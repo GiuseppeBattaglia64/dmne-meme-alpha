@@ -223,3 +223,36 @@ pub fn calculate_return_z_score(prices: &[f64]) -> f64 {
         0.0
     }
 }
+
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct JitoTipFloorStats {
+    pub landed_tips_25th_percentile: Option<f64>,
+    pub landed_tips_50th_percentile: Option<f64>,
+    pub landed_tips_75th_percentile: Option<f64>,
+    pub landed_tips_95th_percentile: Option<f64>,
+    pub landed_tips_99th_percentile: Option<f64>,
+}
+
+/// Dynamically queries Jito Tip Floor percentiles across recent bundles
+pub async fn fetch_dynamic_tip_lamports(
+    client: &Client,
+    tip_floor_url: &str,
+    target_percentile: &str,
+) -> u64 {
+    if let Ok(res) = client.get(tip_floor_url).send().await {
+        if let Ok(arr) = res.json::<Vec<JitoTipFloorStats>>().await {
+            if let Some(stats) = arr.first() {
+                let tip_sol = match target_percentile {
+                    "p75" => stats.landed_tips_75th_percentile.unwrap_or(0.001),
+                    "p95" => stats.landed_tips_95th_percentile.unwrap_or(0.005),
+                    "p25" => stats.landed_tips_25th_percentile.unwrap_or(0.0001),
+                    _ => stats.landed_tips_50th_percentile.unwrap_or(0.0005),
+                };
+                let lamports = (tip_sol * 1_000_000_000.0) as u64;
+                return lamports.max(10_000).min(10_000_000); // 0.00001 to 0.01 SOL bounds
+            }
+        }
+    }
+    100_000 // 0.0001 SOL fallback
+}

@@ -35,6 +35,7 @@ pub struct EngineConfig {
 
     // Endpoint Discovery
     pub jito_block_engine_url: String,
+    pub jito_tip_floor_url: String,
     pub default_rpc_url: String,
 }
 
@@ -62,6 +63,7 @@ impl Default for EngineConfig {
             tranche_2_scale_ratio: 0.25,          // 25% profit harvest tranche
             tranche_2_target_pct: 250.0,          // Harvest at +250% (3.5x)
             jito_block_engine_url: "https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles".to_string(),
+            jito_tip_floor_url: "https://bundles.jito.wtf/api/v1/bundles/tip_floor".to_string(),
             default_rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
         }
     }
