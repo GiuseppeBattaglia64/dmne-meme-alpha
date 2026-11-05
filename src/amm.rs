@@ -57,3 +57,4 @@ impl PumpBondingCurveState {
         (swap_sol_lamports as f64) / ((self.virtual_sol_reserves + swap_sol_lamports) as f64)
     }
 }
+

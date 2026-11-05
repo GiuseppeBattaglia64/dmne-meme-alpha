@@ -2,6 +2,7 @@ mod config;
 mod institutional;
 mod db;
 mod amm;
+mod ws_ingest;
 
 fn append_comprehensive_trade_log(
     pos: &Position,
