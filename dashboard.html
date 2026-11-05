@@ -708,7 +708,7 @@
 
       const now = Math.floor(Date.now() / 1000);
 
-      container.innerHTML = positions.map(p => {
+      let cardsHtml = positions.map(p => {
         const pnl = p.pnl_pct || 0.0;
         const pnlClass = pnl > 0 ? "pnl-pos" : (pnl < 0 ? "pnl-neg" : "pnl-zero");
         const entryPrice = (p.entry_price_sol || 0.0).toExponential(3);
@@ -792,6 +792,20 @@
           </div>
         `;
       }).join('');
+
+      // Fill remaining slots up to 4 with high-density vacant slot cards
+      const vacantSlots = Math.max(0, 4 - positions.length);
+      for (let i = 0; i < vacantSlots; i++) {
+        const slotNum = positions.length + i + 1;
+        cardsHtml += `
+          <div class="pos-card" style="border: 1px dashed var(--border-subtle); background: rgba(16, 24, 40, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 8px;">
+            <div class="mono" style="font-size: 10px; color: var(--cyan); letter-spacing: 0.08em; font-weight: 700;">SLOT ${slotNum} // READY</div>
+            <div style="font-size: 9px; color: var(--text-dim);" class="mono">Awaiting High-Conviction Queue Pop</div>
+            <span class="badge badge-jito" style="font-size: 8px;">KELLY 7.5% NAV</span>
+          </div>
+        `;
+      }
+      container.innerHTML = cardsHtml;
 
       // Draw all canvas sparklines after DOM insertion
       positions.forEach(p => {

@@ -582,6 +582,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
 
+            // Concurrency Queue Consumer: Populate vacant slots from pre-audited candidate_queue
+            {
+                let mut state = eval_state.write().await;
+                while state.active_positions.len() < 4 && !state.candidate_queue.is_empty() {
+                    let candidate = state.candidate_queue.remove(0);
+                    // Verify candidate not already in active positions or closed trades
+                    if !state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint)
+                        && !state.closed_trades.iter().any(|t| t.token_mint == candidate.token_mint)
+                    {
+                        state.total_trades += 1;
+                        let trade_id = state.total_trades;
+                        let current_nav = state.current_bankroll_sol;
+                        let dynamic_entry_sol = (current_nav * eval_cfg.kelly_nav_fraction).max(0.0100).min(0.0450);
+                        let now_epoch = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+                        let now_iso = chrono::Utc::now().to_rfc3339();
+                        let initial_spot = 1.0e-5;
+                        println!("[QUEUE CONSUMER] Filling vacant slot with candidate: {} ({}) | Sized: {:.4} SOL", 
+                            candidate.symbol, candidate.token_mint, dynamic_entry_sol);
+                        
+                        state.active_positions.push(Position {
+                            id: format!("pos_{}", trade_id),
+                            token_mint: candidate.token_mint,
+                            pair_address: "".to_string(),
+                            symbol: candidate.symbol,
+                            entry_time_iso: now_iso,
+                            entry_timestamp_epoch: now_epoch,
+                            entry_price_sol: initial_spot,
+                            current_price_sol: initial_spot,
+                            last_price_sol: initial_spot,
+                            initial_size_sol: dynamic_entry_sol,
+                            size_sol: dynamic_entry_sol,
+                            tranche_1_taken: false,
+                            tranche_2_taken: false,
+                            pnl_pct: 0.0,
+                            status: "Active".to_string(),
+                            peak_price_sol: initial_spot,
+                            trough_price_sol: initial_spot,
+                            liquidity_usd: candidate.liquidity_usd,
+                            fdv_usd: candidate.liquidity_usd * 2.0,
+                            price_buffer: vec![initial_spot],
+                        });
+                    }
+                }
+            }
+
             let active_mints: Vec<(usize, String)> = {
                 let guard = eval_state.read().await;
                 guard.active_positions.iter().enumerate().map(|(i, p)| (i, p.token_mint.clone())).collect()
@@ -776,9 +824,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 if !already_in_desk {
                                     drop(guard);
                                     if let Some((initial_price, sym, pair_addr, liq, fdv)) = fetch_live_price(&scanner_client, &mint).await {
-                                        if liq < scanner_cfg.min_liquidity_usd { continue; }
-                                        let rpc_endpoint = &scanner_cfg.default_rpc_url;
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
+                                        if liq < scanner_cfg.min_liquidity_usd {
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: "LIQUIDITY_BELOW_FLOOR".to_string(),
+                                            });
+                                            continue;
+                                        }
+                                        let rpc_endpoint = &scanner_cfg.default_rpc_url;
                                         if !verify_token_security(&scanner_client, rpc_endpoint, &mint).await {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
@@ -853,7 +916,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     token_mint: mint.clone(),
                                                     dex_id: dex_id.to_string(),
                                                     liquidity_usd: liq,
-                                                    bonding_curve_pct: if mint.ends_with("pump") { 68 } else { 100 },
+                                                    bonding_curve_pct: {
+                                                let pct = ((liq / 69_000.0) * 100.0) as u32;
+                                                pct.max(15).min(100)
+                                            },
                                                     dev_holding_pct: 0.0,
                                                     mint_authority_revoked: true,
                                                     freeze_authority_revoked: true,
