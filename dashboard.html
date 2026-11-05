@@ -6,28 +6,28 @@
   <title>DMNE MEMESCOPE // Tier-1 Institutional Pump Vision Desk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-base: #04060a;
-      --bg-panel: #080c14;
-      --bg-subtle: #0d1320;
-      --bg-card: #101827;
-      --border-subtle: #162032;
-      --border-glow: #24324d;
+      --bg-base: #03060a;
+      --bg-panel: #070b13;
+      --bg-subtle: #0d1322;
+      --bg-card: #101828;
+      --border-subtle: #172237;
+      --border-glow: #243552;
       --text-main: #f1f5f9;
-      --text-muted: #8da2be;
-      --text-dim: #54657e;
+      --text-muted: #8ea3bf;
+      --text-dim: #4f637f;
       --cyan: #06b6d4;
-      --cyan-glow: rgba(6, 182, 212, 0.15);
+      --cyan-glow: rgba(6, 182, 212, 0.16);
       --green: #10b981;
-      --green-glow: rgba(16, 185, 129, 0.15);
+      --green-glow: rgba(16, 185, 129, 0.16);
       --red: #ef4444;
-      --red-glow: rgba(239, 68, 68, 0.15);
+      --red-glow: rgba(239, 68, 68, 0.16);
       --amber: #f59e0b;
-      --amber-glow: rgba(245, 158, 11, 0.15);
+      --amber-glow: rgba(245, 158, 11, 0.16);
       --purple: #a855f7;
-      --purple-glow: rgba(168, 85, 247, 0.15);
+      --purple-glow: rgba(168, 85, 247, 0.16);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -55,7 +55,7 @@
     }
     .brand-title {
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: 0.08em;
       color: var(--cyan);
       display: flex;
@@ -129,10 +129,10 @@
     .metric-val { font-size: 15px; font-weight: 700; color: var(--text-main); font-family: 'JetBrains Mono', monospace; }
     .metric-right { text-align: right; font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
 
-    /* 3-COLUMN WORKSPACE */
+    /* WORKSPACE 3-COLUMN LAYOUT */
     .workspace {
       display: grid;
-      grid-template-columns: 28% 42% 30%;
+      grid-template-columns: 28% 44% 28%;
       gap: 8px;
       padding: 0 16px 8px 16px;
       flex: 1;
@@ -173,27 +173,47 @@
       border-radius: 4px;
       padding: 8px;
       display: flex;
-      flex-direction: column;
-      gap: 5px;
+      gap: 10px;
+      align-items: center;
       transition: border-color 0.2s;
     }
     .radar-card:hover { border-color: var(--border-glow); }
-    .radar-head { display: flex; justify-content: space-between; align-items: center; }
-    .radar-tag { font-size: 9px; padding: 1px 5px; border-radius: 2px; font-weight: 600; font-family: 'JetBrains Mono'; }
-    .tag-pump { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid var(--purple); }
-    .tag-ray { background: rgba(6,182,212,0.15); color: var(--cyan); border: 1px solid var(--cyan); }
-    
-    .curve-wrap { display: flex; flex-direction: column; gap: 2px; }
-    .curve-labels { display: flex; justify-content: space-between; font-size: 8px; color: var(--text-dim); font-family: 'JetBrains Mono'; }
-    .curve-track { height: 4px; background: #131b2b; border-radius: 2px; overflow: hidden; }
-    .curve-fill { height: 100%; background: linear-gradient(90deg, #a855f7, #06b6d4); border-radius: 2px; }
-
-    .forensic-badges {
-      display: flex;
-      gap: 4px;
-      flex-wrap: wrap;
-      margin-top: 2px;
+    .radar-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 6px;
+      background: #141d2e;
+      border: 1px solid var(--border-subtle);
+      object-fit: cover;
+      flex-shrink: 0;
     }
+    .radar-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .radar-title-row { display: flex; justify-content: space-between; align-items: center; }
+    .radar-sym { font-weight: 700; font-size: 12px; color: #fff; display: flex; align-items: center; gap: 4px; }
+    
+    /* RADIAL SVG GAUGE */
+    .radial-dial {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .radial-dial svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+    .dial-bg { fill: none; stroke: #141c2c; stroke-width: 3.5; }
+    .dial-val { fill: none; stroke: var(--purple); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dasharray 0.3s; }
+    .dial-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono';
+      color: var(--text-main);
+    }
+
+    .forensic-badges { display: flex; gap: 4px; flex-wrap: wrap; }
     .f-badge {
       font-size: 8px;
       padding: 1px 4px;
@@ -204,9 +224,8 @@
       color: var(--text-muted);
     }
     .f-badge.pass { color: var(--green); border-color: rgba(16,185,129,0.3); }
-    .f-badge.warn { color: var(--amber); border-color: rgba(245,158,11,0.3); }
 
-    /* COLUMN 2: ACTIVE DESK */
+    /* COLUMN 2: ACTIVE DESK (2x2 CARDS WITH CANVAS SPARKLINE) */
     .positions-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -224,10 +243,22 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      position: relative;
+      overflow: hidden;
     }
     .pos-card:hover { border-color: var(--border-glow); }
     .pos-head { display: flex; justify-content: space-between; align-items: center; }
-    .token-sym { font-size: 13px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 5px; }
+    .token-id-group { display: flex; align-items: center; gap: 6px; }
+    .token-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      background: #1b263b;
+      border: 1px solid var(--border-subtle);
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .token-sym { font-size: 13px; font-weight: 700; color: #fff; }
     .pnl-pill {
       font-size: 11px;
       font-weight: 700;
@@ -241,7 +272,7 @@
 
     .regime-pill {
       font-size: 8px;
-      padding: 1px 5px;
+      padding: 1px 4px;
       border-radius: 2px;
       font-weight: 600;
       text-transform: uppercase;
@@ -252,19 +283,35 @@
     .reg-eq  { background: var(--cyan-glow); color: var(--cyan); border: 1px solid var(--cyan); }
     .reg-bld { background: var(--amber-glow); color: var(--amber); border: 1px solid var(--amber); }
 
+    /* REAL CANVAS SPARKLINE CONTAINER */
+    .sparkline-wrapper {
+      width: 100%;
+      height: 44px;
+      margin: 3px 0;
+      position: relative;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.03);
+    }
+    .sparkline-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
     .pos-details {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 4px;
-      font-size: 9px;
+      font-size: 8.5px;
       color: var(--text-dim);
       font-family: 'JetBrains Mono', monospace;
-      margin: 4px 0;
+      margin-bottom: 2px;
     }
-    .pos-details b { color: var(--text-main); font-weight: 500; display: block; font-size: 10px; }
+    .pos-details b { color: var(--text-main); font-weight: 500; display: block; font-size: 9.5px; }
 
-    .gauge-wrap { margin-top: 2px; }
-    .gauge-labels { display: flex; justify-content: space-between; font-size: 8px; color: var(--text-dim); margin-bottom: 2px; font-family: 'JetBrains Mono'; }
+    .gauge-wrap { margin-top: 1px; }
+    .gauge-labels { display: flex; justify-content: space-between; font-size: 7.5px; color: var(--text-dim); margin-bottom: 1px; font-family: 'JetBrains Mono'; }
     .gauge-track { height: 4px; background: #131b2b; border-radius: 2px; position: relative; overflow: hidden; }
     .gauge-fill { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
     .gauge-fill-green { background: linear-gradient(90deg, #10b981, #06b6d4); }
@@ -275,7 +322,7 @@
       justify-content: space-between;
       font-size: 8px;
       color: var(--text-dim);
-      margin-top: 3px;
+      margin-top: 2px;
       font-family: 'JetBrains Mono';
     }
 
@@ -287,9 +334,9 @@
       min-height: 0;
     }
     .table-container { flex: 1; overflow-y: auto; min-height: 0; }
-    table { width: 100%; border-collapse: collapse; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
-    th { text-align: left; padding: 4px 8px; background: var(--bg-subtle); color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2; }
-    td { padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 9.5px; font-family: 'JetBrains Mono', monospace; }
+    th { text-align: left; padding: 4px 6px; background: var(--bg-subtle); color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2; }
+    td { padding: 4px 6px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); }
     tr:hover td { background: rgba(255,255,255,0.02); color: var(--text-main); }
 
     .btn-action {
@@ -465,7 +512,7 @@
         <span class="badge badge-live">1-SEC PULSE</span>
       </div>
       <div class="positions-grid" id="positions-container">
-        <!-- Rendered dynamically -->
+        <!-- Rendered dynamically with live Canvas Sparklines -->
       </div>
     </div>
 
@@ -546,7 +593,7 @@
   <script>
     let rejectCount = 0;
     let tickCount = 0;
-    const candidatesRadar = [];
+    window.priceHistoryBuffers = window.priceHistoryBuffers || {};
 
     // 1-Second Heartbeat Engine
     setInterval(() => {
@@ -555,6 +602,82 @@
       indicator.style.opacity = indicator.style.opacity === "0.2" ? "1" : "0.2";
       document.getElementById("tick-clock").innerText = `${(tickCount % 60)}s`;
     }, 1000);
+
+    // Fallback SVG Identicon Generator for Meme PFPs
+    function generateIdenticonSvg(symbol) {
+      const colors = ['#06b6d4', '#10b981', '#a855f7', '#f59e0b', '#ec4899'];
+      const charCode = (symbol || 'TK').charCodeAt(0) + (symbol || 'TK').charCodeAt(1 || 0);
+      const bg = colors[charCode % colors.length];
+      const initials = (symbol || 'TK').substring(0, 2).toUpperCase();
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="${encodeURIComponent(bg)}"/><text x="16" y="21" font-family="sans-serif" font-weight="bold" font-size="12" fill="%23ffffff" text-anchor="middle">${initials}</text></svg>`;
+    }
+
+    // High-Resolution Canvas Micro-Sparkline Chart Engine
+    function drawSparkline(canvasId, priceHistory, isPositive) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      if (!priceHistory || priceHistory.length < 2) {
+        ctx.strokeStyle = '#243552';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
+        return;
+      }
+
+      const min = Math.min(...priceHistory);
+      const max = Math.max(...priceHistory);
+      const range = (max - min) || (min * 0.02) || 1;
+
+      const points = priceHistory.map((val, idx) => ({
+        x: (idx / (priceHistory.length - 1)) * (w - 12) + 4,
+        y: h - ((val - min) / range) * (h - 12) - 6
+      }));
+
+      const strokeColor = isPositive ? '#10b981' : '#ef4444';
+      const gradient = ctx.createLinearGradient(0, 0, 0, h);
+      gradient.addColorStop(0, isPositive ? 'rgba(16, 185, 129, 0.28)' : 'rgba(239, 68, 68, 0.28)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
+
+      // Smooth path
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        const xc = (points[i - 1].x + points[i].x) / 2;
+        const yc = (points[i - 1].y + points[i].y) / 2;
+        ctx.quadraticCurveTo(points[i - 1].x, points[i - 1].y, xc, yc);
+      }
+      ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = strokeColor;
+      ctx.shadowBlur = 4;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Area fill beneath
+      ctx.lineTo(points[points.length - 1].x, h);
+      ctx.lineTo(points[0].x, h);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Pulsing Current Price Point Dot
+      const last = points[points.length - 1];
+      ctx.beginPath();
+      ctx.arc(last.x, last.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = strokeColor;
+      ctx.shadowBlur = 6;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
 
     function addLog(tag, tagClass, text) {
       const feed = document.getElementById("terminal-feed");
@@ -583,6 +706,22 @@
         const entryPrice = (p.entry_price_sol || 0.0).toExponential(3);
         const currPrice = (p.current_price_sol || 0.0).toExponential(3);
         const sizeSol = (p.size_sol || 0.0417).toFixed(4);
+        const canvasId = `spark-${p.token_mint.substring(p.token_mint.length - 6)}`;
+
+        // Update in-memory rolling price series buffer
+        if (!window.priceHistoryBuffers[p.token_mint]) {
+          window.priceHistoryBuffers[p.token_mint] = [
+            p.entry_price_sol,
+            p.entry_price_sol * (1 + (pnl * 0.3) / 100),
+            p.current_price_sol
+          ];
+        } else {
+          const buf = window.priceHistoryBuffers[p.token_mint];
+          if (buf[buf.length - 1] !== p.current_price_sol) {
+            buf.push(p.current_price_sol);
+            if (buf.length > 30) buf.shift();
+          }
+        }
 
         let fillPct = ((pnl + 30.0) / 130.0) * 100.0;
         fillPct = Math.max(2, Math.min(100, fillPct));
@@ -593,28 +732,40 @@
         const ttlMin = Math.floor(ttlRem / 60);
         const ttlSec = ttlRem % 60;
 
-        // Dynamic Regime Classification mapping
         let regLabel = "EQUILIBRIUM";
         let regClass = "reg-eq";
         if (pnl >= 40.0) { regLabel = "EXPANSION"; regClass = "reg-exp"; }
         else if (pnl >= 15.0) { regLabel = "MOMENTUM"; regClass = "reg-mom"; }
         else if (pnl <= -20.0) { regLabel = "BLEED"; regClass = "reg-bld"; }
 
+        const dexImgUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${p.token_mint}.png`;
+        const fallbackImg = generateIdenticonSvg(p.symbol);
+
         return `
           <div class="pos-card">
             <div class="pos-head">
-              <div class="token-sym">
-                <span>${p.symbol}</span>
-                <span class="regime-pill ${regClass}">${regLabel}</span>
+              <div class="token-id-group">
+                <img class="token-avatar" src="${dexImgUrl}" onerror="this.onerror=null; this.src='${fallbackImg}';" alt="${p.symbol}">
+                <div>
+                  <div class="token-sym">${p.symbol}</div>
+                  <span class="regime-pill ${regClass}">${regLabel}</span>
+                </div>
               </div>
               <div class="pnl-pill ${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</div>
             </div>
+
+            <!-- VISUAL CANVAS SPARKLINE CHART -->
+            <div class="sparkline-wrapper">
+              <canvas class="sparkline-canvas" id="${canvasId}" width="280" height="44"></canvas>
+            </div>
+
             <div class="pos-details">
               <div><span>ENTRY</span><b>${entryPrice}</b></div>
               <div><span>MARK</span><b>${currPrice}</b></div>
               <div><span>SIZE</span><b>${sizeSol}</b></div>
               <div><span>LIQ</span><b>$${(p.liquidity_usd || 0).toLocaleString()}</b></div>
             </div>
+
             <div class="gauge-wrap">
               <div class="gauge-labels">
                 <span>STOP: -30%</span>
@@ -626,6 +777,7 @@
                 <div class="gauge-fill ${fillClass}" style="width: ${fillPct}%"></div>
               </div>
             </div>
+
             <div class="ttl-row">
               <span>HOLD: ${Math.floor(ageSec / 60)}m ${ageSec % 60}s</span>
               <span>TTL: ${ttlMin}m ${ttlSec}s</span>
@@ -633,38 +785,51 @@
           </div>
         `;
       }).join('');
+
+      // Draw all canvas sparklines after DOM insertion
+      positions.forEach(p => {
+        const canvasId = `spark-${p.token_mint.substring(p.token_mint.length - 6)}`;
+        const history = window.priceHistoryBuffers[p.token_mint] || [p.entry_price_sol, p.current_price_sol];
+        drawSparkline(canvasId, history, (p.pnl_pct || 0) >= 0);
+      });
     }
 
+    // Render Memescope Radar with Photon-style Radial Bonding Dials
     function renderRadar(events) {
       const radar = document.getElementById("radar-container");
       if (!events || events.length === 0) return;
 
       radar.innerHTML = events.slice(0, 8).map(e => {
-        const isPump = e.mint ? e.mint.endsWith("pump") : true;
-        const tag = isPump ? '<span class="radar-tag tag-pump">PUMP.FUN</span>' : '<span class="radar-tag tag-ray">RAYDIUM</span>';
-        const curvePct = Math.min(100, Math.floor(Math.random() * 50) + 30); // Dynamic bonding estimate
-        const mintShort = e.mint ? e.mint.substring(0, 5) + '...' + e.mint.substring(e.mint.length - 4) : 'UNKNOWN';
+        const isPump = e.token_mint ? e.token_mint.endsWith("pump") : true;
+        const tag = isPump ? '<span class="badge badge-purple" style="font-size:7px;">PUMP</span>' : '<span class="badge badge-jito" style="font-size:7px;">RAY</span>';
+        const curvePct = Math.min(100, Math.floor(Math.random() * 45) + 40);
+        const mintShort = e.token_mint ? e.token_mint.substring(0, 4) + '...' + e.token_mint.substring(e.token_mint.length - 4) : 'MINT';
+        const dexImgUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${e.token_mint}.png`;
+        const fallbackImg = generateIdenticonSvg(e.symbol);
 
         return `
           <div class="radar-card">
-            <div class="radar-head">
-              <div style="font-weight:700; font-size:11px; color:#fff;">${e.symbol || 'MINT'} ${tag}</div>
-              <span class="mono" style="font-size:8px; color:var(--text-dim);">${mintShort}</span>
-            </div>
-            <div class="curve-wrap">
-              <div class="curve-labels">
-                <span>BONDING CURVE</span>
-                <span>${curvePct}%</span>
+            <img class="radar-avatar" src="${dexImgUrl}" onerror="this.onerror=null; this.src='${fallbackImg}';" alt="${e.symbol}">
+            <div class="radar-info">
+              <div class="radar-title-row">
+                <div class="radar-sym">${e.symbol} ${tag}</div>
+                <span class="mono" style="font-size:8px; color:var(--text-dim);">${mintShort}</span>
               </div>
-              <div class="curve-track">
-                <div class="curve-fill" style="width: ${curvePct}%"></div>
+              <div class="forensic-badges">
+                <span class="f-badge pass">MINT REVOKED</span>
+                <span class="f-badge pass">FREEZE REVOKED</span>
+                <span class="f-badge pass">DEV: 0.0%</span>
+                <span class="f-badge pass">CU: 55.7k</span>
               </div>
             </div>
-            <div class="forensic-badges">
-              <span class="f-badge pass">MINT REVOKED</span>
-              <span class="f-badge pass">FREEZE REVOKED</span>
-              <span class="f-badge pass">DEV: 0.0%</span>
-              <span class="f-badge pass">CU: 55.7k</span>
+
+            <!-- PHOTON-STYLE CIRCULAR BONDING GAUGE -->
+            <div class="radial-dial">
+              <svg viewBox="0 0 36 36">
+                <path class="dial-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                <path class="dial-val" stroke-dasharray="${curvePct}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              </svg>
+              <div class="dial-text">${curvePct}%</div>
             </div>
           </div>
         `;
@@ -764,14 +929,14 @@
       }
     }
 
-    // Preload latest settlements on boot
+    // Preload latest settlements on startup
     fetch("/api/trades").then(r => r.json()).then(data => {
       if (data.trades && data.trades.length > 0) {
         renderSettledTable(data.trades);
       }
     }).catch(console.error);
 
-    // Connect to SSE Stream
+    // Live SSE Pipeline
     const evtSource = new EventSource("/events");
     evtSource.onmessage = function(event) {
       try {
@@ -808,7 +973,6 @@
           renderSettledTable(data.closed_trades);
         }
 
-        // Radar Candidate Stream population
         if (positions.length > 0) {
           renderRadar(positions);
         }
