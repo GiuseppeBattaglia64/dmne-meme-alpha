@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineConfig {
     // Dynamic Pre-Trade Gate Constraints
+    pub initial_capital_usd: f64,
     pub max_price_impact_ratio: f64,
     pub hhi_concentration_ceiling: f64,
     pub min_dead_lp_ratio: f64,
@@ -40,6 +41,7 @@ pub struct EngineConfig {
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
+            initial_capital_usd: 100.0,          // $100.00 USD Initial Account Capital
             max_price_impact_ratio: 0.012,       // 1.2% maximum pool price impact
             hhi_concentration_ceiling: 0.280,     // Herfindahl-Hirschman Index limit for top holders
             min_dead_lp_ratio: 0.950,             // 95% burned or locked LP tokens for AMM pools
@@ -61,6 +63,16 @@ impl Default for EngineConfig {
             tranche_2_target_pct: 250.0,          // Harvest at +250% (3.5x)
             jito_block_engine_url: "https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles".to_string(),
             default_rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
+        }
+    }
+}
+
+impl EngineConfig {
+    pub fn calculate_initial_bankroll_sol(&self) -> f64 {
+        if self.sol_reference_price_usd > 0.0 {
+            self.initial_capital_usd / self.sol_reference_price_usd
+        } else {
+            0.5556
         }
     }
 }
