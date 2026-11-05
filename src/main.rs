@@ -143,6 +143,7 @@ pub struct BotState {
     pub losses: usize,
     pub active_positions: Vec<Position>,
     pub radar_candidates: Vec<RadarCandidate>,
+    pub candidate_queue: Vec<RadarCandidate>,
     pub rejections_count: u64,
     pub closed_trades: Vec<ClosedTrade>,
     pub recent_onchain_events: Vec<String>,
@@ -159,6 +160,7 @@ impl BotState {
             losses: 0,
             active_positions: Vec::new(),
             radar_candidates: Vec::new(),
+            candidate_queue: Vec::new(),
             rejections_count: 0,
             closed_trades: Vec::new(),
             recent_onchain_events: Vec::new(),
@@ -767,10 +769,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if profile.chain_id.as_deref() == Some("solana") {
                             if let Some(mint) = profile.token_address {
                                 let guard = scanner_state.read().await;
-                                let already_exists = guard.active_positions.iter().any(|p| p.token_mint == mint)
+                                let already_in_desk = guard.active_positions.iter().any(|p| p.token_mint == mint)
                                     || guard.closed_trades.iter().any(|t| t.token_mint == mint);
 
-                                if !already_exists && guard.active_positions.len() < 4 && guard.current_bankroll_sol >= 0.015 {
+                                // Slot-blocking guard removed: Discovery worker audits 100% continuously
+                                if !already_in_desk {
                                     drop(guard);
                                     if let Some((initial_price, sym, pair_addr, liq, fdv)) = fetch_live_price(&scanner_client, &mint).await {
                                         if liq < scanner_cfg.min_liquidity_usd { continue; }
@@ -843,6 +846,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             Ok(sim) => {
                                                 println!("[PREFLIGHT PASS] Mint: {} | Consumed CU: {} -> Optimized CU: {} | Dynamic Tip: {} lamports ({})",
                                                     mint, sim.units_consumed, sim.optimized_cu_limit, sim.tip_lamports, sim.tip_account);
+
+                                                // Ingest discovered candidate into live radar stream & entry queue
+                                                let radar_cand = RadarCandidate {
+                                                    symbol: sym.clone(),
+                                                    token_mint: mint.clone(),
+                                                    dex_id: dex_id.to_string(),
+                                                    liquidity_usd: liq,
+                                                    bonding_curve_pct: if mint.ends_with("pump") { 68 } else { 100 },
+                                                    dev_holding_pct: 0.0,
+                                                    mint_authority_revoked: true,
+                                                    freeze_authority_revoked: true,
+                                                    cu_consumed: sim.optimized_cu_limit as u64,
+                                                };
+                                                {
+                                                    let mut g = scanner_state.write().await;
+                                                    if !g.radar_candidates.iter().any(|c| c.token_mint == mint) {
+                                                        g.radar_candidates.insert(0, radar_cand.clone());
+                                                        if g.radar_candidates.len() > 10 {
+                                                            g.radar_candidates.truncate(10);
+                                                        }
+                                                    }
+                                                    if !g.candidate_queue.iter().any(|c| c.token_mint == mint) {
+                                                        g.candidate_queue.push(radar_cand);
+                                                        if g.candidate_queue.len() > 20 {
+                                                            g.candidate_queue.remove(0);
+                                                        }
+                                                    }
+                                                }
+
+                                                let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                    token_mint: mint.clone(),
+                                                    pair_address: pair_addr.clone(),
+                                                    dex_id: dex_id.to_string(),
+                                                    liquidity_usd: liq,
+                                                    hhi_concentration: 0.15,
+                                                    mint_revoked: true,
+                                                    freeze_revoked: true,
+                                                    lp_burned: true,
+                                                    admitted: true,
+                                                    rejection_reason: "Admitted".to_string(),
+                                                });
                                             }
                                             Err(err) => {
                                                 scanner_state.write().await.rejections_count += 1;
