@@ -335,7 +335,7 @@
       </div>
       <div class="metric-right">
         <div id="nav-fiat">≈ €20.70 EUR</div>
-        <div style="font-size:9px; color:var(--text-dim);">Init: 0.2300 SOL</div>
+        <div style="font-size:9px; color:var(--text-dim);">Init: 0.5556 SOL ($100 USD)</div>
       </div>
     </div>
     <div class="metric-card accent-green">
@@ -547,16 +547,19 @@
         const pnl = parseFloat(t.pnl_pct || t.realized_pnl_pct || 0.0);
         const pnlColor = pnl >= 0 ? "var(--green)" : "var(--red)";
         const realized = parseFloat(t.realized_pnl_sol || t.realized_sol || 0.0);
+        const sym = (t.symbol && t.symbol !== "UNKNOWN" && t.symbol !== "") ? t.symbol : (t.token_mint ? t.token_mint.substring(0, 6) : "TRADE");
+        const rawRule = (t.exit_rule || t.exit_trigger || "Closed").replace(/^[\"']+|[\"']+$/g, "");
+        const sizeSol = parseFloat(t.size_sol || t.entry_size_sol || 0.0417);
         return `
           <tr>
-            <td style="font-weight:700; color:#fff;">${t.symbol || t.token || 'TOKEN'}</td>
-            <td>${parseFloat(t.size_sol || 0.0173).toFixed(4)} SOL</td>
-            <td style="color:${pnlColor}; font-weight:600;">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</td>
-            <td style="color:${pnlColor};">${realized >= 0 ? '+' : ''}${realized.toFixed(5)} SOL</td>
-            <td style="color:var(--text-dim);">${t.exit_rule || t.exit_trigger || 'Closed'}</td>
+            <td style="font-weight:700; color:#fff;">${sym}</td>
+            <td>${sizeSol.toFixed(4)} SOL</td>
+            <td style="color:${pnlColor}; font-weight:600;">${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%</td>
+            <td style="color:${pnlColor};">${realized >= 0 ? "+" : ""}${realized.toFixed(5)} SOL</td>
+            <td style="color:var(--text-dim);">${rawRule}</td>
           </tr>
         `;
-      }).join('');
+      }).join("");
     }
 
     // Modal Control: Fetch all historical trades
