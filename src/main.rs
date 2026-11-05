@@ -1,5 +1,6 @@
 mod config;
 mod institutional;
+mod db;
 
 fn append_comprehensive_trade_log(
     pos: &Position,
@@ -132,9 +133,10 @@ pub struct BotState {
 
 impl BotState {
     pub fn new() -> Self {
+        let initial_sol = config::EngineConfig::default().calculate_initial_bankroll_sol();
         Self {
-            initial_bankroll_sol: 0.23, // ~20 EUR
-            current_bankroll_sol: 0.23,
+            initial_bankroll_sol: initial_sol, // $100.00 USD initial capital
+            current_bankroll_sol: initial_sol,
             total_trades: 0,
             wins: 0,
             losses: 0,
@@ -472,25 +474,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                         } else if req.starts_with("GET /api/trades") {
-                            let log_path = "/home/ubuntu/dmne-meme-alpha/logs/trades_forensic.csv";
                             let mut trades = Vec::new();
-                            if let Ok(content) = tokio::fs::read_to_string(log_path).await {
-                                let lines: Vec<&str> = content.lines().collect();
-                                if lines.len() > 1 {
-                                    let headers: Vec<&str> = lines[0].split(',').map(|s| s.trim()).collect();
-                                    for line in lines.iter().skip(1) {
-                                        let fields: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
-                                        if fields.len() == headers.len() {
-                                            let mut obj = serde_json::Map::new();
-                                            for (h, f) in headers.iter().zip(fields.iter()) {
-                                                obj.insert(h.to_string(), serde_json::Value::String(f.to_string()));
+                            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                trades = db::fetch_settled_trades(&pg_client, 250).await;
+                            }
+                            if trades.is_empty() {
+                                let log_path = "/home/ubuntu/dmne-meme-alpha/logs/trades_forensic.csv";
+                                if let Ok(content) = tokio::fs::read_to_string(log_path).await {
+                                    let lines: Vec<&str> = content.lines().collect();
+                                    if lines.len() > 1 {
+                                        let headers: Vec<&str> = lines[0].split(',').map(|s| s.trim()).collect();
+                                        for line in lines.iter().skip(1) {
+                                            let fields: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
+                                            if fields.len() == headers.len() {
+                                                let mut obj = serde_json::Map::new();
+                                                for (h, f) in headers.iter().zip(fields.iter()) {
+                                                    obj.insert(h.to_string(), serde_json::Value::String(f.to_string()));
+                                                }
+                                                trades.push(serde_json::Value::Object(obj));
                                             }
-                                            trades.push(serde_json::Value::Object(obj));
                                         }
                                     }
                                 }
+                                trades.reverse();
                             }
-                            trades.reverse();
                             let json_resp = serde_json::json!({ "total": trades.len(), "trades": trades }).to_string();
                             let res = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -649,6 +656,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bankroll_before,
                     bankroll_after,
                 );
+                let db_mint = pos.token_mint.clone();
+                let db_sym = pos.symbol.clone();
+                let db_hold_sec = (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) as i32;
+                let db_size = pos.size_sol;
+                let db_entry_px = pos.entry_price_sol;
+                let db_exit_px = pos.current_price_sol;
+                let db_peak_px = pos.peak_price_sol;
+                let db_before = bankroll_before;
+                let db_after = bankroll_after;
+                let db_rule = reason.clone();
+                let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
+                tokio::spawn(async move {
+                    if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                        db::record_settled_trade(
+                            &pg_client, &db_mint, &db_sym, db_hold_sec, db_size,
+                            db_entry_px, db_exit_px, db_peak_px, pnl_pct, pnl_sol,
+                            db_before, db_after, &db_rule, &db_url
+                        ).await;
+                    }
+                });
                 state.closed_trades.push(ClosedTrade {
                     token_mint: pos.token_mint,
                     symbol: pos.symbol,
@@ -716,6 +743,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 liq,
                                                 &scanner_cfg,
                                             );
+
+                                            let audit_mint = mint.clone();
+                                            let audit_pool = pair_addr.clone();
+                                            let audit_dex = dex_id.to_string();
+                                            let audit_liq = liq;
+                                            tokio::spawn(async move {
+                                                if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                                    db::record_pre_trade_audit(
+                                                        &pg_client, &audit_mint, &audit_pool, &audit_dex,
+                                                        audit_liq, 0.15, true, true, true, true, "Admitted"
+                                                    ).await;
+                                                }
+                                            });
 
                                             g.active_positions.push(Position {
                                                 id: format!("pos_{}", trade_id),
