@@ -109,3 +109,24 @@ pub async fn fetch_settled_trades(client: &Client, limit: i64) -> Vec<Value> {
     trades
 }
 
+
+
+/// Fetches the latest dynamic parameter override published by an AI Agent
+pub async fn fetch_latest_override(client: &Client, agent_id: &str) -> Option<(f64, f64, i32)> {
+    let stmt = "
+        SELECT hhi_ceiling, volatility_trail_multiplier, stagnation_ttl_seconds
+        FROM agent_parameter_overrides
+        WHERE agent_id = $1 AND applied_to_engine = true
+        ORDER BY timestamp DESC
+        LIMIT 1
+    ";
+    if let Ok(rows) = client.query(stmt, &[&agent_id]).await {
+        if let Some(row) = rows.first() {
+            let hhi: f64 = row.get::<_, Option<f64>>(0).unwrap_or(0.280);
+            let trail: f64 = row.get::<_, Option<f64>>(1).unwrap_or(2.20);
+            let ttl: i32 = row.get::<_, Option<i32>>(2).unwrap_or(900);
+            return Some((hhi, trail, ttl));
+        }
+    }
+    None
+}
