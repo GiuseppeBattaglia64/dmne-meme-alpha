@@ -560,6 +560,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
+            // Dynamically query AI Cruise Agent overrides from PostgreSQL
+            let mut dynamic_trail_mult = eval_cfg.volatility_trail_multiplier;
+            let mut dynamic_ttl_secs = eval_cfg.stagnation_ttl_seconds;
+            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                if let Some((_, trail, ttl)) = db::fetch_latest_override(&pg_client, "CRUISE_AGENT").await {
+                    dynamic_trail_mult = trail;
+                    dynamic_ttl_secs = ttl as i64;
+                }
+            }
+
             // Evaluate dynamic exit rules
             let mut guard = eval_state.write().await;
             let mut closed_indices = Vec::new();
@@ -597,9 +607,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     pos.size_sol -= sell_size;
                     println!("[CRUISE CONTROL] Tranche 2 Harvest on {} (+{:.1}%): Locked {:.5} SOL gain. 25% moonbag runner active.", pos.symbol, pos.pnl_pct, realized);
                 }
-                // Rule 4: Dynamic Trailing Stop (12% tolerance if peak >= +150%, 18% if peak >= +50%)
+                // Rule 4: Dynamic Trailing Stop (scaled by dynamic_trail_mult)
                 else if peak_pct >= 50.0 {
-                    let trail_factor = if peak_pct >= 150.0 { 0.88 } else { 0.82 };
+                    let trail_factor = if peak_pct >= 150.0 { 1.0 - (0.055 * (dynamic_trail_mult / 2.20)) } else { 1.0 - (0.082 * (dynamic_trail_mult / 2.20)) };
                     if pos.current_price_sol < pos.peak_price_sol * trail_factor {
                         let exit_pnl = pos.pnl_pct;
                         let realized = pos.size_sol * (exit_pnl / 100.0);
@@ -613,7 +623,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     closed_indices.push((idx, format!("Breakeven Guard (+{:.0}%)", eval_cfg.breakeven_floor_pct), realized, eval_cfg.breakeven_floor_pct));
                 }
                 // Rule 6: Adaptive Stagnation TTL (Recycle slot if flat after TTL seconds)
-                else if (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) > eval_cfg.stagnation_ttl_seconds && pos.pnl_pct > -10.0 && pos.pnl_pct < 15.0 {
+                else if (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) > dynamic_ttl_secs && pos.pnl_pct > -10.0 && pos.pnl_pct < 15.0 {
                     let exit_pnl = pos.pnl_pct;
                     let realized = pos.size_sol * (exit_pnl / 100.0);
                     closed_indices.push((idx, "Stagnation TTL Exit".to_string(), realized, exit_pnl));
@@ -716,7 +726,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         if !verify_token_security(&scanner_client, rpc_endpoint, &mint).await {
                                             continue;
                                         }
-                                        if !institutional::evaluate_holder_hhi(&scanner_client, rpc_endpoint, &mint, scanner_cfg.hhi_concentration_ceiling).await {
+                                        let mut dynamic_hhi = scanner_cfg.hhi_concentration_ceiling;
+                                        if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                            if let Some((hhi, _, _)) = db::fetch_latest_override(&pg_client, "LAUNCH_AGENT").await {
+                                                dynamic_hhi = hhi;
+                                            }
+                                        }
+                                        if !institutional::evaluate_holder_hhi(&scanner_client, rpc_endpoint, &mint, dynamic_hhi).await {
                                             continue;
                                         }
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
