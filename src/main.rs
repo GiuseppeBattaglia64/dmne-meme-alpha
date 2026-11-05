@@ -741,6 +741,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         if !institutional::verify_lp_burned_or_locked(&scanner_client, rpc_endpoint, &mint, &pair_addr, dex_id, scanner_cfg.min_dead_lp_ratio).await {
                                             continue;
                                         }
+
+                                        // Step 5: Institutional Preflight Simulation Gate (Zero-Capital Dry-Run)
+                                        match institutional::simulate_dry_run_bundle(
+                                            &scanner_client,
+                                            rpc_endpoint,
+                                            &scanner_cfg.jito_block_engine_url,
+                                            &scanner_cfg.jito_tip_floor_url,
+                                            "p50",
+                                            &scanner_cfg,
+                                        ).await {
+                                            Ok(sim) => {
+                                                println!("[PREFLIGHT PASS] Mint: {} | Consumed CU: {} -> Optimized CU: {} | Dynamic Tip: {} lamports ({})",
+                                                    mint, sim.units_consumed, sim.optimized_cu_limit, sim.tip_lamports, sim.tip_account);
+                                            }
+                                            Err(err) => {
+                                                println!("[PREFLIGHT REJECT] Simulation reverted for mint {}: {}", mint, err);
+                                                continue;
+                                            }
+                                        }
                                         let mut g = scanner_state.write().await;
                                         if g.active_positions.len() < 4 {
                                             g.total_trades += 1;
