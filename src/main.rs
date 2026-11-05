@@ -458,6 +458,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("============================================================\n");
 
     let state = Arc::new(RwLock::new(BotState::new()));
+    // Reconcile system bankroll and cumulative metrics on startup
+    if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
+        let (total, wins, net, rejections) = db::fetch_complete_system_stats(&pg).await;
+        let mut g = state.write().await;
+        g.current_bankroll_sol = (g.initial_bankroll_sol + net).max(0.05);
+        g.total_trades = total as usize;
+        g.wins = wins as usize;
+        g.losses = (total - wins) as usize;
+        g.rejections_count = rejections as u64;
+        println!("[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Total Trades: {} | Rejections: {}", g.current_bankroll_sol, total, rejections);
+    }
     let config = Arc::new(config::EngineConfig::default());
     let http_client = Client::builder()
         .tcp_nodelay(true)
@@ -762,8 +773,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     if let Some((initial_price, sym, pair_addr, liq, fdv)) = fetch_live_price(&scanner_client, &mint).await {
                                         if liq < scanner_cfg.min_liquidity_usd { continue; }
                                         let rpc_endpoint = &scanner_cfg.default_rpc_url;
+                                        let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
                                         if !verify_token_security(&scanner_client, rpc_endpoint, &mint).await {
                                             scanner_state.write().await.rejections_count += 1;
+                                            let audit_mint = mint.clone();
+                                            let audit_pool = pair_addr.clone();
+                                            let audit_dex = dex_id.to_string();
+                                            let audit_liq = liq;
+                                            tokio::spawn(async move {
+                                                if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                                    db::record_pre_trade_audit(&pg, &audit_mint, &audit_pool, &audit_dex, audit_liq, 0.35, false, false, false, false, "PRE_TRADE_SECURITY_REJECT").await;
+                                                }
+                                            });
                                             continue;
                                         }
                                         let mut dynamic_hhi = scanner_cfg.hhi_concentration_ceiling;
@@ -774,11 +795,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                         if !institutional::evaluate_holder_hhi(&scanner_client, rpc_endpoint, &mint, dynamic_hhi).await {
                                             scanner_state.write().await.rejections_count += 1;
+                                            let audit_mint = mint.clone();
+                                            let audit_pool = pair_addr.clone();
+                                            let audit_dex = dex_id.to_string();
+                                            let audit_liq = liq;
+                                            tokio::spawn(async move {
+                                                if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                                    db::record_pre_trade_audit(&pg, &audit_mint, &audit_pool, &audit_dex, audit_liq, 0.50, true, true, false, false, "PRE_TRADE_HHI_REJECT").await;
+                                                }
+                                            });
                                             continue;
                                         }
-                                        let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
-                                        if !institutional::verify_lp_burned_or_locked(&scanner_client, rpc_endpoint, &mint, &pair_addr, dex_id, scanner_cfg.min_dead_lp_ratio).await {
+                                                                                if !institutional::verify_lp_burned_or_locked(&scanner_client, rpc_endpoint, &mint, &pair_addr, dex_id, scanner_cfg.min_dead_lp_ratio).await {
                                             scanner_state.write().await.rejections_count += 1;
+                                            let audit_mint = mint.clone();
+                                            let audit_pool = pair_addr.clone();
+                                            let audit_dex = dex_id.to_string();
+                                            let audit_liq = liq;
+                                            tokio::spawn(async move {
+                                                if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                                    db::record_pre_trade_audit(&pg, &audit_mint, &audit_pool, &audit_dex, audit_liq, 0.20, true, true, false, false, "PRE_TRADE_LP_REJECT").await;
+                                                }
+                                            });
                                             continue;
                                         }
 
@@ -798,6 +836,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             Err(err) => {
                                                 scanner_state.write().await.rejections_count += 1;
                                                 println!("[PREFLIGHT REJECT] Simulation reverted for mint {}: {}", mint, err);
+                                                let audit_mint = mint.clone();
+                                                let audit_pool = pair_addr.clone();
+                                                let audit_dex = dex_id.to_string();
+                                                let audit_liq = liq;
+                                                tokio::spawn(async move {
+                                                    if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                                        db::record_pre_trade_audit(&pg, &audit_mint, &audit_pool, &audit_dex, audit_liq, 0.20, true, true, true, false, "PREFLIGHT_SIM_REJECT").await;
+                                                    }
+                                                });
                                                 continue;
                                             }
                                         }
@@ -816,11 +863,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 .unwrap_or_default()
                                                 .as_secs();
                                             let now_iso = chrono::Utc::now().to_rfc3339();
-                                            let dynamic_entry_sol = institutional::calculate_dynamic_size(
-                                                g.current_bankroll_sol,
-                                                liq,
-                                                &scanner_cfg,
-                                            );
+                                            // Dynamic Half-Kelly sizing calibrated strictly against live reconciled bankroll
+                                            let current_nav = g.current_bankroll_sol;
+                                            let dynamic_entry_sol = (current_nav * scanner_cfg.kelly_nav_fraction).max(0.0100).min(0.0450);
 
                                             let audit_mint = mint.clone();
                                             let audit_pool = pair_addr.clone();
