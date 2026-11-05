@@ -36,6 +36,9 @@ pub struct EngineConfig {
     // Endpoint Discovery
     pub jito_block_engine_url: String,
     pub jito_tip_floor_url: String,
+    pub cu_headroom_multiplier: f64,
+    pub sim_initial_cu_limit: u32,
+    pub min_sim_cu_threshold: u64,
     pub default_rpc_url: String,
 }
 
@@ -64,6 +67,9 @@ impl Default for EngineConfig {
             tranche_2_target_pct: 250.0,          // Harvest at +250% (3.5x)
             jito_block_engine_url: "https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles".to_string(),
             jito_tip_floor_url: "https://bundles.jito.wtf/api/v1/bundles/tip_floor".to_string(),
+            cu_headroom_multiplier: 1.15,        // 15% CU buffer over unitsConsumed
+            sim_initial_cu_limit: 200_000,       // Initial simulation envelope
+            min_sim_cu_threshold: 15_000,        // Rejection floor for no-op transactions
             default_rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
         }
     }
