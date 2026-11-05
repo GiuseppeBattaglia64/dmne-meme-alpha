@@ -774,7 +774,7 @@
             </div>
 
             <div class="gauge-wrap">
-              <div class="gauge-labels">
+              <div class="gauge-labels" style="color:#94a3b8; font-weight:600;">
                 <span>STOP: -30%</span>
                 <span>ENTRY: 0%</span>
                 <span>BE: +22%</span>
@@ -943,6 +943,25 @@
     }).catch(console.error);
 
     // Live SSE Pipeline
+        // Sync True Historical Win Rate from PostgreSQL
+    async function syncPostgresStats() {
+      try {
+        const res = await fetch("/api/trades");
+        const json = await res.json();
+        if (json.trades && json.trades.length > 0) {
+          const total = json.trades.length;
+          const wins = json.trades.filter(t => parseFloat(t.realized_pnl_pct || t.pnl_pct || 0) > 0).length;
+          const wr = ((wins / total) * 100).toFixed(1);
+          document.getElementById("win-rate").innerText = `Win Rate: ${wr}%`;
+          document.getElementById("trade-count").innerText = `Closed: ${total}`;
+        }
+      } catch (e) {
+        console.error("Win rate sync error", e);
+      }
+    }
+    syncPostgresStats();
+    setInterval(syncPostgresStats, 15000);
+
     const evtSource = new EventSource("/events");
     evtSource.onmessage = function(event) {
       try {
@@ -979,13 +998,17 @@
           renderSettledTable(data.closed_trades);
         }
 
-        if (positions.length > 0) {
+        // Maintain decoupled discovery radar buffer
+        if (data.radar_candidates && data.radar_candidates.length > 0) {
+          renderRadar(data.radar_candidates);
+        } else if (!window.hasInitializedRadar && positions.length > 0) {
           renderRadar(positions);
+          window.hasInitializedRadar = true;
         }
 
         if (data.recent_onchain_events) {
           data.recent_onchain_events.forEach(ev => {
-            if (ev.includes("REJECT") || ev.includes("Reject")) {
+                        if (ev.includes("REJECT") || ev.includes("Reject") || ev.includes("HHI") || ev.includes("LP")) {
               rejectCount++;
               document.getElementById("rejected-count").innerText = rejectCount;
               addLog("GATE", "tag-reject", ev);
