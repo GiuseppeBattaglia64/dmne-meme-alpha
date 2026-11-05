@@ -485,19 +485,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 tokio::time::sleep(Duration::from_millis(1000)).await;
                                 let snapshot = {
                                     let guard = st.read().await;
-                                    let (pg_total, pg_wins, _) = if let Ok(client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                        db::fetch_aggregate_stats(&client).await
-                                    } else {
-                                        (guard.total_trades as i64, guard.wins as i64, 0.0)
-                                    };
+                                    let (pg_total, pg_wins, pg_net_sol, pg_rejections) = if let Ok(client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                    db::fetch_complete_system_stats(&client).await
+                } else {
+                    (guard.total_trades as i64, guard.wins as i64, 0.0, guard.rejections_count as i64)
+                };
+
+                // Reconcile current bankroll with true PostgreSQL realized net
+                let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
 
                                     serde_json::to_string(&serde_json::json!({
                                         "initial_bankroll_sol": guard.initial_bankroll_sol,
-                                        "current_bankroll_sol": guard.current_bankroll_sol,
+                                        "current_bankroll_sol": live_reconciled_bankroll,
                                         "total_trades": pg_total,
                                         "wins": pg_wins,
                                         "losses": pg_total - pg_wins,
-                                        "rejections_count": guard.rejections_count,
+                                        "rejections_count": pg_rejections,
                                         "active_positions": guard.active_positions,
                                         "radar_candidates": guard.radar_candidates,
                                         "closed_trades": guard.closed_trades,

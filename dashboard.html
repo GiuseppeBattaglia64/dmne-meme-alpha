@@ -1007,6 +1007,10 @@
 
         if (data.radar_candidates && data.radar_candidates.length > 0) {
           renderRadar(data.radar_candidates);
+        } else if (!window.radarLoadedOnce && data.active_positions && data.active_positions.length > 0) {
+          // Preload active items as baseline radar cards if queue is warming up
+          renderRadar(data.active_positions);
+          window.radarLoadedOnce = true;
         }
 
         if (data.recent_onchain_events) {
