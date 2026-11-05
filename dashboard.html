@@ -623,6 +623,13 @@
     }
 
     // Connect to live SSE Stream
+    // Preload latest settlements on boot
+    fetch("/api/trades").then(r => r.json()).then(data => {
+      if (data.trades && data.trades.length > 0) {
+        renderSettledTable(data.trades);
+      }
+    }).catch(console.error);
+
     const evtSource = new EventSource("/events");
     evtSource.onmessage = function(event) {
       try {
