@@ -130,3 +130,24 @@ pub async fn fetch_latest_override(client: &Client, agent_id: &str) -> Option<(f
     }
     None
 }
+
+
+/// Queries cumulative forensic statistics directly from PostgreSQL
+pub async fn fetch_aggregate_stats(client: &Client) -> (i64, i64, f64) {
+    let stmt = "
+        SELECT 
+            COUNT(*)::bigint AS total_trades,
+            COUNT(*) FILTER (WHERE pnl_pct > 0)::bigint AS wins,
+            COALESCE(SUM(realized_pnl_sol), 0.0) AS net_realized
+        FROM settled_trades
+    ";
+    if let Ok(rows) = client.query(stmt, &[]).await {
+        if let Some(row) = rows.first() {
+            let total: i64 = row.get::<_, i64>(0);
+            let wins: i64 = row.get::<_, i64>(1);
+            let net: f64 = row.get::<_, f64>(2);
+            return (total, wins, net);
+        }
+    }
+    (0, 0, 0.0)
+}

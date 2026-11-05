@@ -1,3 +1,16 @@
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RadarCandidate {
+    pub symbol: String,
+    pub token_mint: String,
+    pub dex_id: String,
+    pub liquidity_usd: f64,
+    pub bonding_curve_pct: u32,
+    pub dev_holding_pct: f64,
+    pub mint_authority_revoked: bool,
+    pub freeze_authority_revoked: bool,
+    pub cu_consumed: u64,
+}
+
 mod config;
 mod institutional;
 mod db;
@@ -129,6 +142,8 @@ pub struct BotState {
     pub wins: usize,
     pub losses: usize,
     pub active_positions: Vec<Position>,
+    pub radar_candidates: Vec<RadarCandidate>,
+    pub rejections_count: u64,
     pub closed_trades: Vec<ClosedTrade>,
     pub recent_onchain_events: Vec<String>,
 }
@@ -143,6 +158,8 @@ impl BotState {
             wins: 0,
             losses: 0,
             active_positions: Vec::new(),
+            radar_candidates: Vec::new(),
+            rejections_count: 0,
             closed_trades: Vec::new(),
             recent_onchain_events: Vec::new(),
         }
@@ -468,7 +485,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 tokio::time::sleep(Duration::from_millis(1000)).await;
                                 let snapshot = {
                                     let guard = st.read().await;
-                                    serde_json::to_string(&*guard).unwrap_or_default()
+                                    let (pg_total, pg_wins, _) = if let Ok(client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                        db::fetch_aggregate_stats(&client).await
+                                    } else {
+                                        (guard.total_trades as i64, guard.wins as i64, 0.0)
+                                    };
+
+                                    serde_json::to_string(&serde_json::json!({
+                                        "initial_bankroll_sol": guard.initial_bankroll_sol,
+                                        "current_bankroll_sol": guard.current_bankroll_sol,
+                                        "total_trades": pg_total,
+                                        "wins": pg_wins,
+                                        "losses": pg_total - pg_wins,
+                                        "rejections_count": guard.rejections_count,
+                                        "active_positions": guard.active_positions,
+                                        "radar_candidates": guard.radar_candidates,
+                                        "closed_trades": guard.closed_trades,
+                                        "recent_onchain_events": guard.recent_onchain_events,
+                                    })).unwrap_or_default()
                                 };
                                 let payload = format!("data: {}\n\n", snapshot);
                                 if socket.write_all(payload.as_bytes()).await.is_err() {
@@ -726,6 +760,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         if liq < scanner_cfg.min_liquidity_usd { continue; }
                                         let rpc_endpoint = &scanner_cfg.default_rpc_url;
                                         if !verify_token_security(&scanner_client, rpc_endpoint, &mint).await {
+                                            scanner_state.write().await.rejections_count += 1;
                                             continue;
                                         }
                                         let mut dynamic_hhi = scanner_cfg.hhi_concentration_ceiling;
@@ -735,10 +770,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             }
                                         }
                                         if !institutional::evaluate_holder_hhi(&scanner_client, rpc_endpoint, &mint, dynamic_hhi).await {
+                                            scanner_state.write().await.rejections_count += 1;
                                             continue;
                                         }
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
                                         if !institutional::verify_lp_burned_or_locked(&scanner_client, rpc_endpoint, &mint, &pair_addr, dex_id, scanner_cfg.min_dead_lp_ratio).await {
+                                            scanner_state.write().await.rejections_count += 1;
                                             continue;
                                         }
 
@@ -756,6 +793,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     mint, sim.units_consumed, sim.optimized_cu_limit, sim.tip_lamports, sim.tip_account);
                                             }
                                             Err(err) => {
+                                                scanner_state.write().await.rejections_count += 1;
                                                 println!("[PREFLIGHT REJECT] Simulation reverted for mint {}: {}", mint, err);
                                                 continue;
                                             }

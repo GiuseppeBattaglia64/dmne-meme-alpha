@@ -806,26 +806,30 @@
       const radar = document.getElementById("radar-container");
       if (!events || events.length === 0) return;
 
+      document.getElementById("radar-count").innerText = `${events.length} ACTIVE`;
+
       radar.innerHTML = events.slice(0, 8).map(e => {
-        const isPump = e.token_mint ? e.token_mint.endsWith("pump") : true;
+        const mint = e.token_mint || e.mint || "";
+        const isPump = (e.dex_id === "pumpfun") || mint.endsWith("pump");
         const tag = isPump ? '<span class="badge badge-purple" style="font-size:7px;">PUMP</span>' : '<span class="badge badge-jito" style="font-size:7px;">RAY</span>';
-        const curvePct = Math.min(100, Math.floor(Math.random() * 45) + 40);
-        const mintShort = e.token_mint ? e.token_mint.substring(0, 4) + '...' + e.token_mint.substring(e.token_mint.length - 4) : 'MINT';
-        const dexImgUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${e.token_mint}.png`;
-        
+        const curvePct = e.bonding_curve_pct || 65;
+        const mintShort = mint.length > 8 ? mint.substring(0, 4) + '...' + mint.substring(mint.length - 4) : 'MINT';
+        const dexImgUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${mint}.png`;
+        const sym = e.symbol || "CANDIDATE";
+
         return `
           <div class="radar-card">
-            <img class="radar-avatar" src="${dexImgUrl}" onerror="handleImgError(this, '${e.symbol}')" alt="${e.symbol}">
+            <img class="radar-avatar" src="${dexImgUrl}" onerror="handleImgError(this, '${sym}')" alt="${sym}">
             <div class="radar-info">
               <div class="radar-title-row">
-                <div class="radar-sym">${e.symbol} ${tag}</div>
+                <div class="radar-sym">${sym} ${tag}</div>
                 <span class="mono" style="font-size:8px; color:var(--text-dim);">${mintShort}</span>
               </div>
               <div class="forensic-badges">
                 <span class="f-badge pass">MINT REVOKED</span>
                 <span class="f-badge pass">FREEZE REVOKED</span>
-                <span class="f-badge pass">DEV: 0.0%</span>
-                <span class="f-badge pass">CU: 55.7k</span>
+                <span class="f-badge pass">DEV: ${e.dev_holding_pct || 0.0}%</span>
+                <span class="f-badge pass">CU: ${(e.cu_consumed || 55774) / 1000}k</span>
               </div>
             </div>
 
@@ -982,6 +986,9 @@
         const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
         document.getElementById("win-rate").innerText = `Win Rate: ${winRate}%`;
         document.getElementById("trade-count").innerText = `Closed: ${totalTrades}`;
+        if (data.rejections_count !== undefined) {
+          document.getElementById("rejected-count").innerText = data.rejections_count;
+        }
 
         const positions = data.active_positions || [];
         let floatingSol = 0.0;
@@ -998,12 +1005,8 @@
           renderSettledTable(data.closed_trades);
         }
 
-        // Maintain decoupled discovery radar buffer
         if (data.radar_candidates && data.radar_candidates.length > 0) {
           renderRadar(data.radar_candidates);
-        } else if (!window.hasInitializedRadar && positions.length > 0) {
-          renderRadar(positions);
-          window.hasInitializedRadar = true;
         }
 
         if (data.recent_onchain_events) {
