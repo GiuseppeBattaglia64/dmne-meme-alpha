@@ -604,12 +604,20 @@
     }, 1000);
 
     // Fallback SVG Identicon Generator for Meme PFPs
+        // Base64-Encoded Clean SVG Identicon Generator (Zero HTML Escaping Collisions)
     function generateIdenticonSvg(symbol) {
       const colors = ['#06b6d4', '#10b981', '#a855f7', '#f59e0b', '#ec4899'];
-      const charCode = (symbol || 'TK').charCodeAt(0) + (symbol || 'TK').charCodeAt(1 || 0);
+      const sym = (symbol || 'TK').replace(/[^a-zA-Z0-9]/g, '') || 'TK';
+      const charCode = sym.charCodeAt(0) + (sym.charCodeAt(1) || 0);
       const bg = colors[charCode % colors.length];
-      const initials = (symbol || 'TK').substring(0, 2).toUpperCase();
-      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="${encodeURIComponent(bg)}"/><text x="16" y="21" font-family="sans-serif" font-weight="bold" font-size="12" fill="%23ffffff" text-anchor="middle">${initials}</text></svg>`;
+      const initials = sym.substring(0, 2).toUpperCase();
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="${bg}"/><text x="16" y="21" font-family="sans-serif" font-weight="bold" font-size="12" fill="#ffffff" text-anchor="middle">${initials}</text></svg>`;
+      return 'data:image/svg+xml;base64,' + btoa(svg);
+    }
+
+    function handleImgError(el, symbol) {
+      el.onerror = null;
+      el.src = generateIdenticonSvg(symbol);
     }
 
     // High-Resolution Canvas Micro-Sparkline Chart Engine
@@ -739,13 +747,12 @@
         else if (pnl <= -20.0) { regLabel = "BLEED"; regClass = "reg-bld"; }
 
         const dexImgUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${p.token_mint}.png`;
-        const fallbackImg = generateIdenticonSvg(p.symbol);
-
+        
         return `
           <div class="pos-card">
             <div class="pos-head">
               <div class="token-id-group">
-                <img class="token-avatar" src="${dexImgUrl}" onerror="this.onerror=null; this.src='${fallbackImg}';" alt="${p.symbol}">
+                <img class="token-avatar" src="${dexImgUrl}" onerror="handleImgError(this, '${p.symbol}')" alt="${p.symbol}">
                 <div>
                   <div class="token-sym">${p.symbol}</div>
                   <span class="regime-pill ${regClass}">${regLabel}</span>
@@ -805,11 +812,10 @@
         const curvePct = Math.min(100, Math.floor(Math.random() * 45) + 40);
         const mintShort = e.token_mint ? e.token_mint.substring(0, 4) + '...' + e.token_mint.substring(e.token_mint.length - 4) : 'MINT';
         const dexImgUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${e.token_mint}.png`;
-        const fallbackImg = generateIdenticonSvg(e.symbol);
-
+        
         return `
           <div class="radar-card">
-            <img class="radar-avatar" src="${dexImgUrl}" onerror="this.onerror=null; this.src='${fallbackImg}';" alt="${e.symbol}">
+            <img class="radar-avatar" src="${dexImgUrl}" onerror="handleImgError(this, '${e.symbol}')" alt="${e.symbol}">
             <div class="radar-info">
               <div class="radar-title-row">
                 <div class="radar-sym">${e.symbol} ${tag}</div>
