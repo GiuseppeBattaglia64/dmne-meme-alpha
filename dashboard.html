@@ -731,12 +731,12 @@
           }
         }
 
-        let fillPct = ((pnl + 30.0) / 130.0) * 100.0;
+        let fillPct = ((pnl + 20.0) / 120.0) * 100.0;
         fillPct = Math.max(2, Math.min(100, fillPct));
         const fillClass = pnl >= 0 ? "gauge-fill-green" : "gauge-fill-red";
 
         const ageSec = p.entry_timestamp_epoch ? Math.max(0, now - p.entry_timestamp_epoch) : 0;
-        const ttlRem = Math.max(0, 900 - ageSec);
+        const ttlRem = Math.max(0, 450 - ageSec);
         const ttlMin = Math.floor(ttlRem / 60);
         const ttlSec = ttlRem % 60;
 
@@ -775,9 +775,9 @@
 
             <div class="gauge-wrap">
               <div class="gauge-labels" style="color:#94a3b8; font-weight:600;">
-                <span>STOP: -30%</span>
+                <span>STOP: -20%</span>
                 <span>ENTRY: 0%</span>
-                <span>BE: +22%</span>
+                <span>BE: +18%</span>
                 <span>T1: +100%</span>
               </div>
               <div class="gauge-track">

@@ -220,3 +220,57 @@ pub async fn fetch_recent_radar_audits(client: &Client, limit: i64) -> Vec<serde
     }
     audits
 }
+
+
+use tokio::sync::mpsc;
+
+#[derive(Debug, Clone)]
+pub struct AuditLogPayload {
+    pub token_mint: String,
+    pub pair_address: String,
+    pub dex_id: String,
+    pub liquidity_usd: f64,
+    pub hhi_concentration: f64,
+    pub mint_revoked: bool,
+    pub freeze_revoked: bool,
+    pub lp_burned: bool,
+    pub admitted: bool,
+    pub rejection_reason: String,
+}
+
+/// Spawns an asynchronous dedicated database worker with a single persistent connection
+pub fn spawn_db_audit_worker(db_url: &'static str) -> mpsc::UnboundedSender<AuditLogPayload> {
+    let (tx, mut rx) = mpsc::unbounded_channel::<AuditLogPayload>();
+
+    tokio::spawn(async move {
+        loop {
+            match establish_connection(db_url).await {
+                Ok(client) => {
+                    println!("[DB WORKER] Persistent audit connection established.");
+                    while let Some(audit) = rx.recv().await {
+                        let _ = record_pre_trade_audit(
+                            &client,
+                            &audit.token_mint,
+                            &audit.pair_address,
+                            &audit.dex_id,
+                            audit.liquidity_usd,
+                            audit.hhi_concentration,
+                            audit.mint_revoked,
+                            audit.freeze_revoked,
+                            audit.lp_burned,
+                            audit.admitted,
+                            &audit.rejection_reason,
+                        ).await;
+                    }
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("[DB WORKER] Connection failed: {}. Retrying in 3s...", e);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                }
+            }
+        }
+    });
+
+    tx
+}

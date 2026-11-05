@@ -49,7 +49,7 @@ impl Default for EngineConfig {
             max_price_impact_ratio: 0.012,       // 1.2% maximum pool price impact
             hhi_concentration_ceiling: 0.280,     // Herfindahl-Hirschman Index limit for top holders
             min_dead_lp_ratio: 0.950,             // 95% burned or locked LP tokens for AMM pools
-            min_liquidity_usd: 8000.0,            // Dynamic fallback liquidity threshold
+            min_liquidity_usd: 18000.0,            // Dynamic fallback liquidity threshold
             kelly_nav_fraction: 0.075,            // 7.5% NAV Half-Kelly risk allocation
             min_entry_sol: 0.012,                 // Minimum entry size (covers rent & priority fees)
             max_entry_sol: 0.045,                 // Maximum entry size cap
@@ -57,10 +57,10 @@ impl Default for EngineConfig {
             rolling_sample_window: 15,            // 15-tick rolling window for volatility calculation
             volatility_trail_multiplier: 2.20,    // Multiplier (k) applied to rolling standard deviation
             z_score_flash_threshold: -3.0,        // Emergency circuit breaker triggered at -3.0 sigma
-            breakeven_arm_peak_pct: 22.0,         // Minimum peak gain to arm breakeven floor guard
+            breakeven_arm_peak_pct: 18.0,         // Minimum peak gain to arm breakeven floor guard
             breakeven_floor_pct: 3.0,             // Minimum guaranteed profit floor
-            stagnation_ttl_seconds: 900,          // 15-minute capital recycling window
-            hard_stop_loss_pct: -30.0,            // Hard stop loss cutoff
+            stagnation_ttl_seconds: 450,          // 15-minute capital recycling window
+            hard_stop_loss_pct: -20.0,            // Hard stop loss cutoff
             tranche_1_scale_ratio: 0.50,          // 50% de-risking tranche
             tranche_1_target_pct: 100.0,          // De-risk at +100% (2x)
             tranche_2_scale_ratio: 0.25,          // 25% profit harvest tranche

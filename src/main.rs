@@ -458,6 +458,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("============================================================\n");
 
     let state = Arc::new(RwLock::new(BotState::new()));
+    let db_audit_tx = db::spawn_db_audit_worker(db::DEFAULT_DB_URL);
     // Reconcile system bankroll and cumulative metrics on startup
     if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
         let (total, wins, net, rejections) = db::fetch_complete_system_stats(&pg).await;
@@ -633,7 +634,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Rule 1: Flash Dump Circuit Breaker (Detect sudden >= 25% tick collapse)
                 let tick_drop = if pos.last_price_sol > 0.0 { (pos.last_price_sol - pos.current_price_sol) / pos.last_price_sol } else { 0.0 };
-                if tick_drop >= 0.25 {
+                if tick_drop >= 0.18 {
                     let exit_pnl = pos.pnl_pct;
                     let realized = pos.size_sol * (exit_pnl / 100.0);
                     println!("[CRUISE CONTROL] Flash Dump detected on {} (-{:.1}% tick drop). Emergency Exit.", pos.symbol, tick_drop * 100.0);
@@ -750,6 +751,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. Ingestion Loop: Fetch Newly Launched Solana Tokens in Real-Time
     let scanner_state = Arc::clone(&state);
+    let scanner_audit_tx = db_audit_tx.clone();
     let scanner_client = http_client.clone();
     let scanner_cfg = Arc::clone(&config);
     tokio::spawn(async move {
@@ -776,14 +778,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
                                         if !verify_token_security(&scanner_client, rpc_endpoint, &mint).await {
                                             scanner_state.write().await.rejections_count += 1;
-                                            let audit_mint = mint.clone();
-                                            let audit_pool = pair_addr.clone();
-                                            let audit_dex = dex_id.to_string();
-                                            let audit_liq = liq;
-                                            tokio::spawn(async move {
-                                                if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                                    db::record_pre_trade_audit(&pg, &audit_mint, &audit_pool, &audit_dex, audit_liq, 0.35, false, false, false, false, "PRE_TRADE_SECURITY_REJECT").await;
-                                                }
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: "PRE_TRADE_SECURITY_REJECT".to_string(),
                                             });
                                             continue;
                                         }
@@ -795,27 +800,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                         if !institutional::evaluate_holder_hhi(&scanner_client, rpc_endpoint, &mint, dynamic_hhi).await {
                                             scanner_state.write().await.rejections_count += 1;
-                                            let audit_mint = mint.clone();
-                                            let audit_pool = pair_addr.clone();
-                                            let audit_dex = dex_id.to_string();
-                                            let audit_liq = liq;
-                                            tokio::spawn(async move {
-                                                if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                                    db::record_pre_trade_audit(&pg, &audit_mint, &audit_pool, &audit_dex, audit_liq, 0.50, true, true, false, false, "PRE_TRADE_HHI_REJECT").await;
-                                                }
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.50,
+                                                mint_revoked: true,
+                                                freeze_revoked: true,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: "PRE_TRADE_HHI_REJECT".to_string(),
                                             });
                                             continue;
                                         }
                                                                                 if !institutional::verify_lp_burned_or_locked(&scanner_client, rpc_endpoint, &mint, &pair_addr, dex_id, scanner_cfg.min_dead_lp_ratio).await {
                                             scanner_state.write().await.rejections_count += 1;
-                                            let audit_mint = mint.clone();
-                                            let audit_pool = pair_addr.clone();
-                                            let audit_dex = dex_id.to_string();
-                                            let audit_liq = liq;
-                                            tokio::spawn(async move {
-                                                if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                                    db::record_pre_trade_audit(&pg, &audit_mint, &audit_pool, &audit_dex, audit_liq, 0.20, true, true, false, false, "PRE_TRADE_LP_REJECT").await;
-                                                }
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.20,
+                                                mint_revoked: true,
+                                                freeze_revoked: true,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: "PRE_TRADE_LP_REJECT".to_string(),
                                             });
                                             continue;
                                         }
@@ -836,14 +847,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             Err(err) => {
                                                 scanner_state.write().await.rejections_count += 1;
                                                 println!("[PREFLIGHT REJECT] Simulation reverted for mint {}: {}", mint, err);
-                                                let audit_mint = mint.clone();
-                                                let audit_pool = pair_addr.clone();
-                                                let audit_dex = dex_id.to_string();
-                                                let audit_liq = liq;
-                                                tokio::spawn(async move {
-                                                    if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                                        db::record_pre_trade_audit(&pg, &audit_mint, &audit_pool, &audit_dex, audit_liq, 0.20, true, true, true, false, "PREFLIGHT_SIM_REJECT").await;
-                                                    }
+                                                let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                    token_mint: mint.clone(),
+                                                    pair_address: pair_addr.clone(),
+                                                    dex_id: dex_id.to_string(),
+                                                    liquidity_usd: liq,
+                                                    hhi_concentration: 0.20,
+                                                    mint_revoked: true,
+                                                    freeze_revoked: true,
+                                                    lp_burned: true,
+                                                    admitted: false,
+                                                    rejection_reason: "PREFLIGHT_SIM_REJECT".to_string(),
                                                 });
                                                 continue;
                                             }
@@ -867,17 +881,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             let current_nav = g.current_bankroll_sol;
                                             let dynamic_entry_sol = (current_nav * scanner_cfg.kelly_nav_fraction).max(0.0100).min(0.0450);
 
-                                            let audit_mint = mint.clone();
-                                            let audit_pool = pair_addr.clone();
-                                            let audit_dex = dex_id.to_string();
-                                            let audit_liq = liq;
-                                            tokio::spawn(async move {
-                                                if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                                    db::record_pre_trade_audit(
-                                                        &pg_client, &audit_mint, &audit_pool, &audit_dex,
-                                                        audit_liq, 0.15, true, true, true, true, "Admitted"
-                                                    ).await;
-                                                }
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.15,
+                                                mint_revoked: true,
+                                                freeze_revoked: true,
+                                                lp_burned: true,
+                                                admitted: true,
+                                                rejection_reason: "Admitted".to_string(),
                                             });
 
                                             g.active_positions.push(Position {
