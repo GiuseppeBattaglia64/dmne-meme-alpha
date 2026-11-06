@@ -44,6 +44,7 @@ mod institutional;
 mod db;
 mod amm;
 mod ws_ingest;
+mod risk;
 
 fn append_comprehensive_trade_log(
     pos: &Position,
@@ -972,10 +973,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
+            let mut effective_risk_cfg = eval_cfg.risk.clone();
+            effective_risk_cfg.stagnation_ttl_secs = dynamic_ttl_secs;
+            effective_risk_cfg.runner_trailing_drop_pct *= dynamic_trail_mult / 2.20;
+
             // Evaluate dynamic exit rules
             let mut guard = eval_state.write().await;
             let mut closed_indices = Vec::new();
             let state = &mut *guard;
+            let now_epoch = chrono::Utc::now().timestamp() as u64;
             for (idx, pos) in state.active_positions.iter_mut().enumerate() {
                 let peak_pct = ((pos.peak_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
 
@@ -983,70 +989,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // DCS CRUISE CONTROL EXECUTION SUPERVISOR
                 // ==========================================
 
-                // Rule 1: Flash Dump Circuit Breaker (Detect sudden >= 25% tick collapse)
+                // Rule 1: Flash Dump Circuit Breaker (Detect sudden >= 18% tick collapse)
                 let tick_drop = if pos.last_price_sol > 0.0 { (pos.last_price_sol - pos.current_price_sol) / pos.last_price_sol } else { 0.0 };
                 if tick_drop >= 0.18 {
                     let exit_pnl = pos.pnl_pct;
                     let realized = pos.size_sol * (exit_pnl / 100.0);
                     println!("[CRUISE CONTROL] Flash Dump detected on {} (-{:.1}% tick drop). Emergency Exit.", pos.symbol, tick_drop * 100.0);
                     closed_indices.push((idx, "Flash Dump Breaker".to_string(), realized, exit_pnl));
-                }
-                // Rule 2: Multi-Tiered Convex TP1 (40% scale-out at >= +45%)
-                else if pos.pnl_pct >= eval_cfg.risk.tp1_trigger_pct && !pos.tranche_1_taken {
-                    pos.tranche_1_taken = true;
-                    let sell_size = pos.initial_size_sol * eval_cfg.risk.tp1_sell_fraction;
-                    let realized = sell_size * (pos.pnl_pct / 100.0);
-                    state.current_bankroll_sol += sell_size + realized;
-                    pos.size_sol -= sell_size;
-                    println!("[CRUISE CONTROL] TP1 Harvest on {} (+{:.1}%): Recaptured capital + {:.5} SOL gain.", pos.symbol, pos.pnl_pct, realized);
-                }
-                // Rule 3: Multi-Tiered Convex TP2 (35% scale-out at >= +90%)
-                else if pos.pnl_pct >= eval_cfg.risk.tp2_trigger_pct && !pos.tranche_2_taken {
-                    pos.tranche_2_taken = true;
-                    let sell_size = pos.initial_size_sol * eval_cfg.risk.tp2_sell_fraction;
-                    let realized = sell_size * (pos.pnl_pct / 100.0);
-                    state.current_bankroll_sol += sell_size + realized;
-                    pos.size_sol -= sell_size;
-                    println!("[CRUISE CONTROL] TP2 Harvest on {} (+{:.1}%): Locked {:.5} SOL gain. 25% moonbag runner active.", pos.symbol, pos.pnl_pct, realized);
-                }
-                // Rule 4: Moonbag Trailing Stop (18% drop from peak for runner or any position above +45% peak)
-                else if peak_pct >= eval_cfg.risk.tp1_trigger_pct && pos.peak_price_sol > 0.0 {
-                    let effective_trail_drop = eval_cfg.risk.runner_trailing_drop_pct * (dynamic_trail_mult / 2.20);
-                    let drop_from_peak_pct = ((pos.peak_price_sol - pos.current_price_sol) / pos.peak_price_sol) * 100.0;
-                    if drop_from_peak_pct >= effective_trail_drop {
-                        let exit_pnl = pos.pnl_pct;
-                        let realized = pos.size_sol * (exit_pnl / 100.0);
-                        let label = format!("Moonbag Trailing Stop (-{:.1}% from +{:.0}% peak)", effective_trail_drop, peak_pct);
-                        closed_indices.push((idx, label, realized, exit_pnl));
+                } else {
+                    let mut active_pos = risk::ActivePosition {
+                        token_mint: pos.token_mint.clone(),
+                        symbol: pos.symbol.clone(),
+                        entry_price: pos.entry_price_sol,
+                        initial_size_sol: pos.initial_size_sol,
+                        remaining_size_sol: pos.size_sol,
+                        remaining_token_amount: 0,
+                        peak_pnl_pct: peak_pct,
+                        tp1_executed: pos.tranche_1_taken,
+                        tp2_executed: pos.tranche_2_taken,
+                        opened_at_epoch: pos.entry_timestamp_epoch,
+                    };
+
+                    let action = risk::evaluate_position_exit(
+                        &mut active_pos,
+                        pos.current_price_sol,
+                        now_epoch,
+                        &effective_risk_cfg,
+                    );
+
+                    match action {
+                        risk::ExitAction::PartialSell { sol_basis_closed, rule_label, .. } => {
+                            let realized = sol_basis_closed * (pos.pnl_pct / 100.0);
+                            state.current_bankroll_sol += sol_basis_closed + realized;
+                            pos.size_sol = active_pos.remaining_size_sol;
+                            pos.tranche_1_taken = active_pos.tp1_executed;
+                            pos.tranche_2_taken = active_pos.tp2_executed;
+                            println!(
+                                "[CRUISE CONTROL] {} on {} (+{:.1}%): Recaptured capital + {:.5} SOL gain.",
+                                rule_label, pos.symbol, pos.pnl_pct, realized
+                            );
+                        }
+                        risk::ExitAction::FullExit { rule_label } => {
+                            let exit_pnl = pos.pnl_pct;
+                            let realized = pos.size_sol * (exit_pnl / 100.0);
+                            closed_indices.push((idx, rule_label, realized, exit_pnl));
+                        }
+                        risk::ExitAction::Hold => {}
                     }
-                }
-                // Rule 5: Uncapped Breakeven Guard (only arms after a +35% move, protects +12% floor)
-                else if peak_pct >= eval_cfg.risk.breakeven_arm_pct && pos.pnl_pct <= eval_cfg.risk.breakeven_floor_pct {
-                    let realized = pos.size_sol * (eval_cfg.risk.breakeven_floor_pct / 100.0);
-                    closed_indices.push((idx, format!("Breakeven Guard (+{:.0}%)", eval_cfg.risk.breakeven_floor_pct), realized, eval_cfg.risk.breakeven_floor_pct));
-                }
-                // Rule 6: Relaxed Stagnation TTL (only kills dead pools that never gained traction)
-                else if (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) > dynamic_ttl_secs
-                    && peak_pct <= eval_cfg.risk.stagnation_max_peak_pct
-                    && pos.pnl_pct >= eval_cfg.risk.stagnation_band_min_pct
-                    && pos.pnl_pct <= eval_cfg.risk.stagnation_band_max_pct {
-                    let exit_pnl = pos.pnl_pct;
-                    let realized = pos.size_sol * (exit_pnl / 100.0);
-                    closed_indices.push((idx, "Stagnation Dead Pool Exit".to_string(), realized, exit_pnl));
-                }
-                // Rule 7: Hard Stop-Loss cutoff (-20%)
-                else if pos.pnl_pct <= eval_cfg.risk.stop_loss_pct {
-                    let exit_pnl = pos.pnl_pct;
-                    let realized = pos.size_sol * (exit_pnl / 100.0);
-                    closed_indices.push((idx, format!("Stop-Loss ({:.0}%)", eval_cfg.risk.stop_loss_pct), realized, exit_pnl));
                 }
 
                 // UI status milestones
-                if pos.pnl_pct >= eval_cfg.risk.tp2_trigger_pct && !pos.status.contains("Runner") {
+                if pos.tranche_2_taken && !pos.status.contains("Runner") {
                     pos.status = "25% Runner Moonbag".to_string();
-                } else if pos.pnl_pct >= eval_cfg.risk.tp1_trigger_pct && pos.status == "Active" {
+                } else if pos.tranche_1_taken && pos.status == "Active" {
                     pos.status = "TP1 Harvested (+45%)".to_string();
-                } else if peak_pct >= eval_cfg.risk.breakeven_arm_pct && pos.status == "Active" {
+                } else if peak_pct >= effective_risk_cfg.breakeven_arm_pct && pos.status == "Active" {
                     pos.status = "Breakeven Armed (+12% Floor)".to_string();
                 }
 
