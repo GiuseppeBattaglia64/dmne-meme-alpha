@@ -16,8 +16,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Validate Swift Code Syntax
+      - name: Compile and Package SwiftUI App
         run: |
           cd ios/DMNEAlpha
-          swiftc -typecheck DMNEAlphaApp.swift ContentView.swift DeskViewModel.swift -sdk $(xcrun --sdk iphonesimulator --show-sdk-path) -target arm64-apple-ios17.0-simulator
-          echo "Native SwiftUI code compiles cleanly without errors!"
+          mkdir -p build/DMNEAlpha.app
+          swiftc -emit-executable DMNEAlphaApp.swift ContentView.swift DeskViewModel.swift \
+            -sdk $(xcrun --sdk iphonesimulator --show-sdk-path) \
+            -target arm64-apple-ios17.0-simulator \
+            -o build/DMNEAlpha.app/DMNEAlpha
+          ditto -c -k --sequesterRsrc build/DMNEAlpha.app DMNEAlpha-iOS.zip
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DMNEAlpha-iOS-Build
+          path: ios/DMNEAlpha/DMNEAlpha-iOS.zip
+          retention-days: 7
