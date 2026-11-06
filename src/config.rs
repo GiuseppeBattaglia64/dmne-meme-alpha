@@ -117,6 +117,16 @@ pub struct RiskConfig {
     pub early_abort_max_peak_pct: f64,
     #[serde(default = "default_early_abort_loss_pct")]
     pub early_abort_loss_pct: f64,
+    #[serde(default = "default_entry_confirm_ticks")]
+    pub entry_confirm_ticks: u32,
+    #[serde(default = "default_entry_confirm_interval_secs")]
+    pub entry_confirm_interval_secs: u64,
+    #[serde(default = "default_min_confirm_tick_gain_pct")]
+    pub min_confirm_tick_gain_pct: f64,
+    #[serde(default = "default_max_confirm_tick_gain_pct")]
+    pub max_confirm_tick_gain_pct: f64,
+    #[serde(default = "default_min_confirm_liquidity_retention_ratio")]
+    pub min_confirm_liquidity_retention_ratio: f64,
     #[serde(default = "default_kelly_fraction_nav_pct")]
     pub kelly_fraction_nav_pct: f64,
     #[serde(default = "default_max_active_slots")]
@@ -150,6 +160,11 @@ fn default_max_entry_fdv_to_liquidity_ratio() -> f64 { 15.0 }
 fn default_early_abort_window_secs() -> u64 { 45 }
 fn default_early_abort_max_peak_pct() -> f64 { 1.0 }
 fn default_early_abort_loss_pct() -> f64 { -10.0 }
+fn default_entry_confirm_ticks() -> u32 { 3 }
+fn default_entry_confirm_interval_secs() -> u64 { 4 }
+fn default_min_confirm_tick_gain_pct() -> f64 { 0.8 }
+fn default_max_confirm_tick_gain_pct() -> f64 { 25.0 }
+fn default_min_confirm_liquidity_retention_ratio() -> f64 { 0.98 }
 fn default_kelly_fraction_nav_pct() -> f64 { 7.5 }
 fn default_max_active_slots() -> usize { 4 }
 fn default_dex_roundtrip_fee_pct() -> f64 { 0.60 }
@@ -193,6 +208,11 @@ impl Default for RiskConfig {
             early_abort_window_secs: 45,
             early_abort_max_peak_pct: 1.0,
             early_abort_loss_pct: -10.0,
+            entry_confirm_ticks: 3,
+            entry_confirm_interval_secs: 4,
+            min_confirm_tick_gain_pct: 0.8,
+            max_confirm_tick_gain_pct: 25.0,
+            min_confirm_liquidity_retention_ratio: 0.98,
             kelly_fraction_nav_pct: 7.5,
             max_active_slots: 4,
             dex_roundtrip_fee_pct: 0.60,

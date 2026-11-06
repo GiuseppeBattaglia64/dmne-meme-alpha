@@ -46,6 +46,8 @@ mod amm;
 mod ws_ingest;
 mod risk;
 
+pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
+
 fn append_comprehensive_trade_log(
     pos: &Position,
     exit_pnl_pct: f64,
@@ -74,7 +76,7 @@ fn append_comprehensive_trade_log(
         let hold_duration = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
         let now_utc = chrono::Utc::now().to_rfc3339();
 
-        let eur_rate = 85.50;
+        let eur_rate = DEFAULT_SOL_EUR_RATE;
         let pnl_eur = exit_pnl_sol * eur_rate;
         let mfe_pnl_pct = ((pos.peak_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
         let mae_pnl_pct = ((pos.trough_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
@@ -1074,11 +1076,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let eval_state = Arc::clone(&state);
     let eval_client = http_client.clone();
     let eval_cfg = Arc::clone(&config);
+    let eval_audit_tx = db_audit_tx.clone();
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
 
-            // Concurrency Queue Consumer: Populate vacant slots from pre-audited candidate_queue
+            // Canonical Concurrency Queue Consumer: Populate vacant slots with Multi-Tick Confirmed candidates
             {
                 let mut candidate_to_eval = None;
                 {
@@ -1130,31 +1133,94 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 if let Some(candidate) = candidate_to_eval {
-                    if let Some(snap) = fetch_live_price(&eval_client, &candidate.token_mint).await {
+                    let confirm_ticks = eval_cfg.risk.entry_confirm_ticks as usize;
+                    let confirm_interval = Duration::from_secs(eval_cfg.risk.entry_confirm_interval_secs);
+                    let mut prices = Vec::with_capacity(confirm_ticks);
+                    let mut liquidities = Vec::with_capacity(confirm_ticks);
+                    let mut final_snap_opt = None;
+                    let mut fetch_failed = false;
+
+                    for tick in 0..confirm_ticks {
+                        if tick > 0 {
+                            tokio::time::sleep(confirm_interval).await;
+                        }
+                        if let Some(snap) = fetch_live_price(&eval_client, &candidate.token_mint).await {
+                            prices.push(snap.price_sol);
+                            liquidities.push(snap.liquidity_usd);
+                            final_snap_opt = Some(snap);
+                        } else {
+                            fetch_failed = true;
+                            break;
+                        }
+                    }
+
+                    if fetch_failed || final_snap_opt.is_none() {
+                        println!("[CONFIRMATION REJECT] Candidate {} ({}) failed live telemetry fetch during confirmation", candidate.symbol, candidate.token_mint);
+                        let mut state = eval_state.write().await;
+                        state.rejections_count += 1;
+                        state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                        state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                    } else {
+                        let final_snap = final_snap_opt.unwrap();
+                        let tick_res = risk::validate_live_tick_confirmation(&prices, &liquidities, &eval_cfg.risk);
                         let conviction_pct = if candidate.dex_id == "raydium" {
                             100.0
                         } else {
-                            ((snap.liquidity_usd / 69_000.0) * 100.0).min(100.0)
+                            ((final_snap.liquidity_usd / 69_000.0) * 100.0).min(100.0)
                         };
-                        if let Err(reject_reason) = risk::validate_queue_pop_snapshot(
-                            snap.liquidity_usd,
-                            snap.fdv_usd,
-                            snap.m5_price_change_pct,
-                            snap.h1_price_change_pct,
-                            snap.buy_sell_ratio,
+                        let snapshot_res = risk::validate_queue_pop_snapshot(
+                            final_snap.liquidity_usd,
+                            final_snap.fdv_usd,
+                            final_snap.m5_price_change_pct,
+                            final_snap.h1_price_change_pct,
+                            final_snap.buy_sell_ratio,
                             conviction_pct,
                             &eval_cfg.risk,
-                        ) {
-                            println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated while in queue: {}", candidate.symbol, candidate.token_mint, reject_reason);
+                        );
+
+                        if let Err(reject_reason) = tick_res {
+                            println!("[CONFIRMATION REJECT] Candidate {} ({}) failed live tick gate: {} (Ticks: {:?})", 
+                                candidate.symbol, candidate.token_mint, reject_reason, prices);
                             let mut state = eval_state.write().await;
                             state.rejections_count += 1;
                             state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                             state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                            let _ = eval_audit_tx.send(db::AuditLogPayload {
+                                token_mint: candidate.token_mint.clone(),
+                                pair_address: final_snap.pair_address.clone(),
+                                dex_id: candidate.dex_id.clone(),
+                                liquidity_usd: final_snap.liquidity_usd,
+                                hhi_concentration: 0.15,
+                                mint_revoked: true,
+                                freeze_revoked: true,
+                                lp_burned: true,
+                                admitted: false,
+                                rejection_reason: reject_reason.to_string(),
+                            });
+                        } else if let Err(reject_reason) = snapshot_res {
+                            println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated during confirmation: {}", 
+                                candidate.symbol, candidate.token_mint, reject_reason);
+                            let mut state = eval_state.write().await;
+                            state.rejections_count += 1;
+                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                            let _ = eval_audit_tx.send(db::AuditLogPayload {
+                                token_mint: candidate.token_mint.clone(),
+                                pair_address: final_snap.pair_address.clone(),
+                                dex_id: candidate.dex_id.clone(),
+                                liquidity_usd: final_snap.liquidity_usd,
+                                hhi_concentration: 0.15,
+                                mint_revoked: true,
+                                freeze_revoked: true,
+                                lp_burned: true,
+                                admitted: false,
+                                rejection_reason: reject_reason.to_string(),
+                            });
                         } else {
                             let mut state = eval_state.write().await;
                             let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint || p.symbol == candidate.symbol);
                             if is_active {
-                                println!("[ANTI-DUPLICATE] Active position already exists on pop: {} ({})", candidate.symbol, candidate.token_mint);
+                                println!("[ANTI-DUPLICATE] Active position already exists on confirmed pop: {} ({})", candidate.symbol, candidate.token_mint);
                                 state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                                 state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             } else if state.active_positions.len() < eval_cfg.risk.max_active_slots {
@@ -1167,34 +1233,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     .unwrap_or_default()
                                     .as_secs();
                                 let now_iso = chrono::Utc::now().to_rfc3339();
-                                let initial_spot = snap.price_sol;
-                                println!("[QUEUE CONSUMER] Filling vacant slot with candidate: {} ({}) | Price: {:.10e} | Sized: {:.4} SOL", 
-                                    candidate.symbol, candidate.token_mint, initial_spot, dynamic_entry_sol);
+                                let final_confirmed_spot = *prices.last().unwrap();
+                                println!("[CANONICAL ENTRY] Opened position on CONFIRMED candidate: {} ({}) | Confirmed Spot: {:.10e} | Ticks: {:?} | Sized: {:.4} SOL", 
+                                    candidate.symbol, candidate.token_mint, final_confirmed_spot, prices, dynamic_entry_sol);
                                 
                                 state.active_positions.push(Position {
                                     id: format!("pos_{}", trade_id),
                                     token_mint: candidate.token_mint.clone(),
-                                    pair_address: snap.pair_address,
+                                    pair_address: final_snap.pair_address.clone(),
                                     symbol: candidate.symbol.clone(),
                                     entry_time_iso: now_iso,
                                     entry_timestamp_epoch: now_epoch,
-                                    entry_price_sol: initial_spot,
-                                    current_price_sol: initial_spot,
-                                    last_price_sol: initial_spot,
+                                    entry_price_sol: final_confirmed_spot,
+                                    current_price_sol: final_confirmed_spot,
+                                    last_price_sol: final_confirmed_spot,
                                     initial_size_sol: dynamic_entry_sol,
                                     size_sol: dynamic_entry_sol,
                                     tranche_1_taken: false,
                                     tranche_2_taken: false,
                                     pnl_pct: 0.0,
                                     status: "Active".to_string(),
-                                    peak_price_sol: initial_spot,
-                                    trough_price_sol: initial_spot,
-                                    liquidity_usd: snap.liquidity_usd,
-                                    fdv_usd: snap.fdv_usd,
-                                    price_buffer: vec![initial_spot],
+                                    peak_price_sol: final_confirmed_spot,
+                                    trough_price_sol: final_confirmed_spot,
+                                    liquidity_usd: final_snap.liquidity_usd,
+                                    fdv_usd: final_snap.fdv_usd,
+                                    price_buffer: prices.clone(),
                                 });
+                                let log_msg = format!("SNIPED CONFIRMED TOKEN: {} ({}) at {:.4e} SOL", candidate.symbol, &candidate.token_mint[..8.min(candidate.token_mint.len())], final_confirmed_spot);
+                                state.recent_onchain_events.insert(0, log_msg);
+                                if state.recent_onchain_events.len() > 15 {
+                                    state.recent_onchain_events.pop();
+                                }
                                 state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                                 state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                                let _ = eval_audit_tx.send(db::AuditLogPayload {
+                                    token_mint: candidate.token_mint.clone(),
+                                    pair_address: final_snap.pair_address.clone(),
+                                    dex_id: candidate.dex_id.clone(),
+                                    liquidity_usd: final_snap.liquidity_usd,
+                                    hhi_concentration: 0.15,
+                                    mint_revoked: true,
+                                    freeze_revoked: true,
+                                    lp_burned: true,
+                                    admitted: true,
+                                    rejection_reason: "Admitted (Multi-Tick Confirmed)".to_string(),
+                                });
                             }
                         }
                     }
@@ -1477,7 +1560,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 if !is_active && !is_quarantined {
                                     drop(guard);
                                     if let Some(snap) = fetch_live_price(&scanner_client, &mint).await {
-                                        let initial_price = snap.price_sol;
                                         let sym = snap.symbol.clone();
                                         {
                                             let guard = scanner_state.read().await;
@@ -1729,65 +1811,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 });
                                                 continue;
                                             }
-                                        }
-                                        let mut g = scanner_state.write().await;
-                                        let is_active_pos = g.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
-                                        if !is_active_pos && g.active_positions.len() < scanner_cfg.risk.max_active_slots {
-                                            g.total_trades += 1;
-                                            let trade_id = g.total_trades;
-                                            let log_msg = format!("SNIPED NEW TOKEN: {} ({}) at {:.4e} SOL", sym, &mint[..8], initial_price);
-                                            g.recent_onchain_events.insert(0, log_msg);
-                                            if g.recent_onchain_events.len() > 15 {
-                                                g.recent_onchain_events.pop();
-                                            }
-
-                                            let now_epoch = std::time::SystemTime::now()
-                                                .duration_since(std::time::UNIX_EPOCH)
-                                                .unwrap_or_default()
-                                                .as_secs();
-                                            let now_iso = chrono::Utc::now().to_rfc3339();
-                                            // Dynamic Half-Kelly sizing calibrated strictly against live reconciled bankroll
-                                            let current_nav = g.current_bankroll_sol;
-                                            let dynamic_entry_sol = (current_nav * (scanner_cfg.risk.kelly_fraction_nav_pct / 100.0)).max(0.0100).min(0.0450);
-
-                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr.clone(),
-                                                dex_id: dex_id.to_string(),
-                                                liquidity_usd: liq,
-                                                hhi_concentration: 0.15,
-                                                mint_revoked: true,
-                                                freeze_revoked: true,
-                                                lp_burned: true,
-                                                admitted: true,
-                                                rejection_reason: "Admitted".to_string(),
-                                            });
-
-                                            g.active_positions.push(Position {
-                                                id: format!("pos_{}", trade_id),
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr,
-                                                symbol: sym.clone(),
-                                                entry_time_iso: now_iso,
-                                                entry_timestamp_epoch: now_epoch,
-                                                entry_price_sol: initial_price,
-                                                current_price_sol: initial_price,
-                                                last_price_sol: initial_price,
-                                                initial_size_sol: dynamic_entry_sol,
-                                                size_sol: dynamic_entry_sol,
-                                                tranche_1_taken: false,
-                                                tranche_2_taken: false,
-                                                pnl_pct: 0.0,
-                                                status: "Active".to_string(),
-                                                peak_price_sol: initial_price,
-                                                trough_price_sol: initial_price,
-                                                liquidity_usd: liq,
-                                                fdv_usd: fdv,
-                                                price_buffer: vec![initial_price],
-                                            });
-
-                                            g.radar_candidates.retain(|c| c.token_mint != mint);
-                                            g.candidate_queue.retain(|c| c.token_mint != mint);
                                         }
                                     }
                                 }

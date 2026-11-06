@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // DMNE QUANT // IN-MEMORY AMM & BONDING CURVE DECODER
 // Sub-Microsecond Local Mathematical State Machine for Pump.fun and Raydium Pools
 

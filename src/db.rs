@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // DMNE QUANT // POSTGRESQL PERSISTENCE MODULE
 // Asynchronous Database Client, Pre-Trade Audits & Trade Settlement Logs
 

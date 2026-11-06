@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // DMNE QUANT // TIER-1 INSTITUTIONAL MODULE
 // Dynamic Jito Tip Discovery, Statistical Gateways, and Rolling Volatility Metrics
 

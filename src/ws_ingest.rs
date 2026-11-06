@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // DMNE QUANT // DIRECT SOLANA WEBSOCKET INGESTION DAEMON
 // Sub-second block event listener for Pump.fun and Raydium programs
 
