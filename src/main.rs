@@ -183,6 +183,8 @@ pub struct BotState {
     pub radar_candidates: Vec<RadarCandidate>,
     pub candidate_queue: Vec<RadarCandidate>,
     pub rejections_count: u64,
+    #[serde(default)]
+    pub total_realized_pnl_sol: f64,
     pub closed_trades: Vec<ClosedTrade>,
     pub recent_onchain_events: Vec<String>,
 }
@@ -205,6 +207,7 @@ impl BotState {
             radar_candidates: Vec::new(),
             candidate_queue: Vec::new(),
             rejections_count: 0,
+            total_realized_pnl_sol: 0.0,
             closed_trades: Vec::new(),
             recent_onchain_events: Vec::new(),
         }
@@ -562,6 +565,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("============================================================\n");
 
     let state = Arc::new(RwLock::new(BotState::new()));
+    let config = Arc::new(config::EngineConfig::load());
     let db_audit_tx = db::spawn_db_audit_worker(db::DEFAULT_DB_URL);
     // Reconcile system bankroll and cumulative metrics on startup
     if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
@@ -572,9 +576,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         g.wins = wins as usize;
         g.losses = (total - wins) as usize;
         g.rejections_count = rejections as u64;
-        println!("[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Total Trades: {} | Rejections: {}", g.current_bankroll_sol, total, rejections);
+        g.total_realized_pnl_sol = net;
+
+        // Restore historical closed trades & quarantine state from PostgreSQL
+        let historical_trades = db::fetch_settled_trades_for_reconcile(&pg).await;
+        for (mint, symbol, size, pnl_sol, pnl_pct, rule, epoch) in historical_trades {
+            let is_toxic = risk::is_historical_exit_toxic(pnl_pct, &config.risk);
+            g.closed_trades.push(ClosedTrade {
+                token_mint: mint,
+                symbol,
+                size_sol: size,
+                pnl_sol,
+                pnl_pct,
+                reason: rule,
+                closed_at_epoch: epoch,
+                is_toxic,
+            });
+        }
+        println!("[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Rejections: {} | Restored Closed Trades: {}", 
+            g.current_bankroll_sol, g.total_realized_pnl_sol, total, rejections, g.closed_trades.len());
     }
-    let config = Arc::new(config::EngineConfig::load());
+
+    // Fallback: If DB had no closed trades or was unreachable, load from trades_forensic.csv
+    {
+        let mut g = state.write().await;
+        if g.closed_trades.is_empty() {
+            if let Ok(content) = std::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/logs/trades_forensic.csv") {
+                for line in content.lines().skip(1) {
+                    let cols: Vec<&str> = line.split(',').collect();
+                    if cols.len() >= 20 {
+                        let exit_time_str = cols[0];
+                        let closed_at_epoch = chrono::DateTime::parse_from_rfc3339(exit_time_str)
+                            .map(|dt| dt.timestamp().max(0) as u64)
+                            .unwrap_or_default();
+                        let symbol = cols[3].to_string();
+                        let token_mint = cols[4].to_string();
+                        let size_sol = cols[7].parse::<f64>().unwrap_or(0.0);
+                        let pnl_pct = cols[14].parse::<f64>().unwrap_or(0.0);
+                        let pnl_sol = cols[15].parse::<f64>().unwrap_or(0.0);
+                        let reason = cols[19].trim_matches('"').to_string();
+                        let is_toxic = risk::is_historical_exit_toxic(pnl_pct, &config.risk);
+                        g.closed_trades.push(ClosedTrade {
+                            token_mint,
+                            symbol,
+                            size_sol,
+                            pnl_sol,
+                            pnl_pct,
+                            reason,
+                            closed_at_epoch,
+                            is_toxic,
+                        });
+                    }
+                }
+                println!("[STARTUP RECONCILE] Restored {} closed trades from trades_forensic.csv fallback", g.closed_trades.len());
+            }
+        }
+    }
     let http_client = Client::builder()
         .tcp_nodelay(true)
         .build()?;
@@ -624,6 +681,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let server_state = Arc::clone(&state);
+    let server_cfg = Arc::clone(&config);
     tokio::spawn(async move {
         let listener = TcpListener::bind(format!("0.0.0.0:{}", DASHBOARD_PORT))
             .await
@@ -633,6 +691,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             if let Ok((mut socket, _)) = listener.accept().await {
                 let st = Arc::clone(&server_state);
+                let scfg = Arc::clone(&server_cfg);
                 tokio::spawn(async move {
                     let mut buf = [0u8; 2048];
                     if let Ok(n) = socket.read(&mut buf).await {
@@ -661,6 +720,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "wallet_pubkey": guard.wallet_pubkey.clone(),
                     "initial_bankroll_sol": guard.initial_bankroll_sol,
                                         "current_bankroll_sol": live_reconciled_bankroll,
+                                        "total_realized_pnl_sol": guard.total_realized_pnl_sol,
                                         "total_trades": pg_total,
                                         "wins": pg_wins,
                                         "losses": pg_total - pg_wins,
@@ -669,6 +729,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "radar_candidates": guard.radar_candidates,
                                         "closed_trades": guard.closed_trades,
                                         "recent_onchain_events": guard.recent_onchain_events,
+                                        "risk_config": &scfg.risk,
                                     })).unwrap_or_default()
                                 };
                                 let payload = format!("data: {}\n\n", snapshot);
@@ -676,6 +737,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     break;
                                 }
                             }
+                        } else if req.starts_with("GET /api/state") {
+                            let guard = st.read().await;
+                            let (pg_total, pg_wins, pg_net_sol, pg_rejections) = if let Ok(client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                db::fetch_complete_system_stats(&client).await
+                            } else {
+                                (guard.total_trades as i64, guard.wins as i64, 0.0, guard.rejections_count as i64)
+                            };
+                            let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
+                            let state_json = serde_json::to_string(&serde_json::json!({
+                                "system_version": APP_VERSION,
+                                "live_onchain_sol": guard.live_onchain_sol,
+                                "is_scanner_paused": guard.is_scanner_paused,
+                                "panic_mode": guard.panic_mode,
+                                "wallet_pubkey": guard.wallet_pubkey.clone(),
+                                "initial_bankroll_sol": guard.initial_bankroll_sol,
+                                "current_bankroll_sol": live_reconciled_bankroll,
+                                "total_realized_pnl_sol": guard.total_realized_pnl_sol,
+                                "total_trades": pg_total,
+                                "wins": pg_wins,
+                                "losses": pg_total - pg_wins,
+                                "rejections_count": pg_rejections,
+                                "active_positions": guard.active_positions,
+                                "radar_candidates": guard.radar_candidates,
+                                "closed_trades": guard.closed_trades,
+                                "recent_onchain_events": guard.recent_onchain_events,
+                                "risk_config": &scfg.risk,
+                            })).unwrap_or_default();
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                state_json.len(),
+                                state_json
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
                         } else if req.starts_with("GET /api/pause") || req.starts_with("POST /api/pause") {
                             let mut g = st.write().await;
                             g.is_scanner_paused = !g.is_scanner_paused;
@@ -1095,6 +1189,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let realized = sol_basis_closed * (pos.pnl_pct / 100.0);
                         let bankroll_before = state.current_bankroll_sol;
                         state.current_bankroll_sol += sol_basis_closed + realized;
+                        state.total_realized_pnl_sol += realized;
                         let bankroll_after = state.current_bankroll_sol;
                         pos.size_sol = active_pos.remaining_size_sol;
                         pos.tranche_1_taken = active_pos.tp1_executed;
@@ -1178,6 +1273,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let bankroll_before = state.current_bankroll_sol;
                 let pos = state.active_positions.remove(idx);
                 state.current_bankroll_sol += pnl_sol;
+                state.total_realized_pnl_sol += pnl_sol;
                 let bankroll_after = state.current_bankroll_sol;
                 if pnl_sol > 0.0 {
                     state.wins += 1;

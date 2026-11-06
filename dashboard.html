@@ -1009,12 +1009,18 @@
           }
         }
 
-        let fillPct = ((pnl + 20.0) / 120.0) * 100.0;
+        const rc = window.activeRiskConfig || {};
+        const stopLossPct = rc.stop_loss_pct !== undefined ? rc.stop_loss_pct : -20.0;
+        const beArmPct = rc.breakeven_arm_pct !== undefined ? rc.breakeven_arm_pct : 35.0;
+        const tp1Pct = rc.tp1_trigger_pct !== undefined ? rc.tp1_trigger_pct : 45.0;
+        const stagTtlSecs = rc.stagnation_ttl_secs !== undefined ? rc.stagnation_ttl_secs : 240;
+
+        let fillPct = ((pnl - stopLossPct) / (tp1Pct - stopLossPct)) * 100.0;
         fillPct = Math.max(2, Math.min(100, fillPct));
         const fillClass = pnl >= 0 ? "gauge-fill-green" : "gauge-fill-red";
 
         const ageSec = p.entry_timestamp_epoch ? Math.max(0, now - p.entry_timestamp_epoch) : 0;
-        const ttlRem = Math.max(0, 450 - ageSec);
+        const ttlRem = Math.max(0, stagTtlSecs - ageSec);
         const ttlMin = Math.floor(ttlRem / 60);
         const ttlSec = ttlRem % 60;
 
@@ -1053,10 +1059,10 @@
 
             <div class="gauge-wrap">
               <div class="gauge-labels" style="color:#94a3b8; font-weight:600;">
-                <span>STOP: -20%</span>
+                <span>STOP: ${stopLossPct > 0 ? '+' : ''}${stopLossPct.toFixed(0)}%</span>
                 <span>ENTRY: 0%</span>
-                <span>BE: +15%</span>
-                <span>T1: +100%</span>
+                <span>BE: +${beArmPct.toFixed(0)}%</span>
+                <span>T1: +${tp1Pct.toFixed(0)}%</span>
               </div>
               <div class="gauge-track">
                 <div class="gauge-fill ${fillClass}" style="width: ${fillPct}%"></div>
@@ -1255,6 +1261,21 @@
         console.error("Win rate sync error", e);
       }
     }
+    async function fetchInitialState() {
+      try {
+        const res = await fetch('/api/state');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.risk_config) {
+            window.activeRiskConfig = data.risk_config;
+          }
+        }
+      } catch (e) {
+        console.error("Initial state sync error", e);
+      }
+    }
+    fetchInitialState();
+
     syncPostgresStats();
     setInterval(syncPostgresStats, 15000);
 
@@ -1262,6 +1283,9 @@
     evtSource.onmessage = function(event) {
       try {
         const data = JSON.parse(event.data);
+        if (data.risk_config) {
+          window.activeRiskConfig = data.risk_config;
+        }
         const bankroll = data.current_bankroll_sol || 0.5556;
         const initial = data.initial_bankroll_sol || 0.5556;
         const netRealized = bankroll - initial;

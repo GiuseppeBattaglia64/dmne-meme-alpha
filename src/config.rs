@@ -103,7 +103,7 @@ fn default_flash_dump_tick_pct() -> f64 { -15.0 }
 fn default_flash_dump_max_pnl_pct() -> f64 { 0.0 }
 fn default_max_slippage_loss_pct() -> f64 { -25.0 }
 fn default_cruise_baseline_trail_mult() -> f64 { 2.20 }
-fn default_cruise_baseline_ttl_secs() -> u64 { 240 }
+fn default_cruise_baseline_ttl_secs() -> u64 { 180 }
 fn default_reentry_cooldown_secs() -> u64 { 3600 }
 fn default_toxic_exit_permanent_ban() -> bool { true }
 fn default_min_entry_liquidity_usd() -> f64 { 25000.0 }
@@ -129,7 +129,7 @@ impl Default for RiskConfig {
             runner_trailing_drop_pct: 18.0,
             cruise_baseline_trail_mult: 2.20,
             stagnation_ttl_secs: 240,
-            cruise_baseline_ttl_secs: 240,
+            cruise_baseline_ttl_secs: 180,
             stagnation_max_peak_pct: 12.0,
             stagnation_band_min_pct: -8.0,
             stagnation_band_max_pct: 5.0,

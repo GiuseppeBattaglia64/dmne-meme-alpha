@@ -109,6 +109,30 @@ pub async fn fetch_settled_trades(client: &Client, limit: i64) -> Vec<Value> {
     trades
 }
 
+/// Fetches all historical closed trades for quarantine state reconciliation on startup
+pub async fn fetch_settled_trades_for_reconcile(client: &Client) -> Vec<(String, String, f64, f64, f64, String, u64)> {
+    let stmt = "
+        SELECT token_mint, symbol, entry_size_sol, realized_pnl_sol, pnl_pct, exit_rule,
+               EXTRACT(EPOCH FROM exit_timestamp)::bigint AS exit_epoch
+        FROM settled_trades
+        ORDER BY exit_timestamp ASC
+    ";
+    let mut out = Vec::new();
+    if let Ok(rows) = client.query(stmt, &[]).await {
+        for row in rows {
+            let mint: String = row.get("token_mint");
+            let symbol: String = row.get("symbol");
+            let size: f64 = row.get("entry_size_sol");
+            let pnl_sol: f64 = row.get("realized_pnl_sol");
+            let pnl_pct: f64 = row.get("pnl_pct");
+            let rule: String = row.get("exit_rule");
+            let epoch: i64 = row.get("exit_epoch");
+            out.push((mint, symbol, size, pnl_sol, pnl_pct, rule, epoch.max(0) as u64));
+        }
+    }
+    out
+}
+
 /// Queries all active users from PostgreSQL
 pub async fn fetch_active_users(client: &Client) -> Vec<Value> {
     let stmt = "
