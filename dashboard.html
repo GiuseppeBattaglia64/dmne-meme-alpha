@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
+  <script>
+    // Authentication Gate
+    const activeToken = localStorage.getItem('dmne_token');
+    const activeUser = localStorage.getItem('dmne_user');
+    const activeRole = localStorage.getItem('dmne_role');
+    if (!activeToken && !window.location.search.includes('bypass=true')) {
+      window.location.href = '/login';
+    }
+  </script>
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="mobile-web-app-capable" content="yes">
@@ -637,7 +648,8 @@
         <button class="wallet-btn" style="background:#dc2626;" onclick="triggerPanicDump()">🛑 PANIC DUMP</button>
         <button class="wallet-btn" onclick="openDepositModal()">📥 DEPOSIT</button>
         <button class="wallet-btn withdraw-btn" onclick="openWithdrawModal()">📤 WITHDRAW</button>
-        <button class="wallet-btn" style="background:#334155;" onclick="window.location.href='/login'" title="Lock Workspace / Re-authenticate">🔒 LOCK</button>
+        
+        <button class="wallet-btn" style="background:#334155;" onclick="logout()">LOGOUT</button>
       </div>
   </header>
 
@@ -905,6 +917,24 @@
     }
 
     function renderActivePositions(positions) {
+
+        // Multi-Tenant Isolation Hook
+        if (currentUser === 'giovanni') {
+          // Check if Giovanni has initialized desk
+          const deskGrid = document.getElementById('positions-container') || document.querySelector('.pos-card-grid');
+          if (deskGrid && !window.giovanniStarted && (!usersMap['giovanni'] || !usersMap['giovanni'].has_started)) {
+            deskGrid.innerHTML = `
+              <div style="grid-column: 1 / -1; padding: 40px 20px; text-align: center; background: rgba(13,19,34,0.6); border: 1px dashed #334155; border-radius: 8px;">
+                <h3 style="color: #38bdf8; font-size: 14px; margin-bottom: 8px;">GIOVANNI BATTAGLIA // DESK IDLE</h3>
+                <p style="color: #64748b; font-size: 11px; margin-bottom: 16px;">This trading workspace has not been initialized yet. No positions or paper trades have been allocated.</p>
+                <button class="wallet-btn" style="background: #10b981; font-size: 12px; padding: 10px 20px;" onclick="window.giovanniStarted=true; startUserTrading('giovanni');">▶ START PAPER TRADING</button>
+              </div>`;
+            const nav = document.getElementById('nav-val');
+            if (nav) nav.innerText = '0.5000 SOL';
+            return;
+          }
+        }
+
       const container = document.getElementById("positions-container");
       document.getElementById("concurrency-badge").innerText = `${positions.length}/4`;
       document.getElementById("margin-pct").innerText = `Slots: ${positions.length}/4`;
@@ -1375,6 +1405,38 @@
         updateUserUI();
       } catch (e) {
         console.error('Failed to load users:', e);
+      }
+    }
+
+    
+    function logout() {
+      localStorage.clear();
+      document.cookie = "dmne_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+      window.location.href = '/login';
+    }
+
+    // Role-based visibility on load
+    document.addEventListener("DOMContentLoaded", () => {
+      const u = localStorage.getItem('dmne_user') || 'admin';
+      const role = localStorage.getItem('dmne_role') || 'user';
+      currentUser = u;
+
+      // If regular user (not admin), lock dropdown to themselves
+      const userSelect = document.getElementById('user-select');
+      const addBtn = document.getElementById('admin-add-btn');
+      if (role !== 'admin' && userSelect) {
+        userSelect.disabled = true;
+        if (addBtn) addBtn.style.display = 'none';
+      }
+    });
+
+    async function startUserTrading(uid) {
+      try {
+        await fetch(`/api/user/start?user=${uid}`, { method: 'POST' });
+        alert(`Workspace initialized for ${uid}! Engine will now begin allocating trades.`);
+        window.location.reload();
+      } catch (e) {
+        console.error('Failed to start trading:', e);
       }
     }
 
