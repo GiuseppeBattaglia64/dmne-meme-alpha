@@ -622,6 +622,9 @@
       <div class="tele-stat">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
     </div>
         <div class="header-right" style="display:flex; gap:6px; align-items:center;">
+        <span class="badge badge-purple" id="mode-badge" style="background:#0284c7; color:#fff; font-weight:700;">🧪 PAPER MODE</span>
+        <button class="wallet-btn" id="pause-btn" style="background:#f59e0b;" onclick="toggleScannerPause()">⏸ PAUSE</button>
+        <button class="wallet-btn" style="background:#dc2626;" onclick="triggerPanicDump()">🛑 PANIC DUMP</button>
         <button class="wallet-btn" onclick="openDepositModal()">📥 DEPOSIT</button>
         <button class="wallet-btn withdraw-btn" onclick="openWithdrawModal()">📤 WITHDRAW</button>
       </div>
@@ -1189,6 +1192,21 @@
         if (data.wallet_pubkey) {
           const el = document.getElementById("modal-pubkey");
           if (el) el.innerText = data.wallet_pubkey;
+        }
+        
+        if (data.is_scanner_paused !== undefined) {
+          const btn = document.getElementById('pause-btn');
+          if (btn) {
+            btn.innerText = data.is_scanner_paused ? '▶ RESUME' : '⏸ PAUSE';
+            btn.style.background = data.is_scanner_paused ? '#10b981' : '#f59e0b';
+          }
+        }
+        if (data.live_onchain_sol > 0.05) {
+          const modeBadge = document.getElementById('mode-badge');
+          if (modeBadge) {
+            modeBadge.innerText = '🔴 LIVE MAINNET';
+            modeBadge.style.background = '#ef4444';
+          }
         }
         document.getElementById("nav-val").innerText = `${bankroll.toFixed(4)} SOL`;
         document.getElementById("nav-fiat").innerText = `≈ €${(bankroll * 90.0).toFixed(2)} EUR`;
