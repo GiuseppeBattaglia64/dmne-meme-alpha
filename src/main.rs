@@ -161,6 +161,10 @@ pub struct ClosedTrade {
     pub pnl_sol: f64,
     pub pnl_pct: f64,
     pub reason: String,
+    #[serde(default)]
+    pub closed_at_epoch: u64,
+    #[serde(default)]
+    pub is_toxic: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -227,6 +231,12 @@ struct DexLiquidity {
 }
 
 #[derive(Deserialize)]
+struct PriceChange {
+    m5: Option<f64>,
+    h1: Option<f64>,
+}
+
+#[derive(Deserialize)]
 struct DexPair {
     #[serde(rename = "pairAddress")]
     pair_address: Option<String>,
@@ -236,6 +246,8 @@ struct DexPair {
     base_token: Option<TokenInfo>,
     liquidity: Option<DexLiquidity>,
     fdv: Option<f64>,
+    #[serde(rename = "priceChange")]
+    price_change: Option<PriceChange>,
 }
 
 #[derive(Deserialize)]
@@ -303,7 +315,7 @@ async fn verify_token_security(client: &Client, rpc_url: &str, mint: &str) -> bo
     true
 }
 
-async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<(f64, String, String, f64, f64)> {
+async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<(f64, String, String, f64, f64, f64)> {
     let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", token_mint);
     if let Ok(res) = client.get(&url).timeout(Duration::from_millis(1500)).send().await {
         if let Ok(data) = res.json::<DexResponse>().await {
@@ -313,9 +325,10 @@ async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<(f64, Str
                     let sym = best_pair.base_token.as_ref().and_then(|b| b.symbol.clone()).unwrap_or_else(|| "TOKEN".to_string());
                     if price_sol > 0.0 {
                         let pair_addr = best_pair.pair_address.clone().unwrap_or_default();
-                    let liq = best_pair.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-                    let fdv = best_pair.fdv.unwrap_or(0.0);
-                    return Some((price_sol, sym, pair_addr, liq, fdv));
+                        let liq = best_pair.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+                        let fdv = best_pair.fdv.unwrap_or(0.0);
+                        let m5_change = best_pair.price_change.as_ref().and_then(|p| p.m5.or(p.h1)).unwrap_or(0.0);
+                        return Some((price_sol, sym, pair_addr, liq, fdv, m5_change));
                     }
                 }
             }
@@ -887,11 +900,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Concurrency Queue Consumer: Populate vacant slots from pre-audited candidate_queue
             {
                 let mut state = eval_state.write().await;
+                let now_epoch = chrono::Utc::now().timestamp() as u64;
                 while !state.is_scanner_paused && state.active_positions.len() < 4 && !state.candidate_queue.is_empty() {
                     let candidate = state.candidate_queue.remove(0);
-                    // Verify candidate not already in active positions or closed trades
-                    if !state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint)
-                        && !state.closed_trades.iter().any(|t| t.token_mint == candidate.token_mint)
+                    let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint);
+                    let is_quarantined = state.closed_trades.iter().any(|t| {
+                        if t.token_mint != candidate.token_mint {
+                            return false;
+                        }
+                        if eval_cfg.risk.toxic_exit_permanent_ban && t.is_toxic {
+                            println!("[ANTI-CHURN] Permanent ban active for toxic token: {} ({})", candidate.symbol, candidate.token_mint);
+                            return true;
+                        }
+                        if now_epoch < t.closed_at_epoch.saturating_add(eval_cfg.risk.reentry_cooldown_secs) {
+                            let rem = t.closed_at_epoch.saturating_add(eval_cfg.risk.reentry_cooldown_secs).saturating_sub(now_epoch);
+                            println!("[ANTI-CHURN] Token {} ({}) in quarantine ({}s remaining)", candidate.symbol, candidate.token_mint, rem);
+                            return true;
+                        }
+                        false
+                    });
+
+                    // Verify candidate not already in active positions or quarantined
+                    if !is_active && !is_quarantined
                     {
                         state.total_trades += 1;
                         let trade_id = state.total_trades;
@@ -938,7 +968,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             for (idx, mint) in active_mints {
-                if let Some((real_price, _, _, liq, fdv)) = fetch_live_price(&eval_client, &mint).await {
+                if let Some((real_price, _, _, liq, fdv, _)) = fetch_live_price(&eval_client, &mint).await {
                     let mut guard = eval_state.write().await;
                     if idx < guard.active_positions.len() {
                         let pos = &mut guard.active_positions[idx];
@@ -989,13 +1019,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // DCS CRUISE CONTROL EXECUTION SUPERVISOR
                 // ==========================================
 
-                // Rule 1: Flash Dump Circuit Breaker (Detect sudden >= 18% tick collapse)
-                let tick_drop = if pos.last_price_sol > 0.0 { (pos.last_price_sol - pos.current_price_sol) / pos.last_price_sol } else { 0.0 };
-                if tick_drop >= 0.18 {
+                // Rule 1: Flash Dump Circuit Breaker (Detect sudden tick collapse based on risk config)
+                let tick_drop_pct = if pos.last_price_sol > 0.0 {
+                    ((pos.current_price_sol - pos.last_price_sol) / pos.last_price_sol) * 100.0
+                } else {
+                    0.0
+                };
+                if tick_drop_pct <= effective_risk_cfg.flash_dump_tick_pct {
                     let exit_pnl = pos.pnl_pct;
                     let realized = pos.size_sol * (exit_pnl / 100.0);
-                    println!("[CRUISE CONTROL] Flash Dump detected on {} (-{:.1}% tick drop). Emergency Exit.", pos.symbol, tick_drop * 100.0);
-                    closed_indices.push((idx, "Flash Dump Breaker".to_string(), realized, exit_pnl));
+                    println!(
+                        "[CRUISE CONTROL] Flash Dump detected on {} ({:.1}% tick drop <= {:.1}% threshold). Emergency Exit.",
+                        pos.symbol, tick_drop_pct, effective_risk_cfg.flash_dump_tick_pct
+                    );
+                    closed_indices.push((idx, format!("Flash Dump Breaker ({:.0}%)", effective_risk_cfg.flash_dump_tick_pct), realized, exit_pnl));
                 } else {
                     let mut active_pos = risk::ActivePosition {
                         token_mint: pos.token_mint.clone(),
@@ -1091,6 +1128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         ).await;
                     }
                 });
+                let is_toxic = risk::is_toxic_exit(&reason, pnl_pct, &effective_risk_cfg);
                 state.closed_trades.push(ClosedTrade {
                     token_mint: pos.token_mint,
                     symbol: pos.symbol,
@@ -1098,6 +1136,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     pnl_sol,
                     pnl_pct,
                     reason,
+                    closed_at_epoch: now_epoch,
+                    is_toxic,
                 });
             }
         }
@@ -1121,15 +1161,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if profile.chain_id.as_deref() == Some("solana") {
                             if let Some(mint) = profile.token_address {
                                 let guard = scanner_state.read().await;
-                                let already_in_desk = guard.active_positions.iter().any(|p| p.token_mint == mint)
-                                    || guard.closed_trades.iter().any(|t| t.token_mint == mint);
+                                let is_active = guard.active_positions.iter().any(|p| p.token_mint == mint);
+                                let now_sec = chrono::Utc::now().timestamp() as u64;
+                                let is_quarantined = guard.closed_trades.iter().any(|t| {
+                                    if t.token_mint != mint { return false; }
+                                    if scanner_cfg.risk.toxic_exit_permanent_ban && t.is_toxic { return true; }
+                                    if now_sec < t.closed_at_epoch.saturating_add(scanner_cfg.risk.reentry_cooldown_secs) { return true; }
+                                    false
+                                });
 
                                 // Slot-blocking guard removed: Discovery worker audits 100% continuously
-                                if !already_in_desk {
+                                if !is_active && !is_quarantined {
                                     drop(guard);
-                                    if let Some((initial_price, sym, pair_addr, liq, fdv)) = fetch_live_price(&scanner_client, &mint).await {
+                                    if let Some((initial_price, sym, pair_addr, liq, fdv, m5_change)) = fetch_live_price(&scanner_client, &mint).await {
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
-                                        if liq < scanner_cfg.min_liquidity_usd {
+                                        let min_liq = scanner_cfg.risk.min_entry_liquidity_usd;
+                                        if liq < min_liq {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
@@ -1141,7 +1188,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 freeze_revoked: false,
                                                 lp_burned: false,
                                                 admitted: false,
-                                                rejection_reason: "LIQUIDITY_BELOW_FLOOR".to_string(),
+                                                rejection_reason: format!("LIQUIDITY_BELOW_FLOOR (${:.0} < ${:.0})", liq, min_liq),
+                                            });
+                                            continue;
+                                        }
+
+                                        // Entry Momentum Gate
+                                        if m5_change < scanner_cfg.risk.min_entry_price_change_pct {
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: format!("ENTRY_MOMENTUM_BELOW_THRESHOLD ({:+.2}% < +{:.2}%)", m5_change, scanner_cfg.risk.min_entry_price_change_pct),
                                             });
                                             continue;
                                         }

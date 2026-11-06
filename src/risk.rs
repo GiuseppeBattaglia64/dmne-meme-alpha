@@ -46,6 +46,13 @@ pub fn evaluate_position_exit(
 
     let elapsed_secs = now_epoch.saturating_sub(pos.opened_at_epoch);
 
+    // 0. Max Slippage Loss Protection (-25%)
+    if pnl_pct <= cfg.max_slippage_loss_pct {
+        return ExitAction::FullExit {
+            rule_label: format!("Max Slippage Loss ({:.0}%)", cfg.max_slippage_loss_pct),
+        };
+    }
+
     // 1. Hard Stop-Loss (-20%)
     if pnl_pct <= cfg.stop_loss_pct {
         return ExitAction::FullExit {
@@ -113,6 +120,13 @@ pub fn evaluate_position_exit(
     }
 
     ExitAction::Hold
+}
+
+pub fn is_toxic_exit(reason: &str, pnl_pct: f64, cfg: &RiskConfig) -> bool {
+    reason.contains("Stop-Loss")
+        || reason.contains("Flash Dump")
+        || reason.contains("Max Slippage")
+        || pnl_pct <= cfg.stop_loss_pct
 }
 
 #[cfg(test)]
@@ -221,6 +235,29 @@ mod tests {
             ExitAction::FullExit { rule_label } => assert!(rule_label.contains("Stagnation TTL")),
             _ => panic!("Expected Stagnation TTL exit"),
         }
+    }
+
+    #[test]
+    fn test_max_slippage_loss() {
+        let mut pos = setup_test_position();
+        let cfg = RiskConfig::default();
+
+        // Gap down to -26% (exceeds -25% max slippage)
+        let action = evaluate_position_exit(&mut pos, 0.74, 1050, &cfg);
+        match action {
+            ExitAction::FullExit { rule_label } => assert!(rule_label.contains("Max Slippage Loss")),
+            _ => panic!("Expected Max Slippage Loss exit"),
+        }
+    }
+
+    #[test]
+    fn test_toxic_exit_detection() {
+        let cfg = RiskConfig::default();
+        assert!(is_toxic_exit("Stop-Loss (-20%)", -20.5, &cfg));
+        assert!(is_toxic_exit("Flash Dump Breaker (-15%)", -16.0, &cfg));
+        assert!(is_toxic_exit("Max Slippage Loss (-25%)", -26.0, &cfg));
+        assert!(!is_toxic_exit("TP1 Scale-Out (+45%)", 45.0, &cfg));
+        assert!(!is_toxic_exit("Trailing Runner (Peak +60.0%)", 41.0, &cfg));
     }
 }
 
