@@ -1093,14 +1093,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match action {
                     risk::ExitAction::PartialSell { sol_basis_closed, rule_label, .. } => {
                         let realized = sol_basis_closed * (pos.pnl_pct / 100.0);
+                        let bankroll_before = state.current_bankroll_sol;
                         state.current_bankroll_sol += sol_basis_closed + realized;
+                        let bankroll_after = state.current_bankroll_sol;
                         pos.size_sol = active_pos.remaining_size_sol;
                         pos.tranche_1_taken = active_pos.tp1_executed;
                         pos.tranche_2_taken = active_pos.tp2_executed;
+                        if realized > 0.0 {
+                            state.wins += 1;
+                            state.consecutive_losses = 0;
+                        }
                         println!(
                             "[CRUISE CONTROL] {} on {} (+{:.1}%): Recaptured capital + {:.5} SOL gain.",
                             rule_label, pos.symbol, pos.pnl_pct, realized
                         );
+
+                        // 1. Append to trades_forensic.csv
+                        let mut pos_partial = pos.clone();
+                        pos_partial.size_sol = sol_basis_closed;
+                        append_comprehensive_trade_log(
+                            &pos_partial,
+                            pos.pnl_pct,
+                            realized,
+                            &rule_label,
+                            bankroll_before,
+                            bankroll_after,
+                        );
+
+                        // 2. Persist to PostgreSQL (db.rs)
+                        let db_mint = pos.token_mint.clone();
+                        let db_sym = pos.symbol.clone();
+                        let db_hold_sec = (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) as i32;
+                        let db_size = sol_basis_closed;
+                        let db_entry_px = pos.entry_price_sol;
+                        let db_exit_px = pos.current_price_sol;
+                        let db_peak_px = pos.peak_price_sol;
+                        let db_before = bankroll_before;
+                        let db_after = bankroll_after;
+                        let db_rule = rule_label.clone();
+                        let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
+                        let pnl_pct = pos.pnl_pct;
+                        tokio::spawn(async move {
+                            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                db::record_settled_trade(
+                                    &pg_client, &db_mint, &db_sym, db_hold_sec, db_size,
+                                    db_entry_px, db_exit_px, db_peak_px, pnl_pct, realized,
+                                    db_before, db_after, &db_rule, &db_url
+                                ).await;
+                            }
+                        });
+
+                        // 3. Create and push ClosedTrade record
+                        state.closed_trades.push(ClosedTrade {
+                            token_mint: pos.token_mint.clone(),
+                            symbol: pos.symbol.clone(),
+                            size_sol: sol_basis_closed,
+                            pnl_sol: realized,
+                            pnl_pct: pos.pnl_pct,
+                            reason: rule_label,
+                            closed_at_epoch: now_epoch,
+                            is_toxic: false,
+                        });
                     }
                     risk::ExitAction::FullExit { rule_label, is_toxic } => {
                         let exit_pnl = pos.pnl_pct;
