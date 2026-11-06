@@ -652,11 +652,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             );
                             let _ = socket.write_all(res.as_bytes()).await;
                         } else if req.starts_with("GET /api/admin/users/create") || req.starts_with("POST /api/admin/users/create") {
-                            let json_resp = serde_json::json!({ "status": "PROVISIONED" }).to_string();
+                            let first_line = req.lines().next().unwrap_or("");
+                            let path_and_query = first_line.split_whitespace().nth(1).unwrap_or("");
+                            let query = path_and_query.split('?').nth(1).unwrap_or("");
+                            let mut id = "newuser".to_string();
+                            let mut name = "New Trader".to_string();
+                            let mut pass = "trader8090".to_string();
+                            let mut mode = "PAPER".to_string();
+
+                            for pair in query.split('&') {
+                                let mut kv = pair.split('=');
+                                if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
+                                    let val = v.replace("%20", " ").replace('+', " ");
+                                    match k {
+                                        "id" => id = val,
+                                        "name" => name = val,
+                                        "pass" | "password" => pass = val,
+                                        "mode" => mode = val,
+                                        _ => {}
+                                    }
+                                }
+                            }
+
+                            let body = if let Some(idx) = req.find("\r\n\r\n") {
+                                &req[idx + 4..]
+                            } else if let Some(idx) = req.find("\n\n") {
+                                &req[idx + 2..]
+                            } else {
+                                ""
+                            };
+                            if let Ok(json_body) = serde_json::from_str::<serde_json::Value>(body.trim()) {
+                                if let Some(v) = json_body.get("id").and_then(|v| v.as_str()) { id = v.to_string(); }
+                                if let Some(v) = json_body.get("name").and_then(|v| v.as_str()) { name = v.to_string(); }
+                                if let Some(v) = json_body.get("password").or_else(|| json_body.get("pass")).and_then(|v| v.as_str()) { pass = v.to_string(); }
+                                if let Some(v) = json_body.get("mode").and_then(|v| v.as_str()) { mode = v.to_string(); }
+                            }
+
+                            let output = std::process::Command::new("/home/ubuntu/dmne-meme-alpha/provision_user.py")
+                                .args([&id, &name, &pass, &mode])
+                                .output();
+
+                            let resp_json = match output {
+                                Ok(out) => {
+                                    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                    if s.is_empty() {
+                                        format!("{{\"success\":false,\"error\":\"{}\"}}", String::from_utf8_lossy(&out.stderr).trim().replace('"', "\\\""))
+                                    } else {
+                                        s
+                                    }
+                                },
+                                Err(e) => format!("{{\"success\":false,\"error\":\"{}\"}}", e),
+                            };
+
                             let res = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                                json_resp.len(),
-                                json_resp
+                                resp_json.len(),
+                                resp_json
                             );
                             let _ = socket.write_all(res.as_bytes()).await;
                         } else if req.starts_with("GET /api/trades") {

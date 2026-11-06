@@ -1581,7 +1581,17 @@
       const mode = document.getElementById('new-user-mode').value;
       if (!uid || !name) { alert('Please provide ID and name'); return; }
 
-      alert(`Provisioned workspace for ${name} (${uid}) in ${mode} mode.`);
+      try {
+        const res = await fetch(`/api/admin/users/create?id=${encodeURIComponent(uid)}&name=${encodeURIComponent(name)}&mode=${encodeURIComponent(mode)}&pass=${encodeURIComponent(uid + '8090')}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert(`Trading desk provisioned for ${name} (${uid})!\nMode: ${data.mode}\nPublic Key: ${data.pubkey}\nDefault Password: ${uid}8090`);
+        } else {
+          alert(`Provisioning failed: ${data.error}`);
+        }
+      } catch (e) {
+        console.error('Failed to create user:', e);
+      }
       closeModals();
       loadUsers();
     }
