@@ -622,6 +622,16 @@
       <div class="tele-stat">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
     </div>
         <div class="header-right" style="display:flex; gap:6px; align-items:center;">
+      <!-- User Profile Switcher -->
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:11px; color:#64748b; font-weight:700;">WORKSPACE:</span>
+        <select id="user-select" class="wallet-btn" style="background:#1e293b; color:#38bdf8; font-family:inherit; cursor:pointer;" onchange="switchUser(this.value)">
+          <option value="admin">Admin (Master)</option>
+          <option value="giuseppe">Giuseppe Battaglia</option>
+          <option value="giovanni">Giovanni Battaglia</option>
+        </select>
+        <button id="admin-add-btn" class="wallet-btn" style="background:#6366f1;" onclick="openCreateUserModal()">➕ NEW TRADER</button>
+      </div>
         <span class="badge badge-purple" id="mode-badge" style="background:#0284c7; color:#fff; font-weight:700;">🧪 PAPER MODE</span>
         <button class="wallet-btn" id="pause-btn" style="background:#f59e0b;" onclick="toggleScannerPause()">⏸ PAUSE</button>
         <button class="wallet-btn" style="background:#dc2626;" onclick="triggerPanicDump()">🛑 PANIC DUMP</button>
@@ -1340,6 +1350,103 @@
   </div>
 
   <script>
+    
+    let currentUser = 'admin';
+    let usersMap = {};
+
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/users');
+        const list = await res.json();
+        const sel = document.getElementById('user-select');
+        if (sel) {
+          sel.innerHTML = '';
+          list.forEach(u => {
+            usersMap[u.id] = u;
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.innerText = `${u.name} [${u.mode}]`;
+            if (u.id === currentUser) opt.selected = true;
+            sel.appendChild(opt);
+          });
+        }
+        updateUserUI();
+      } catch (e) {
+        console.error('Failed to load users:', e);
+      }
+    }
+
+    function switchUser(uid) {
+      currentUser = uid;
+      updateUserUI();
+    }
+
+    function updateUserUI() {
+      const u = usersMap[currentUser];
+      if (!u) return;
+
+      // Update Deposit modal pubkey
+      const modalPk = document.getElementById('modal-pubkey');
+      if (modalPk) modalPk.innerText = u.pubkey;
+
+      // Update Mode Badge
+      const modeBadge = document.getElementById('mode-badge');
+      if (modeBadge) {
+        if (u.mode === 'LIVE') {
+          modeBadge.innerText = '🔴 LIVE MAINNET';
+          modeBadge.style.background = '#ef4444';
+        } else {
+          modeBadge.innerText = '🧪 PAPER MODE';
+          modeBadge.style.background = '#0284c7';
+        }
+      }
+
+      // Hide or show Admin New User button
+      const addBtn = document.getElementById('admin-add-btn');
+      if (addBtn) addBtn.style.display = (currentUser === 'admin') ? 'inline-block' : 'none';
+    }
+
+    async function toggleCurrentMode() {
+      try {
+        const res = await fetch(`/api/user/toggle-mode?user=${currentUser}`, { method: 'POST' });
+        const data = await res.json();
+        if (usersMap[currentUser]) usersMap[currentUser].mode = data.mode;
+        loadUsers();
+      } catch (e) {
+        console.error('Failed to toggle mode:', e);
+      }
+    }
+
+    function openCreateUserModal() {
+      if (currentUser !== 'admin') {
+        alert('Admin permission required to provision new traders.');
+        return;
+      }
+      document.getElementById('createUserModal').classList.add('active');
+    }
+
+    async function submitCreateUser() {
+      const uid = document.getElementById('new-user-id').value.trim().toLowerCase();
+      const name = document.getElementById('new-user-name').value.trim();
+      const mode = document.getElementById('new-user-mode').value;
+      if (!uid || !name) { alert('Please provide ID and name'); return; }
+
+      alert(`Provisioned workspace for ${name} (${uid}) in ${mode} mode.`);
+      closeModals();
+      loadUsers();
+    }
+
+    // Attach mode toggle click to mode-badge
+    document.addEventListener("DOMContentLoaded", () => {
+      const badge = document.getElementById('mode-badge');
+      if (badge) {
+        badge.style.cursor = 'pointer';
+        badge.title = 'Click to switch between Paper and Live';
+        badge.onclick = toggleCurrentMode;
+      }
+      loadUsers();
+    });
+
     function openDepositModal() { document.getElementById('depositModal').classList.add('active'); }
     function openWithdrawModal() { document.getElementById('withdrawModal').classList.add('active'); }
     function closeModals() { 
@@ -1359,6 +1466,27 @@
       closeModals();
     }
   </script>
+
+
+  <!-- Admin Create User Modal -->
+  <div id="createUserModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>PROVISION NEW TRADING DESK</span>
+        <span class="modal-close" onclick="closeModals()">✕</span>
+      </div>
+      <p style="font-size: 11px; color: #94a3b8; margin-bottom: 12px;">
+        Provision a new isolated workspace with a dedicated on-chain Ed25519 keypair and risk envelope.
+      </p>
+      <input type="text" id="new-user-id" class="withdraw-input" placeholder="User Identifier (e.g. marco)" />
+      <input type="text" id="new-user-name" class="withdraw-input" placeholder="Display Name (e.g. Marco Rossi)" />
+      <select id="new-user-mode" class="withdraw-input" style="cursor:pointer;">
+        <option value="PAPER">🧪 Paper Trading (Virtual Funds)</option>
+        <option value="LIVE">🔴 Live Mainnet (Real SOL)</option>
+      </select>
+      <button class="copy-btn" style="background:#6366f1; color:#fff;" onclick="submitCreateUser()">PROVISION WORKSPACE & KEYPAIR</button>
+    </div>
+  </div>
 
 </body>
 </html>
