@@ -153,6 +153,8 @@ pub struct ClosedTrade {
 pub struct BotState {
     pub initial_bankroll_sol: f64,
     pub current_bankroll_sol: f64,
+    pub live_onchain_sol: f64,
+    pub wallet_pubkey: String,
     pub total_trades: usize,
     pub wins: usize,
     pub losses: usize,
@@ -170,6 +172,8 @@ impl BotState {
         Self {
             initial_bankroll_sol: initial_sol, // $100.00 USD initial capital
             current_bankroll_sol: initial_sol,
+            live_onchain_sol: 0.0,
+            wallet_pubkey: "CwBPS16Pz6RonsKmYPJAjZR7RbFpbKwJN6CcvJikj55j".to_string(),
             total_trades: 0,
             wins: 0,
             losses: 0,
@@ -493,6 +497,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     // 1. Dashboard Web Server (Port 8090)
+    
+    // Periodic Live Wallet On-Chain Balance Poller
+    let balance_state = Arc::clone(&state);
+    let balance_cfg = Arc::clone(&config);
+    let balance_client = http_client.clone();
+    tokio::spawn(async move {
+        // Load actual keypair pubkey if available on disk
+        let wallet_path = &balance_cfg.wallet_keypair_path;
+        if let Ok(content) = std::fs::read_to_string(wallet_path) {
+            if let Ok(bytes) = serde_json::from_str::<Vec<u8>>(&content) {
+                let pub_bytes = if bytes.len() == 64 { &bytes[32..] } else { &bytes[..] };
+                let derived = bs58::encode(pub_bytes).into_string();
+                balance_state.write().await.wallet_pubkey = derived;
+            }
+        }
+        loop {
+            let pubkey = {
+                let g = balance_state.read().await;
+                g.wallet_pubkey.clone()
+            };
+            let req_body = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "getBalance",
+                "params": [pubkey]
+            });
+            if let Ok(res) = balance_client.post(&balance_cfg.default_rpc_url)
+                .json(&req_body)
+                .timeout(Duration::from_millis(3000))
+                .send()
+                .await 
+            {
+                if let Ok(json) = res.json::<serde_json::Value>().await {
+                    if let Some(lamports) = json["result"]["value"].as_u64() {
+                        let sol = lamports as f64 / 1_000_000_000.0;
+                        balance_state.write().await.live_onchain_sol = sol;
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        }
+    });
+
     let server_state = Arc::clone(&state);
     tokio::spawn(async move {
         let listener = TcpListener::bind(format!("0.0.0.0:{}", DASHBOARD_PORT))
@@ -525,6 +572,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                     serde_json::to_string(&serde_json::json!({
                                         "system_version": APP_VERSION,
+                    "live_onchain_sol": guard.live_onchain_sol,
+                    "wallet_pubkey": guard.wallet_pubkey.clone(),
                     "initial_bankroll_sol": guard.initial_bankroll_sol,
                                         "current_bankroll_sol": live_reconciled_bankroll,
                                         "total_trades": pg_total,

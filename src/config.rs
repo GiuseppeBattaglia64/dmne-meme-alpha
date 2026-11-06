@@ -10,6 +10,8 @@ pub struct EngineConfig {
     pub max_price_impact_ratio: f64,
     pub hhi_concentration_ceiling: f64,
     pub min_dead_lp_ratio: f64,
+    pub wallet_keypair_path: String,
+    pub min_gas_reserve_sol: f64,
     pub min_liquidity_usd: f64,
     pub max_dev_holding_pct: f64,
     pub max_top10_concentration_pct: f64,
@@ -52,6 +54,8 @@ impl Default for EngineConfig {
             max_price_impact_ratio: 0.012,       // 1.2% maximum pool price impact
             hhi_concentration_ceiling: 0.280,     // Herfindahl-Hirschman Index limit for top holders
             min_dead_lp_ratio: 0.950,             // 95% burned or locked LP tokens for AMM pools
+            wallet_keypair_path: "/home/ubuntu/.config/solana/dmne-live-wallet.json".to_string(),
+            min_gas_reserve_sol: 0.0300,       // Never withdraw or trade below this reserve
             min_liquidity_usd: 25000.0,
             max_dev_holding_pct: 1.0,         // Reject if deployer holds >= 1.0%
             max_top10_concentration_pct: 18.0,
