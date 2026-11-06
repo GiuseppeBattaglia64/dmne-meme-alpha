@@ -195,6 +195,8 @@ pub struct BotState {
     pub effective_risk_cfg: config::RiskConfig,
     #[serde(default)]
     pub banned_tokens: std::collections::HashSet<String>,
+    #[serde(default)]
+    pub rejected_candidates: std::collections::HashMap<String, u64>,
 }
 
 impl BotState {
@@ -220,6 +222,7 @@ impl BotState {
             recent_onchain_events: Vec::new(),
             effective_risk_cfg: config::RiskConfig::default(),
             banned_tokens: std::collections::HashSet::new(),
+            rejected_candidates: std::collections::HashMap::new(),
         }
     }
 }
@@ -269,6 +272,8 @@ struct DexVolume {
 
 #[derive(Deserialize)]
 struct DexPair {
+    #[serde(rename = "dexId")]
+    dex_id: Option<String>,
     #[serde(rename = "pairAddress")]
     pair_address: Option<String>,
     #[serde(rename = "priceNative")]
@@ -287,6 +292,7 @@ struct DexPair {
 pub struct LiveMarketSnapshot {
     pub price_sol: f64,
     pub symbol: String,
+    pub dex_id: String,
     pub pair_address: String,
     pub liquidity_usd: f64,
     pub fdv_usd: f64,
@@ -370,6 +376,9 @@ async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<LiveMarke
                 if let Some(best_pair) = pairs.first() {
                     let price_sol = best_pair.price_native.as_deref().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
                     let sym = best_pair.base_token.as_ref().and_then(|b| b.symbol.clone()).unwrap_or_else(|| "TOKEN".to_string());
+                    let dex_id = best_pair.dex_id.clone().unwrap_or_else(|| {
+                        if token_mint.ends_with("pump") { "pumpfun".to_string() } else { "raydium".to_string() }
+                    });
                     if price_sol > 0.0 {
                         let pair_addr = best_pair.pair_address.clone().unwrap_or_default();
                         let liq = best_pair.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
@@ -386,6 +395,7 @@ async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<LiveMarke
                         return Some(LiveMarketSnapshot {
                             price_sol,
                             symbol: sym,
+                            dex_id,
                             pair_address: pair_addr,
                             liquidity_usd: liq,
                             fdv_usd: fdv,
@@ -1126,6 +1136,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             continue;
                         }
+                        let is_rejected = state.rejected_candidates.iter().any(|(k, rejected_at)| {
+                            (k == &candidate.token_mint || k == &candidate.symbol)
+                                && now_epoch < rejected_at.saturating_add(eval_cfg.risk.rejected_candidate_cooldown_secs)
+                        });
+                        if is_rejected {
+                            let rem = state.rejected_candidates.get(&candidate.token_mint)
+                                .or_else(|| state.rejected_candidates.get(&candidate.symbol))
+                                .map(|r| r.saturating_add(eval_cfg.risk.rejected_candidate_cooldown_secs).saturating_sub(now_epoch))
+                                .unwrap_or(0);
+                            println!("[ANTI-CHURN] Token {} ({}) in rejected candidate cooldown ({}s remaining)", candidate.symbol, candidate.token_mint, rem);
+                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                            continue;
+                        }
 
                         candidate_to_eval = Some(candidate);
                         break;
@@ -1157,16 +1181,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if fetch_failed || final_snap_opt.is_none() {
                         println!("[CONFIRMATION REJECT] Candidate {} ({}) failed live telemetry fetch during confirmation", candidate.symbol, candidate.token_mint);
                         let mut state = eval_state.write().await;
+                        let now_epoch = chrono::Utc::now().timestamp() as u64;
+                        state.rejected_candidates.insert(candidate.token_mint.clone(), now_epoch);
+                        if !candidate.symbol.is_empty() {
+                            state.rejected_candidates.insert(candidate.symbol.clone(), now_epoch);
+                        }
                         state.rejections_count += 1;
                         state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                         state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                     } else {
                         let final_snap = final_snap_opt.unwrap();
                         let tick_res = risk::validate_live_tick_confirmation(&prices, &liquidities, &eval_cfg.risk);
-                        let conviction_pct = if candidate.dex_id == "raydium" {
+                        let conviction_pct = if final_snap.dex_id != "pumpfun" {
                             100.0
                         } else {
-                            ((final_snap.liquidity_usd / 69_000.0) * 100.0).min(100.0)
+                            ((final_snap.fdv_usd / 69_000.0) * 100.0).clamp(0.0, 100.0)
                         };
                         let snapshot_res = risk::validate_queue_pop_snapshot(
                             final_snap.liquidity_usd,
@@ -1182,6 +1211,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("[CONFIRMATION REJECT] Candidate {} ({}) failed live tick gate: {} (Ticks: {:?})", 
                                 candidate.symbol, candidate.token_mint, reject_reason, prices);
                             let mut state = eval_state.write().await;
+                            let now_epoch = chrono::Utc::now().timestamp() as u64;
+                            state.rejected_candidates.insert(candidate.token_mint.clone(), now_epoch);
+                            if !candidate.symbol.is_empty() {
+                                state.rejected_candidates.insert(candidate.symbol.clone(), now_epoch);
+                            }
                             state.rejections_count += 1;
                             state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                             state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
@@ -1201,6 +1235,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated during confirmation: {}", 
                                 candidate.symbol, candidate.token_mint, reject_reason);
                             let mut state = eval_state.write().await;
+                            let now_epoch = chrono::Utc::now().timestamp() as u64;
+                            state.rejected_candidates.insert(candidate.token_mint.clone(), now_epoch);
+                            if !candidate.symbol.is_empty() {
+                                state.rejected_candidates.insert(candidate.symbol.clone(), now_epoch);
+                            }
                             state.rejections_count += 1;
                             state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                             state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
@@ -1547,6 +1586,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     continue;
                                 }
                                 let now_sec = chrono::Utc::now().timestamp() as u64;
+                                let is_rejected_mint = guard.rejected_candidates.get(&mint)
+                                    .map(|r| now_sec < r.saturating_add(scanner_cfg.risk.rejected_candidate_cooldown_secs))
+                                    .unwrap_or(false);
+                                if is_rejected_mint {
+                                    continue;
+                                }
                                 let is_quarantined = guard.closed_trades.iter().any(|t| {
                                     let is_match = !t.token_mint.is_empty() && t.token_mint == mint;
                                     if !is_match { return false; }
@@ -1562,36 +1607,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     if let Some(snap) = fetch_live_price(&scanner_client, &mint).await {
                                         let sym = snap.symbol.clone();
                                         {
-                                            let guard = scanner_state.read().await;
-                                            let is_active_sym = guard.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
-                                            if is_active_sym {
-                                                continue;
-                                            }
-                                            let is_banned_sym = guard.banned_tokens.contains(&mint) || guard.banned_tokens.contains(&sym);
-                                            if scanner_cfg.risk.toxic_exit_permanent_ban && is_banned_sym {
-                                                continue;
-                                            }
-                                            let is_quarantined_sym = guard.closed_trades.iter().any(|t| {
-                                                let is_match = (!t.token_mint.is_empty() && t.token_mint == mint) || (!t.symbol.is_empty() && t.symbol == sym);
-                                                if !is_match { return false; }
-                                                let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &scanner_cfg.risk);
-                                                if scanner_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade { return true; }
-                                                if now_sec < t.closed_at_epoch.saturating_add(scanner_cfg.risk.reentry_cooldown_secs) { return true; }
-                                                false
-                                            });
-                                            if is_quarantined_sym {
-                                                continue;
-                                            }
-                                        }
-                                        let pair_addr = snap.pair_address.clone();
-                                        let liq = snap.liquidity_usd;
-                                        let fdv = snap.fdv_usd;
-                                        let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
-                                        let conviction_pct = if dex_id == "raydium" {
-                                            100.0
-                                        } else {
-                                            ((liq / 69_000.0) * 100.0).min(100.0)
-                                        };
+                                             let guard = scanner_state.read().await;
+                                             let is_active_sym = guard.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
+                                             if is_active_sym {
+                                                 continue;
+                                             }
+                                             let is_banned_sym = guard.banned_tokens.contains(&mint) || guard.banned_tokens.contains(&sym);
+                                             if scanner_cfg.risk.toxic_exit_permanent_ban && is_banned_sym {
+                                                 continue;
+                                             }
+                                             let is_rejected_sym = guard.rejected_candidates.iter().any(|(k, rejected_at)| {
+                                                 (k == &mint || k == &sym)
+                                                     && now_sec < rejected_at.saturating_add(scanner_cfg.risk.rejected_candidate_cooldown_secs)
+                                             });
+                                             if is_rejected_sym {
+                                                 continue;
+                                             }
+                                             let is_quarantined_sym = guard.closed_trades.iter().any(|t| {
+                                                 let is_match = (!t.token_mint.is_empty() && t.token_mint == mint) || (!t.symbol.is_empty() && t.symbol == sym);
+                                                 if !is_match { return false; }
+                                                 let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &scanner_cfg.risk);
+                                                 if scanner_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade { return true; }
+                                                 if now_sec < t.closed_at_epoch.saturating_add(scanner_cfg.risk.reentry_cooldown_secs) { return true; }
+                                                 false
+                                             });
+                                             if is_quarantined_sym {
+                                                 continue;
+                                             }
+                                         }
+                                         let pair_addr = snap.pair_address.clone();
+                                         let liq = snap.liquidity_usd;
+                                         let fdv = snap.fdv_usd;
+                                         let dex_id = snap.dex_id.clone();
+                                         let conviction_pct = if dex_id != "pumpfun" {
+                                             100.0
+                                         } else {
+                                             ((snap.fdv_usd / 69_000.0) * 100.0).clamp(0.0, 100.0)
+                                         };
                                         if let Err(reject_reason) = risk::validate_entry_gates(
                                             liq,
                                             fdv,
@@ -1715,7 +1767,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             continue;
                                         }
 
-                                        if !institutional::verify_lp_burned_or_locked(&scanner_client, rpc_endpoint, &mint, &pair_addr, dex_id, scanner_cfg.min_dead_lp_ratio).await {
+                                        if !institutional::verify_lp_burned_or_locked(&scanner_client, rpc_endpoint, &mint, &pair_addr, &dex_id, scanner_cfg.min_dead_lp_ratio).await {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),

@@ -38,11 +38,12 @@ min_entry_m5_volume_usd = 2500.0
 min_entry_h1_price_change_pct = -10.0
 max_entry_fdv_to_liquidity_ratio = 15.0
 
-entry_confirm_ticks = 3
-entry_confirm_interval_secs = 4
-min_confirm_tick_gain_pct = 0.8
+entry_confirm_ticks = 2
+entry_confirm_interval_secs = 6
+min_confirm_tick_gain_pct = 0.0
 max_confirm_tick_gain_pct = 25.0
 min_confirm_liquidity_retention_ratio = 0.98
+rejected_candidate_cooldown_secs = 300
 
 early_abort_window_secs = 45
 early_abort_max_peak_pct = 1.0

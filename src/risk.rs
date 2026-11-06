@@ -256,7 +256,7 @@ pub fn validate_live_tick_confirmation(
 
     let first_price = prices[0];
     let last_price = *prices.last().unwrap();
-    if last_price <= first_price {
+    if cfg.min_confirm_tick_gain_pct > 0.0 && last_price <= first_price {
         return Err("CONFIRMATION_ZERO_OR_NEGATIVE_GAIN");
     }
 
@@ -265,7 +265,7 @@ pub fn validate_live_tick_confirmation(
         return Err("CONFIRMATION_MOMENTUM_BELOW_MIN");
     }
     if gain_pct > cfg.max_confirm_tick_gain_pct {
-        return Err("CONFIRMATION_MOMENTUM_OVEREXTENDED");
+        return Err("CONFIRMATION_OVEREXTENDED");
     }
 
     let first_liq = liquidities[0];
@@ -596,40 +596,44 @@ mod tests {
 
     #[test]
     fn test_validate_live_tick_confirmation() {
-        let cfg = RiskConfig::default();
+        let cfg = RiskConfig::default(); // entry_confirm_ticks = 2, min_confirm_tick_gain_pct = 0.0
 
         // 1. Valid non-decreasing monotonic confirmation with positive gain & liquidity retention
-        let valid_prices = vec![1.000, 1.010, 1.025];
-        let valid_liq = vec![30_000.0, 30_100.0, 30_200.0];
+        let valid_prices = vec![1.000, 1.010];
+        let valid_liq = vec![30_000.0, 30_100.0];
         assert!(validate_live_tick_confirmation(&valid_prices, &valid_liq, &cfg).is_ok());
 
-        // 2. Insufficient confirm ticks (2 < 3)
-        let short_prices = vec![1.000, 1.010];
-        let short_liq = vec![30_000.0, 30_100.0];
+        // 2. Flat candle surviving DexScreener CDN cache window (0.0% gain passes when min_confirm_tick_gain_pct == 0.0)
+        let flat_prices = vec![1.000, 1.000];
+        assert!(validate_live_tick_confirmation(&flat_prices, &valid_liq, &cfg).is_ok());
+
+        // 3. Insufficient confirm ticks (1 < 2)
+        let short_prices = vec![1.000];
+        let short_liq = vec![30_000.0];
         assert_eq!(validate_live_tick_confirmation(&short_prices, &short_liq, &cfg), Err("INSUFFICIENT_CONFIRM_TICKS"));
 
-        // 3. Invalid zero or negative telemetry
-        let zero_prices = vec![1.000, 0.0, 1.020];
+        // 4. Invalid zero or negative telemetry
+        let zero_prices = vec![1.000, 0.0];
         assert_eq!(validate_live_tick_confirmation(&zero_prices, &valid_liq, &cfg), Err("INVALID_TICK_TELEMETRY"));
 
-        // 4. Confirmation tick down (dip in middle of confirmation window)
-        let dip_prices = vec![1.000, 1.015, 1.010];
+        // 5. Confirmation tick down (reversal / falling knife)
+        let dip_prices = vec![1.000, 0.990];
         assert_eq!(validate_live_tick_confirmation(&dip_prices, &valid_liq, &cfg), Err("CONFIRMATION_TICK_DOWN"));
 
-        // 5. Zero gain / stalled spot price (flat candle)
-        let flat_prices = vec![1.000, 1.000, 1.000];
-        assert_eq!(validate_live_tick_confirmation(&flat_prices, &valid_liq, &cfg), Err("CONFIRMATION_ZERO_OR_NEGATIVE_GAIN"));
+        // 6. Cumulative gain overextended (+30.0% > +25.0%)
+        let parabolic_prices = vec![1.000, 1.300];
+        assert_eq!(validate_live_tick_confirmation(&parabolic_prices, &valid_liq, &cfg), Err("CONFIRMATION_OVEREXTENDED"));
 
-        // 6. Cumulative gain below minimum threshold (+0.4% < +0.8%)
-        let slow_prices = vec![1.000, 1.002, 1.004];
-        assert_eq!(validate_live_tick_confirmation(&slow_prices, &valid_liq, &cfg), Err("CONFIRMATION_MOMENTUM_BELOW_MIN"));
-
-        // 7. Cumulative gain overextended (+30.0% > +25.0%)
-        let parabolic_prices = vec![1.000, 1.150, 1.300];
-        assert_eq!(validate_live_tick_confirmation(&parabolic_prices, &valid_liq, &cfg), Err("CONFIRMATION_MOMENTUM_OVEREXTENDED"));
-
-        // 8. Liquidity drain / rugging during confirmation ($27k / $30k = 0.90 < 0.98)
-        let drain_liq = vec![30_000.0, 29_000.0, 27_000.0];
+        // 7. Liquidity drain / rugging during confirmation ($27k / $30k = 0.90 < 0.98)
+        let drain_liq = vec![30_000.0, 27_000.0];
         assert_eq!(validate_live_tick_confirmation(&valid_prices, &drain_liq, &cfg), Err("CONFIRMATION_LIQUIDITY_DRAIN"));
+
+        // 8. Strict minimum gain enforcement when min_confirm_tick_gain_pct > 0.0
+        let mut strict_cfg = cfg.clone();
+        strict_cfg.min_confirm_tick_gain_pct = 0.8;
+        assert_eq!(validate_live_tick_confirmation(&flat_prices, &valid_liq, &strict_cfg), Err("CONFIRMATION_ZERO_OR_NEGATIVE_GAIN"));
+
+        let slow_prices = vec![1.000, 1.004];
+        assert_eq!(validate_live_tick_confirmation(&slow_prices, &valid_liq, &strict_cfg), Err("CONFIRMATION_MOMENTUM_BELOW_MIN"));
     }
 }
