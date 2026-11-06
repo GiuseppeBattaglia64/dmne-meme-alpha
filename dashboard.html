@@ -1012,9 +1012,24 @@
         const rc = window.activeRiskConfig || {};
         const stopLossPct = rc.stop_loss_pct !== undefined ? rc.stop_loss_pct : -20.0;
         const beArmPct = rc.breakeven_arm_pct !== undefined ? rc.breakeven_arm_pct : 35.0;
+        const beFloorPct = rc.breakeven_floor_pct !== undefined ? rc.breakeven_floor_pct : 12.0;
         const tp1Pct = rc.tp1_trigger_pct !== undefined ? rc.tp1_trigger_pct : 45.0;
         const tp2Pct = rc.tp2_trigger_pct !== undefined ? rc.tp2_trigger_pct : 100.0;
+        const runnerDropPct = rc.runner_trailing_drop_pct !== undefined ? rc.runner_trailing_drop_pct : 18.0;
         const stagTtlSecs = rc.stagnation_ttl_secs !== undefined ? rc.stagnation_ttl_secs : 240;
+
+        const peakPct = (p.peak_price_sol && p.entry_price_sol)
+          ? ((p.peak_price_sol - p.entry_price_sol) / p.entry_price_sol) * 100.0
+          : Math.max(pnl, 0.0);
+
+        let activeFloorPct;
+        if (p.tranche_1_taken) {
+          activeFloorPct = ((1.0 + peakPct / 100.0) * (1.0 - runnerDropPct / 100.0) - 1.0) * 100.0;
+        } else if (peakPct >= beArmPct) {
+          activeFloorPct = beFloorPct;
+        } else {
+          activeFloorPct = stopLossPct;
+        }
 
         const minScale = stopLossPct;
         const maxScale = tp2Pct;
@@ -1061,11 +1076,12 @@
             </div>
 
             <div class="gauge-wrap">
-              <div class="gauge-labels" style="color:#94a3b8; font-weight:600; display:flex; justify-content:space-between;">
+              <div class="gauge-labels" style="color:#94a3b8; font-weight:600; display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px;">
                 <span>STOP: ${stopLossPct.toFixed(0)}%</span>
                 <span>BE: +${beArmPct.toFixed(0)}%</span>
                 <span>TP1: +${tp1Pct.toFixed(0)}%</span>
                 <span>TP2: +${tp2Pct.toFixed(0)}%</span>
+                <span style="color:#38bdf8;">FLOOR: ${activeFloorPct > 0 ? '+' : ''}${activeFloorPct.toFixed(1)}%</span>
               </div>
               <div class="gauge-track">
                 <div class="gauge-fill ${fillClass}" style="width: ${fillPct}%"></div>

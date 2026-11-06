@@ -72,10 +72,18 @@ pub struct RiskConfig {
     pub runner_trailing_drop_pct: f64,
     #[serde(default = "default_cruise_baseline_trail_mult")]
     pub cruise_baseline_trail_mult: f64,
+    #[serde(default = "default_min_runner_trailing_drop_pct")]
+    pub min_runner_trailing_drop_pct: f64,
+    #[serde(default = "default_max_runner_trailing_drop_pct")]
+    pub max_runner_trailing_drop_pct: f64,
 
     pub stagnation_ttl_secs: u64,
     #[serde(default = "default_cruise_baseline_ttl_secs")]
     pub cruise_baseline_ttl_secs: u64,
+    #[serde(default = "default_min_stagnation_ttl_secs")]
+    pub min_stagnation_ttl_secs: u64,
+    #[serde(default = "default_max_stagnation_ttl_secs")]
+    pub max_stagnation_ttl_secs: u64,
     pub stagnation_max_peak_pct: f64,
     pub stagnation_band_min_pct: f64,
     pub stagnation_band_max_pct: f64,
@@ -97,13 +105,21 @@ pub struct RiskConfig {
     pub min_entry_m5_txns: u32,
     #[serde(default = "default_min_entry_m5_volume_usd")]
     pub min_entry_m5_volume_usd: f64,
+    #[serde(default = "default_min_entry_h1_price_change_pct")]
+    pub min_entry_h1_price_change_pct: f64,
+    #[serde(default = "default_max_entry_fdv_to_liquidity_ratio")]
+    pub max_entry_fdv_to_liquidity_ratio: f64,
 }
 
 fn default_flash_dump_tick_pct() -> f64 { -15.0 }
 fn default_flash_dump_max_pnl_pct() -> f64 { 0.0 }
 fn default_max_slippage_loss_pct() -> f64 { -25.0 }
 fn default_cruise_baseline_trail_mult() -> f64 { 2.20 }
+fn default_min_runner_trailing_drop_pct() -> f64 { 12.0 }
+fn default_max_runner_trailing_drop_pct() -> f64 { 25.0 }
 fn default_cruise_baseline_ttl_secs() -> u64 { 180 }
+fn default_min_stagnation_ttl_secs() -> u64 { 120 }
+fn default_max_stagnation_ttl_secs() -> u64 { 360 }
 fn default_reentry_cooldown_secs() -> u64 { 3600 }
 fn default_toxic_exit_permanent_ban() -> bool { true }
 fn default_min_entry_liquidity_usd() -> f64 { 25000.0 }
@@ -112,6 +128,8 @@ fn default_max_entry_price_change_pct() -> f64 { 85.0 }
 fn default_min_entry_buy_sell_ratio() -> f64 { 1.20 }
 fn default_min_entry_m5_txns() -> u32 { 15 }
 fn default_min_entry_m5_volume_usd() -> f64 { 2500.0 }
+fn default_min_entry_h1_price_change_pct() -> f64 { -10.0 }
+fn default_max_entry_fdv_to_liquidity_ratio() -> f64 { 15.0 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -128,8 +146,12 @@ impl Default for RiskConfig {
             tp2_sell_fraction: 0.35,
             runner_trailing_drop_pct: 18.0,
             cruise_baseline_trail_mult: 2.20,
+            min_runner_trailing_drop_pct: 12.0,
+            max_runner_trailing_drop_pct: 25.0,
             stagnation_ttl_secs: 240,
             cruise_baseline_ttl_secs: 180,
+            min_stagnation_ttl_secs: 120,
+            max_stagnation_ttl_secs: 360,
             stagnation_max_peak_pct: 12.0,
             stagnation_band_min_pct: -8.0,
             stagnation_band_max_pct: 5.0,
@@ -141,6 +163,8 @@ impl Default for RiskConfig {
             min_entry_buy_sell_ratio: 1.20,
             min_entry_m5_txns: 15,
             min_entry_m5_volume_usd: 2500.0,
+            min_entry_h1_price_change_pct: -10.0,
+            max_entry_fdv_to_liquidity_ratio: 15.0,
         }
     }
 }

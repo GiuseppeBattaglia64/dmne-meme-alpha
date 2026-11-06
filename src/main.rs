@@ -53,6 +53,7 @@ fn append_comprehensive_trade_log(
     exit_reason: &str,
     bankroll_before: f64,
     bankroll_after: f64,
+    is_toxic: bool,
 ) {
     use std::io::Write;
     use std::fs::OpenOptions;
@@ -62,7 +63,7 @@ fn append_comprehensive_trade_log(
 
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
         if !file_exists {
-            let header = "timestamp_exit_utc,timestamp_entry_utc,hold_duration_secs,token_symbol,token_mint,pair_address,dex_url,size_sol,entry_price_sol,peak_price_sol,trough_price_sol,exit_price_sol,mfe_pnl_pct,mae_pnl_pct,realized_pnl_pct,realized_pnl_sol,realized_pnl_eur,liquidity_usd,fdv_usd,exit_rule,outcome,simulated_fee_sol,bankroll_before_sol,bankroll_after_sol\n";
+            let header = "timestamp_exit_utc,timestamp_entry_utc,hold_duration_secs,token_symbol,token_mint,pair_address,dex_url,size_sol,entry_price_sol,peak_price_sol,trough_price_sol,exit_price_sol,mfe_pnl_pct,mae_pnl_pct,realized_pnl_pct,realized_pnl_sol,realized_pnl_eur,liquidity_usd,fdv_usd,exit_rule,outcome,simulated_fee_sol,bankroll_before_sol,bankroll_after_sol,is_toxic\n";
             let _ = file.write_all(header.as_bytes());
         }
 
@@ -82,7 +83,7 @@ fn append_comprehensive_trade_log(
         let dex_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
 
         let row = format!(
-            "{},{},{},{},{},{},{},{:.4},{:.10e},{:.10e},{:.10e},{:.10e},{:.2},{:.2},{:.2},{:.6},{:.2},{:.2},{:.2},\"{}\",{},{:.5},{:.4},{:.4}\n",
+            "{},{},{},{},{},{},{},{:.4},{:.10e},{:.10e},{:.10e},{:.10e},{:.2},{:.2},{:.2},{:.6},{:.2},{:.2},{:.2},\"{}\",{},{:.5},{:.4},{:.4},{}\n",
             now_utc,
             pos.entry_time_iso,
             hold_duration,
@@ -106,7 +107,8 @@ fn append_comprehensive_trade_log(
             outcome,
             simulated_fee,
             bankroll_before,
-            bankroll_after
+            bankroll_after,
+            is_toxic
         );
         let _ = file.write_all(row.as_bytes());
     }
@@ -284,6 +286,7 @@ pub struct LiveMarketSnapshot {
     pub liquidity_usd: f64,
     pub fdv_usd: f64,
     pub m5_price_change_pct: f64,
+    pub h1_price_change_pct: f64,
     pub buy_sell_ratio: f64,
     pub m5_txns: u32,
     pub m5_volume_usd: f64,
@@ -367,6 +370,7 @@ async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<LiveMarke
                         let liq = best_pair.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
                         let fdv = best_pair.fdv.unwrap_or(0.0);
                         let m5_change = best_pair.price_change.as_ref().and_then(|p| p.m5.or(p.h1)).unwrap_or(0.0);
+                        let h1_change = best_pair.price_change.as_ref().and_then(|p| p.h1).unwrap_or(0.0);
                         let txns = best_pair.txns.as_ref().and_then(|t| t.m5.as_ref().or(t.h1.as_ref()));
                         let buys = txns.and_then(|t| t.buys).unwrap_or(0);
                         let sells = txns.and_then(|t| t.sells).unwrap_or(0);
@@ -381,6 +385,7 @@ async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<LiveMarke
                             liquidity_usd: liq,
                             fdv_usd: fdv,
                             m5_price_change_pct: m5_change,
+                            h1_price_change_pct: h1_change,
                             buy_sell_ratio,
                             m5_txns,
                             m5_volume_usd: m5_vol,
@@ -619,7 +624,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let pnl_pct = cols[14].parse::<f64>().unwrap_or(0.0);
                         let pnl_sol = cols[15].parse::<f64>().unwrap_or(0.0);
                         let reason = cols[19].trim_matches('"').to_string();
-                        let is_toxic = risk::is_historical_exit_toxic(pnl_pct, &config.risk);
+                        let is_toxic = if cols.len() > 24 {
+                            cols[24].trim().parse::<bool>().unwrap_or_else(|_| risk::is_historical_exit_toxic(pnl_pct, &config.risk))
+                        } else {
+                            risk::is_historical_exit_toxic(pnl_pct, &config.risk)
+                        };
                         g.closed_trades.push(ClosedTrade {
                             token_mint,
                             symbol,
@@ -1153,6 +1162,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 * (dynamic_ttl_secs as f64 / effective_risk_cfg.cruise_baseline_ttl_secs as f64))
                 .round() as u64;
             effective_risk_cfg.runner_trailing_drop_pct *= dynamic_trail_mult / effective_risk_cfg.cruise_baseline_trail_mult;
+            effective_risk_cfg.stagnation_ttl_secs = effective_risk_cfg.stagnation_ttl_secs.clamp(
+                effective_risk_cfg.min_stagnation_ttl_secs,
+                effective_risk_cfg.max_stagnation_ttl_secs,
+            );
+            effective_risk_cfg.runner_trailing_drop_pct = effective_risk_cfg.runner_trailing_drop_pct.clamp(
+                effective_risk_cfg.min_runner_trailing_drop_pct,
+                effective_risk_cfg.max_runner_trailing_drop_pct,
+            );
 
             // Evaluate dynamic exit rules
             let mut guard = eval_state.write().await;
@@ -1217,6 +1234,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &rule_label,
                             bankroll_before,
                             bankroll_after,
+                            false,
                         );
 
                         // 2. Persist to PostgreSQL (db.rs)
@@ -1286,6 +1304,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     state.losses += 1;
                     state.consecutive_losses += 1;
                 }
+                let is_toxic_exit = is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk);
                 append_comprehensive_trade_log(
                     &pos,
                     pnl_pct,
@@ -1293,6 +1312,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &reason,
                     bankroll_before,
                     bankroll_after,
+                    is_toxic_exit,
                 );
                 let db_mint = pos.token_mint.clone();
                 let db_sym = pos.symbol.clone();
@@ -1305,7 +1325,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let db_after = bankroll_after;
                 let db_rule = reason.clone();
                 let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
-                let is_toxic_exit = is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk);
                 tokio::spawn(async move {
                     if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
                         db::record_settled_trade(
@@ -1486,6 +1505,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 lp_burned: false,
                                                 admitted: false,
                                                 rejection_reason: format!("M5_VOLUME_BELOW_FLOOR (${:.0} < ${:.0})", snap.m5_volume_usd, scanner_cfg.risk.min_entry_m5_volume_usd),
+                                            });
+                                            continue;
+                                        }
+
+                                        // 1-Hour Trend Gate: Reject bearish/dumping tokens
+                                        if snap.h1_price_change_pct < scanner_cfg.risk.min_entry_h1_price_change_pct {
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: format!("H1_TREND_BEARISH ({:+.1}% < {:+.1}%)", snap.h1_price_change_pct, scanner_cfg.risk.min_entry_h1_price_change_pct),
+                                            });
+                                            continue;
+                                        }
+
+                                        // FDV to Liquidity Ratio Gate: Reject heavily diluted / hollow pools
+                                        if snap.liquidity_usd > 0.0 && (snap.fdv_usd / snap.liquidity_usd) > scanner_cfg.risk.max_entry_fdv_to_liquidity_ratio {
+                                            let fdv_liq_ratio = snap.fdv_usd / snap.liquidity_usd;
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: format!("FDV_LIQ_RATIO_EXCEEDED ({:.1}x > {:.1}x)", fdv_liq_ratio, scanner_cfg.risk.max_entry_fdv_to_liquidity_ratio),
                                             });
                                             continue;
                                         }

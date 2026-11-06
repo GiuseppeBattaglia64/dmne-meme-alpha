@@ -9,9 +9,18 @@ adaptive dynamic parameter overrides in PostgreSQL.
 import time
 import math
 import json
+from pathlib import Path
 import psycopg2
 import requests
 from dataclasses import dataclass
+
+try:
+    import tomllib
+except ImportError:
+    try:
+        import toml as tomllib
+    except ImportError:
+        tomllib = None
 
 DB_PARAMS = {
     "dbname": "dmne_quant",
@@ -39,6 +48,17 @@ class AICruiseAgent:
         self.session = requests.Session()
         print("[AI CRUISE AGENT] Online. In-flight position regime supervisor initialized.")
 
+    def load_risk_config(self) -> dict:
+        config_path = Path(__file__).resolve().parent.parent / "config.toml"
+        if config_path.exists() and tomllib is not None:
+            try:
+                with open(config_path, "rb") as f:
+                    data = tomllib.load(f)
+                    return data.get("risk", {})
+            except Exception as e:
+                print(f"[AI CRUISE AGENT] Warning: Failed to load config.toml: {e}")
+        return {}
+
     def fetch_live_positions(self) -> list:
         try:
             res = self.session.get(ENGINE_EVENTS_URL, timeout=3, stream=True)
@@ -52,7 +72,7 @@ class AICruiseAgent:
             return []
         return []
 
-    def classify_position_regime(self, p: dict) -> CruiseRegimeVerdict:
+    def classify_position_regime(self, p: dict, rc: dict) -> CruiseRegimeVerdict:
         sym = p.get("symbol", "UNKNOWN")
         mint = p.get("token_mint", "")
         pnl = float(p.get("pnl_pct", 0.0))
@@ -61,26 +81,38 @@ class AICruiseAgent:
         baseline_sigma = 0.045
         baseline_drift = pnl / 100.0
 
-        if pnl >= 40.0:
+        min_ttl = int(rc.get("min_stagnation_ttl_secs", 120))
+        max_ttl = int(rc.get("max_stagnation_ttl_secs", 360))
+        base_ttl = int(rc.get("stagnation_ttl_secs", 240))
+        base_trail = float(rc.get("cruise_baseline_trail_mult", 2.20))
+
+        stop_loss_pct = float(rc.get("stop_loss_pct", -20.0))
+        be_arm_pct = float(rc.get("breakeven_arm_pct", 35.0))
+        tp1_pct = float(rc.get("tp1_trigger_pct", 45.0))
+
+        if pnl >= tp1_pct:
             # Aggressive breakout expansion: widen trailing stop so parabolic run isn't clipped
             regime = "AGGRESSIVE_EXPANSION"
-            dynamic_trail = 2.65
-            dynamic_ttl = 1200
-        elif pnl >= 15.0:
+            dynamic_trail = round(base_trail * 1.20, 2)
+            dynamic_ttl = max_ttl
+        elif pnl >= be_arm_pct:
             # Steady momentum: standard institutional volatility envelope
             regime = "STEADY_MOMENTUM"
-            dynamic_trail = 2.20
-            dynamic_ttl = 900
-        elif pnl <= -20.0:
+            dynamic_trail = base_trail
+            dynamic_ttl = (base_ttl + max_ttl) // 2
+        elif pnl <= stop_loss_pct:
             # Distribution decay: accelerate capital recycling to avoid trailing bleed
             regime = "DISTRIBUTION_BLEED"
-            dynamic_trail = 1.40
-            dynamic_ttl = 600
+            dynamic_trail = round(base_trail * 0.65, 2)
+            dynamic_ttl = min_ttl
         else:
             # Equilibrium consolidation
             regime = "EQUILIBRIUM"
-            dynamic_trail = 2.00
-            dynamic_ttl = 900
+            dynamic_trail = round(base_trail * 0.90, 2)
+            dynamic_ttl = base_ttl
+
+        # Ensure dynamic_ttl stays strictly within [min_ttl, max_ttl]
+        dynamic_ttl = max(min_ttl, min(max_ttl, dynamic_ttl))
 
         return CruiseRegimeVerdict(
             symbol=sym,
@@ -96,13 +128,17 @@ class AICruiseAgent:
         cursor = self.conn.cursor()
         while True:
             try:
+                rc = self.load_risk_config()
+                min_ttl = int(rc.get("min_stagnation_ttl_secs", 120))
+                max_ttl = int(rc.get("max_stagnation_ttl_secs", 360))
                 positions = self.fetch_live_positions()
                 if positions:
-                    verdicts = [self.classify_position_regime(p) for p in positions]
+                    verdicts = [self.classify_position_regime(p, rc) for p in positions]
 
                     # Compute fleet average recommended parameters
                     avg_trail = sum(v.dynamic_trail_multiplier for v in verdicts) / len(verdicts)
                     avg_ttl = int(sum(v.recommended_ttl_seconds for v in verdicts) / len(verdicts))
+                    avg_ttl = max(min_ttl, min(max_ttl, avg_ttl))
                     primary_regime = verdicts[0].regime
 
                     cursor.execute("""
