@@ -103,10 +103,21 @@ pub fn evaluate_position_exit(
         };
     }
 
-    // 6. Moonbag Trailing Stop (Post-TP1)
-    if pos.tp1_executed && pnl_pct <= (pos.peak_pnl_pct - cfg.runner_trailing_drop_pct) {
+    // 6. Moonbag Trailing Stop (True relative drawdown from high-water mark price)
+    let peak_mult = 1.0 + (pos.peak_pnl_pct / 100.0);
+    let curr_mult = 1.0 + (pnl_pct / 100.0);
+    let peak_drawdown_pct = if peak_mult > 0.0 {
+        ((peak_mult - curr_mult) / peak_mult) * 100.0
+    } else {
+        0.0
+    };
+
+    if pos.tp1_executed && peak_drawdown_pct >= cfg.runner_trailing_drop_pct {
         return ExitAction::FullExit {
-            rule_label: format!("Trailing Runner (Peak +{:.1}%)", pos.peak_pnl_pct),
+            rule_label: format!(
+                "Trailing Runner (-{:.0}% from +{:.1}% Peak)",
+                cfg.runner_trailing_drop_pct, pos.peak_pnl_pct
+            ),
             is_toxic: false,
         };
     }
@@ -247,11 +258,11 @@ mod tests {
         assert!(pos.tp1_executed);
         assert!((pos.peak_pnl_pct - 60.0).abs() < 1e-6);
 
-        // Pull back from +60% to +41% (drawdown 19% > 18%)
-        let action = evaluate_position_exit(&mut pos, 1.41, 1060, &cfg);
+        // Pull back from +60% (price 1.60) to price 1.29 (relative peak drawdown of 19.375% > 18%)
+        let action = evaluate_position_exit(&mut pos, 1.29, 1060, &cfg);
         match action {
             ExitAction::FullExit { rule_label, is_toxic } => {
-                assert!(rule_label.contains("Trailing Runner"));
+                assert!(rule_label.contains("Trailing Runner (-18% from +60.0% Peak)"));
                 assert!(!is_toxic);
             }
             _ => panic!("Expected Trailing Runner exit"),
