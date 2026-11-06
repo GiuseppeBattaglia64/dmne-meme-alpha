@@ -1578,22 +1578,31 @@
     async function submitCreateUser() {
       const uid = document.getElementById('new-user-id').value.trim().toLowerCase();
       const name = document.getElementById('new-user-name').value.trim();
+      const pass = (document.getElementById('new-user-pass') ? document.getElementById('new-user-pass').value.trim() : '') || 'trader8090';
       const mode = document.getElementById('new-user-mode').value;
-      if (!uid || !name) { alert('Please provide ID and name'); return; }
+      if (!uid || !name) { alert('Please provide User ID and Display Name'); return; }
 
       try {
-        const res = await fetch(`/api/admin/users/create?id=${encodeURIComponent(uid)}&name=${encodeURIComponent(name)}&mode=${encodeURIComponent(mode)}&pass=${encodeURIComponent(uid + '8090')}`, { method: 'POST' });
+        const query = `id=${encodeURIComponent(uid)}&name=${encodeURIComponent(name)}&pass=${encodeURIComponent(pass)}&mode=${encodeURIComponent(mode)}`;
+        const res = await fetch(`/api/admin/users/create?${query}`, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          alert(`Trading desk provisioned for ${name} (${uid})!\nMode: ${data.mode}\nPublic Key: ${data.pubkey}\nDefault Password: ${uid}8090`);
+          alert(`✅ Workspace created successfully!
+
+User: ${data.display_name} (${data.user_id})
+Deposit Pubkey: ${data.pubkey}
+Mode: ${data.mode}`);
+          closeModals();
+          await loadUsers();
+          document.getElementById('user-select').value = uid;
+          switchUser(uid);
         } else {
-          alert(`Provisioning failed: ${data.error}`);
+          alert('Error provisioning user: ' + (data.error || 'Unknown error'));
         }
-      } catch (e) {
-        console.error('Failed to create user:', e);
+      } catch (err) {
+        alert('Network error provisioning user.');
+        console.error(err);
       }
-      closeModals();
-      loadUsers();
     }
 
     // Attach mode toggle click to mode-badge
@@ -1640,6 +1649,7 @@
       </p>
       <input type="text" id="new-user-id" class="withdraw-input" placeholder="User Identifier (e.g. marco)" />
       <input type="text" id="new-user-name" class="withdraw-input" placeholder="Display Name (e.g. Marco Rossi)" />
+      <input type="password" id="new-user-pass" class="withdraw-input" placeholder="Initial Password / PIN (e.g. marco8090)" />
       <select id="new-user-mode" class="withdraw-input" style="cursor:pointer;">
         <option value="PAPER">🧪 Paper Trading (Virtual Funds)</option>
         <option value="LIVE">🔴 Live Mainnet (Real SOL)</option>
