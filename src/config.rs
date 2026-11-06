@@ -13,6 +13,7 @@ pub struct EngineConfig {
     pub min_liquidity_usd: f64,
     pub max_dev_holding_pct: f64,
     pub max_top10_concentration_pct: f64,
+    pub min_symbol_entropy: f64,
 
     // Dynamic Sizing Engine
     pub kelly_nav_fraction: f64,
@@ -53,7 +54,8 @@ impl Default for EngineConfig {
             min_dead_lp_ratio: 0.950,             // 95% burned or locked LP tokens for AMM pools
             min_liquidity_usd: 25000.0,
             max_dev_holding_pct: 1.0,         // Reject if deployer holds >= 1.0%
-            max_top10_concentration_pct: 18.0, // Reject if top 10 hold > 18.0%            // Dynamic fallback liquidity threshold
+            max_top10_concentration_pct: 18.0,
+            min_symbol_entropy: 1.8,          // Reject repetitive ticker spam // Reject if top 10 hold > 18.0%            // Dynamic fallback liquidity threshold
             kelly_nav_fraction: 0.075,            // 7.5% NAV Half-Kelly risk allocation
             min_entry_sol: 0.012,                 // Minimum entry size (covers rent & priority fees)
             max_entry_sol: 0.045,                 // Maximum entry size cap
@@ -61,7 +63,7 @@ impl Default for EngineConfig {
             rolling_sample_window: 15,            // 15-tick rolling window for volatility calculation
             volatility_trail_multiplier: 2.20,    // Multiplier (k) applied to rolling standard deviation
             z_score_flash_threshold: -3.0,        // Emergency circuit breaker triggered at -3.0 sigma
-            breakeven_arm_peak_pct: 18.0,         // Minimum peak gain to arm breakeven floor guard
+            breakeven_arm_peak_pct: 15.0,         // Minimum peak gain to arm breakeven floor guard
             breakeven_floor_pct: 3.0,             // Minimum guaranteed profit floor
             stagnation_ttl_seconds: 450,          // 15-minute capital recycling window
             hard_stop_loss_pct: -20.0,            // Hard stop loss cutoff

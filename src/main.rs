@@ -1,3 +1,17 @@
+/// Calculates Shannon character entropy H(X) in bits for a string
+pub fn calculate_string_entropy(s: &str) -> f64 {
+    if s.is_empty() { return 0.0; }
+    let mut freq = std::collections::HashMap::new();
+    for c in s.chars() {
+        *freq.entry(c).or_insert(0usize) += 1;
+    }
+    let len = s.len() as f64;
+    freq.values().map(|&count| {
+        let p = count as f64 / len;
+        -p * p.log2()
+    }).sum()
+}
+
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RadarCandidate {
@@ -887,6 +901,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let dev_holding = 0.0; // Ingested via token account audit
                                         let top10_concentration = 15.0; // Default dispersed baseline
 
+                                        
+                                        // Shannon Entropy Filter: Reject degenerate spam tickers (e.g., AAAAAAAAAAAA)
+                                        if sym.len() >= 4 && calculate_string_entropy(&sym) < scanner_cfg.min_symbol_entropy {
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.90,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: "LOW_SYMBOL_ENTROPY".to_string(),
+                                            });
+                                            continue;
+                                        }
+
                                         if dev_holding >= scanner_cfg.max_dev_holding_pct {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
@@ -975,7 +1008,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                         }
                                                     }
                                                     if !g.candidate_queue.iter().any(|c| c.token_mint == mint) {
-                                                        g.candidate_queue.push(radar_cand);
+                                                        // Priority routing: Graduated / Raydium pools pushed to front of queue
+                                                        if radar_cand.dex_id == "raydium" || radar_cand.bonding_curve_pct >= 95 {
+                                                            g.candidate_queue.insert(0, radar_cand);
+                                                        } else {
+                                                            g.candidate_queue.push(radar_cand);
+                                                        }
                                                         if g.candidate_queue.len() > 20 {
                                                             g.candidate_queue.remove(0);
                                                         }
