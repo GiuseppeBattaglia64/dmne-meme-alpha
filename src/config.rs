@@ -130,10 +130,10 @@ fn default_min_stagnation_ttl_secs() -> u64 { 120 }
 fn default_max_stagnation_ttl_secs() -> u64 { 360 }
 fn default_reentry_cooldown_secs() -> u64 { 3600 }
 fn default_toxic_exit_permanent_ban() -> bool { true }
-fn default_min_entry_liquidity_usd() -> f64 { 25000.0 }
+fn default_min_entry_liquidity_usd() -> f64 { 15000.0 }
 fn default_min_entry_price_change_pct() -> f64 { 1.5 }
 fn default_max_entry_price_change_pct() -> f64 { 85.0 }
-fn default_min_entry_buy_sell_ratio() -> f64 { 1.20 }
+fn default_min_entry_buy_sell_ratio() -> f64 { 1.10 }
 fn default_min_entry_m5_txns() -> u32 { 15 }
 fn default_min_entry_m5_volume_usd() -> f64 { 2500.0 }
 fn default_min_entry_h1_price_change_pct() -> f64 { -10.0 }
@@ -169,10 +169,10 @@ impl Default for RiskConfig {
             stagnation_band_max_pct: 5.0,
             reentry_cooldown_secs: 3600,
             toxic_exit_permanent_ban: true,
-            min_entry_liquidity_usd: 25000.0,
+            min_entry_liquidity_usd: 15000.0,
             min_entry_price_change_pct: 1.5,
             max_entry_price_change_pct: 85.0,
-            min_entry_buy_sell_ratio: 1.20,
+            min_entry_buy_sell_ratio: 1.10,
             min_entry_m5_txns: 15,
             min_entry_m5_volume_usd: 2500.0,
             min_entry_h1_price_change_pct: -10.0,

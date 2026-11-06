@@ -191,6 +191,8 @@ pub struct BotState {
     pub recent_onchain_events: Vec<String>,
     #[serde(default)]
     pub effective_risk_cfg: config::RiskConfig,
+    #[serde(default)]
+    pub banned_tokens: std::collections::HashSet<String>,
 }
 
 impl BotState {
@@ -215,6 +217,7 @@ impl BotState {
             closed_trades: Vec::new(),
             recent_onchain_events: Vec::new(),
             effective_risk_cfg: config::RiskConfig::default(),
+            banned_tokens: std::collections::HashSet::new(),
         }
     }
 }
@@ -604,6 +607,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         println!("[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Rejections: {} | Restored Closed Trades: {}", 
             g.current_bankroll_sol, g.total_realized_pnl_sol, total, rejections, g.closed_trades.len());
+
+        // Restore permanent toxic ban set from archived trades without polluting v0.7.1 PnL
+        let toxic_tokens = db::fetch_archived_toxic_tokens(&pg, config.risk.stagnation_band_min_pct).await;
+        let toxic_count = toxic_tokens.len();
+        for (mint, sym) in toxic_tokens {
+            if !mint.is_empty() {
+                g.banned_tokens.insert(mint);
+            }
+            if !sym.is_empty() {
+                g.banned_tokens.insert(sym);
+            }
+        }
+        println!("[STARTUP RECONCILE] Restored {} permanent toxic banned tokens from settled_trades archive", toxic_count);
     }
 
     // Fallback: If DB had no closed trades or was unreachable, load from trades_forensic.csv
@@ -1063,6 +1079,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     while !state.is_scanner_paused && state.active_positions.len() < eval_cfg.risk.max_active_slots && !state.candidate_queue.is_empty() {
                         let candidate = state.candidate_queue.remove(0);
                         let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint || p.symbol == candidate.symbol);
+                        let is_banned = state.banned_tokens.contains(&candidate.token_mint) || state.banned_tokens.contains(&candidate.symbol);
+                        if eval_cfg.risk.toxic_exit_permanent_ban && is_banned {
+                            println!("[ANTI-CHURN] Permanent ban active for toxic token: {} ({})", candidate.symbol, candidate.token_mint);
+                            continue;
+                        }
                         let is_quarantined = state.closed_trades.iter().any(|t| {
                             let is_match = (!t.token_mint.is_empty() && t.token_mint == candidate.token_mint) || (!t.symbol.is_empty() && t.symbol == candidate.symbol);
                             if !is_match {
@@ -1090,14 +1111,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if let Some(candidate) = candidate_to_eval {
                     if let Some(snap) = fetch_live_price(&eval_client, &candidate.token_mint).await {
-                        if let Err(reject_reason) = risk::validate_entry_gates(
+                        if let Err(reject_reason) = risk::validate_queue_pop_snapshot(
                             snap.liquidity_usd,
                             snap.fdv_usd,
                             snap.m5_price_change_pct,
                             snap.h1_price_change_pct,
-                            snap.buy_sell_ratio,
-                            snap.m5_txns,
-                            snap.m5_volume_usd,
                             &eval_cfg.risk,
                         ) {
                             println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated while in queue: {}", candidate.symbol, candidate.token_mint, reject_reason);
@@ -1335,6 +1353,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     state.consecutive_losses += 1;
                 }
                 let is_toxic_exit = is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk);
+                if is_toxic_exit {
+                    if !pos.token_mint.is_empty() {
+                        state.banned_tokens.insert(pos.token_mint.clone());
+                    }
+                    if !pos.symbol.is_empty() {
+                        state.banned_tokens.insert(pos.symbol.clone());
+                    }
+                }
                 append_comprehensive_trade_log(
                     &pos,
                     pnl_pct,
@@ -1397,6 +1423,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if let Some(mint) = profile.token_address {
                                 let guard = scanner_state.read().await;
                                 let is_active = guard.active_positions.iter().any(|p| p.token_mint == mint);
+                                let is_banned = guard.banned_tokens.contains(&mint);
+                                if scanner_cfg.risk.toxic_exit_permanent_ban && is_banned {
+                                    continue;
+                                }
                                 let now_sec = chrono::Utc::now().timestamp() as u64;
                                 let is_quarantined = guard.closed_trades.iter().any(|t| {
                                     let is_match = !t.token_mint.is_empty() && t.token_mint == mint;
@@ -1415,6 +1445,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let sym = snap.symbol.clone();
                                         {
                                             let guard = scanner_state.read().await;
+                                            let is_banned_sym = guard.banned_tokens.contains(&mint) || guard.banned_tokens.contains(&sym);
+                                            if scanner_cfg.risk.toxic_exit_permanent_ban && is_banned_sym {
+                                                continue;
+                                            }
                                             let is_quarantined_sym = guard.closed_trades.iter().any(|t| {
                                                 let is_match = (!t.token_mint.is_empty() && t.token_mint == mint) || (!t.symbol.is_empty() && t.symbol == sym);
                                                 if !is_match { return false; }

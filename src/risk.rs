@@ -192,6 +192,28 @@ pub fn validate_entry_gates(
     Ok(())
 }
 
+pub fn validate_queue_pop_snapshot(
+    liquidity_usd: f64,
+    fdv_usd: f64,
+    m5_price_change_pct: f64,
+    h1_price_change_pct: f64,
+    cfg: &RiskConfig,
+) -> Result<(), &'static str> {
+    if liquidity_usd < cfg.min_entry_liquidity_usd {
+        return Err("LIQUIDITY_BELOW_FLOOR");
+    }
+    if liquidity_usd > 0.0 && (fdv_usd / liquidity_usd) > cfg.max_entry_fdv_to_liquidity_ratio {
+        return Err("FDV_LIQ_RATIO_EXCEEDED");
+    }
+    if m5_price_change_pct < 0.0 {
+        return Err("M5_PRICE_MOMENTUM_NEGATIVE");
+    }
+    if h1_price_change_pct < cfg.min_entry_h1_price_change_pct {
+        return Err("H1_TREND_BEARISH");
+    }
+    Ok(())
+}
+
 pub const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
 
 pub fn compute_net_realized_sol(basis_sol: f64, gross_pnl_pct: f64, cfg: &RiskConfig) -> f64 {
@@ -414,8 +436,8 @@ mod tests {
         // Passing valid baseline
         assert!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg).is_ok());
 
-        // 1. Liquidity below floor ($20,000 < $25,000)
-        assert_eq!(validate_entry_gates(20_000.0, 100_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
+        // 1. Liquidity below floor ($10,000 < $15,000)
+        assert_eq!(validate_entry_gates(10_000.0, 100_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
 
         // 2. FDV to Liquidity ratio exceeded (FDV $500,000 / Liq $30,000 = 16.6x > 15.0x)
         assert_eq!(validate_entry_gates(30_000.0, 500_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
@@ -429,14 +451,33 @@ mod tests {
         // 5. H1 trend bearish (-12.0% < -10.0%)
         assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, -12.0, 1.5, 25, 5_000.0, &cfg), Err("H1_TREND_BEARISH"));
 
-        // 6. Buy/sell ratio below threshold (1.0 < 1.2)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.0, 25, 5_000.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
+        // 6. Buy/sell ratio below threshold (0.9 < 1.10)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 0.9, 25, 5_000.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
 
         // 7. M5 txns below floor (10 < 15)
         assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 10, 5_000.0, &cfg), Err("M5_TXNS_BELOW_FLOOR"));
 
         // 8. M5 volume below floor ($1,000 < $2,500)
         assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 1_000.0, &cfg), Err("M5_VOLUME_BELOW_FLOOR"));
+    }
+
+    #[test]
+    fn test_validate_queue_pop_snapshot() {
+        let cfg = RiskConfig::default();
+        // Valid baseline: liq $20,000 >= $15,000, FDV/liq = 5x <= 15x, m5 = +2.5% >= 0%, h1 = +5% >= -10%
+        assert!(validate_queue_pop_snapshot(20_000.0, 100_000.0, 2.5, 5.0, &cfg).is_ok());
+
+        // 1. Liquidity below floor ($10,000 < $15,000)
+        assert_eq!(validate_queue_pop_snapshot(10_000.0, 100_000.0, 2.5, 5.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
+
+        // 2. FDV to Liquidity ratio exceeded (FDV $400,000 / Liq $20,000 = 20x > 15x)
+        assert_eq!(validate_queue_pop_snapshot(20_000.0, 400_000.0, 2.5, 5.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+
+        // 3. M5 turned negative (-1.5% < 0.0%)
+        assert_eq!(validate_queue_pop_snapshot(20_000.0, 100_000.0, -1.5, 5.0, &cfg), Err("M5_PRICE_MOMENTUM_NEGATIVE"));
+
+        // 4. H1 trend bearish (-12.0% < -10.0%)
+        assert_eq!(validate_queue_pop_snapshot(20_000.0, 100_000.0, 2.5, -12.0, &cfg), Err("H1_TREND_BEARISH"));
     }
 
     #[test]

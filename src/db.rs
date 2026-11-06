@@ -294,6 +294,42 @@ pub async fn fetch_complete_system_stats(client: &Client) -> (i64, i64, f64, i64
     (total, wins, net, rejections)
 }
 
+/// Queries both settled_trades and settled_trades_v070_archive for distinct (token_mint, symbol)
+/// where is_toxic = true or pnl_pct < min_non_toxic_pnl_pct
+pub async fn fetch_archived_toxic_tokens(client: &Client, min_non_toxic_pnl_pct: f64) -> Vec<(String, String)> {
+    let mut tokens = Vec::new();
+    let query = "
+        SELECT DISTINCT token_mint, symbol FROM (
+            SELECT token_mint, symbol, is_toxic, pnl_pct FROM settled_trades
+            UNION ALL
+            SELECT token_mint, symbol, is_toxic, pnl_pct FROM settled_trades_v070_archive
+        ) sub
+        WHERE (is_toxic = true OR pnl_pct < $1)
+          AND (token_mint != '' OR symbol != '')
+    ";
+    if let Ok(rows) = client.query(query, &[&min_non_toxic_pnl_pct]).await {
+        for row in rows {
+            let mint: String = row.get(0);
+            let sym: String = row.get(1);
+            tokens.push((mint, sym));
+        }
+    } else {
+        let fallback = "
+            SELECT DISTINCT token_mint, symbol FROM settled_trades
+            WHERE (is_toxic = true OR pnl_pct < $1)
+              AND (token_mint != '' OR symbol != '')
+        ";
+        if let Ok(rows) = client.query(fallback, &[&min_non_toxic_pnl_pct]).await {
+            for row in rows {
+                let mint: String = row.get(0);
+                let sym: String = row.get(1);
+                tokens.push((mint, sym));
+            }
+        }
+    }
+    tokens
+}
+
 /// Fetches recent pre-trade audits to populate candidate radar on boot
 pub async fn fetch_recent_radar_audits(client: &Client, limit: i64) -> Vec<serde_json::Value> {
     let stmt = "

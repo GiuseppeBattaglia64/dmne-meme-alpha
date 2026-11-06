@@ -1068,17 +1068,13 @@
 
       const container = document.getElementById("positions-container");
       const maxSlots = (window.activeRiskConfig && window.activeRiskConfig.max_active_slots) || 4;
-      document.getElementById("concurrency-badge").innerText = `${positions.length}/${maxSlots}`;
-      document.getElementById("margin-pct").innerText = `Slots: ${positions.length}/${maxSlots}`;
-
-      if (!positions || positions.length === 0) {
-        container.innerHTML = '<div style="grid-column: span 2; padding: 20px; text-align: center; color: var(--text-dim); font-size: 11px;" class="mono">Scanning mempool via Pre-Trade Gate...</div>';
-        return;
-      }
+      const posList = positions || [];
+      document.getElementById("concurrency-badge").innerText = `${posList.length}/${maxSlots}`;
+      document.getElementById("margin-pct").innerText = `Slots: ${posList.length}/${maxSlots}`;
 
       const now = Math.floor(Date.now() / 1000);
 
-      let cardsHtml = positions.map(p => {
+      let cardsHtml = posList.map(p => {
         const pnl = p.pnl_pct || 0.0;
         const pnlClass = pnl > 0 ? "pnl-pos" : (pnl < 0 ? "pnl-neg" : "pnl-zero");
         const entryPrice = (p.entry_price_sol || 0.0).toExponential(3);
@@ -1189,10 +1185,10 @@
       }).join('');
 
       // Fill remaining slots up to max_active_slots with high-density vacant slot cards
-      const vacantSlots = Math.max(0, maxSlots - positions.length);
+      const vacantSlots = Math.max(0, maxSlots - posList.length);
       const kellyPct = (window.activeRiskConfig && window.activeRiskConfig.kelly_fraction_nav_pct) || 7.5;
       for (let i = 0; i < vacantSlots; i++) {
-        const slotNum = positions.length + i + 1;
+        const slotNum = posList.length + i + 1;
         cardsHtml += `
           <div class="pos-card" style="border: 1px dashed var(--border-subtle); background: rgba(16, 24, 40, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 8px;">
             <div class="mono" style="font-size: 10px; color: var(--cyan); letter-spacing: 0.08em; font-weight: 700;">SLOT ${slotNum} // READY</div>
@@ -1204,7 +1200,7 @@
       container.innerHTML = cardsHtml;
 
       // Draw all canvas sparklines after DOM insertion
-      positions.forEach(p => {
+      posList.forEach(p => {
         const canvasId = `spark-${p.token_mint.substring(p.token_mint.length - 6)}`;
         const history = window.priceHistoryBuffers[p.token_mint] || [p.entry_price_sol, p.current_price_sol];
         drawSparkline(canvasId, history, (p.pnl_pct || 0) >= 0);
