@@ -1,0 +1,454 @@
+{
+  "total_archived_trades": 195,
+  "total_winners": 82,
+  "total_right_censored_winners": 37,
+  "censored_ratio_pct": 45.12,
+  "breakeven_choked_count": 25,
+  "stagnation_choked_count": 12,
+  "censored_winners": [
+    {
+      "symbol": "CR",
+      "mint": "EbFJbnAMyf1hHHd2QNvHFRoKFntj1GZWHnFR2JYYpump",
+      "pair_address": "5HMgjoYdNhhh6cmF3KmVEQevmshbq5FG8XmWaqC5hb67",
+      "hold_secs": 183,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 39.89,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "TOPLESS",
+      "mint": "CxYe8z7qnUFXDoPKce2pZ9xo9yP3KDktTojH5ZiCmWY9",
+      "pair_address": "9e2YFW8XJWdnAHpoZaHysGiJcXmsLSew4jmMxVwzbSz8",
+      "hold_secs": 141,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 26.69,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "INDEX",
+      "mint": "EESvU4BaTq6yGfaCUbNVC8HCDtrsfnoecmrSpKzuVxDu",
+      "pair_address": "2icdPobtW92JSe7Vr5WKXKsXxpJeBR7nCV8vDbKmzr8i",
+      "hold_secs": 3846,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 34.77,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "Pillheads",
+      "mint": "9UuBKMwmvB4FWcFF6W1UKwwQjeYN8AzzjN33sQx9pump",
+      "pair_address": "GdENv4dsKWNwPJakwzkWdG7cKMy6yH4teNPhneUNxxoi",
+      "hold_secs": 212,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 23.54,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "PILLHEADS",
+      "mint": "BFJd5mWCvu7yMivKCM7Xh8Dx17GgBbwaxcmFX3Aqpump",
+      "pair_address": "H3N46U1JgdKRiJHU2a8jnYEa9ih8Zc3hTe6BXG7zfE78",
+      "hold_secs": 241,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 25.61,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "SOUNDER",
+      "mint": "DBhWAqpAJFNM1A9XY6DDb1SJVkNCv87hRdYCoCoypump",
+      "pair_address": "6dTUgedFaTS8qopkTLq5YeZS3TdkeSk32mw8nriWXp86",
+      "hold_secs": 1265,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 36.89,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "\u30ad\u30e9",
+      "mint": "Ad8jHhxVsAJ1DHecFuZc2usXdKFJCPcgQhdiq2JYpump",
+      "pair_address": "AJ81ikEzyZXxcgtGiMWDShb45nh7Be51GRbwRYdGH6Ej",
+      "hold_secs": 2072,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 24.22,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "AMD",
+      "mint": "Eq8UZ5oadKvLtiDnPrb41dwDwU4BuB2tFXRT8rw8pump",
+      "pair_address": "ErQ7k7g7MAtN5VosnDQ1Cxp9kuPvRs3R1P23AKAWmNyT",
+      "hold_secs": 521,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 22.65,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "TUNE",
+      "mint": "LT4ZUKDemAFdD5x8yonF3m9iBiiMZm8K1wBxbE3tune",
+      "pair_address": "Aev9QLNoohCn6tw9tyvjcc9nzdqrGZpBK7RABHpyArw4",
+      "hold_secs": 205,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 31.34,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "GTAVI",
+      "mint": "27AYXq96kjPgsy2qMsLXTPAf47CJHZPHa5P2fQZ38Z77",
+      "pair_address": "7M44Bf1ekzq1e4VgbDpRLg7QGkZ3Q5yWTS9YsGDeHJS4",
+      "hold_secs": 317,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 41.84,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "BTC",
+      "mint": "GMXYEB8JfRRPxxLCBxWWxFePjMfSfdQUVmd8YHsupump",
+      "pair_address": "G9aXdfyn6zhTTB7VZjBVt2dUBiDm9nWwUg1ADSmKyir7",
+      "hold_secs": 1072,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 28.56,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "GTA",
+      "mint": "HR8a1erQ4LyTKW5XYrHzPy9na5Gd6GHhccXhQywzpump",
+      "pair_address": "5R5Rcy8jfRrGmnzgUxiHso45jgW2ZKz2kPvMs1kvKvSd",
+      "hold_secs": 205,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 5.0,
+      "recorded_peak_pnl_pct": 28.49,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "GUDI",
+      "mint": "6j1TAQEsdiM85XsBamqTzpgYMXwLd1FnrbPhQaDH4VTQ",
+      "pair_address": "4SkQckCqLojMh5VsB7nGHQ2LQsPKpmT6t2KzYZtw9SNz",
+      "hold_secs": 901,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 0.84,
+      "recorded_peak_pnl_pct": 0.84,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "PHILCOIN",
+      "mint": "Ea5dBrJZN58yV1nm1Q4DybJNYKeTvwpb2GEkXyW64bUH",
+      "pair_address": "7trrZ4UAcd8QkuXpfL1zvnFzaZVfH1wTTT15sHSXP1yd",
+      "hold_secs": 921,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 7.31,
+      "recorded_peak_pnl_pct": 24.54,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "Chewchan",
+      "mint": "GMdkBYSKJuWnqd4vGdSnxiELNQTPhMhvdCmPb77dpump",
+      "pair_address": "H1MHbKjDPqRhCRCKQfDqX1KtieGDeEe9sKneMPSAcd8A",
+      "hold_secs": 901,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 1.63,
+      "recorded_peak_pnl_pct": 12.67,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "COGE",
+      "mint": "FsTN7q7wVywYsCNBKfA7R1fJ97rADdvrMMtNSBWYpump",
+      "pair_address": "HNZvECgWxeqCTiV8UeWeeK57jSmBUm5PS2k4Bk4GRxcE",
+      "hold_secs": 455,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 37.45,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "COGE",
+      "mint": "Fa93AEKdk5GJovkJseEjQ4geYuadFLimbKgy3BiPwiwS",
+      "pair_address": "dUQhyj5hktjYRGxSHq2TXVoQnCNGzMANN5aJLk7EQ3N",
+      "hold_secs": 143,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 31.27,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "COGE",
+      "mint": "Fa93AEKdk5GJovkJseEjQ4geYuadFLimbKgy3BiPwiwS",
+      "pair_address": "dUQhyj5hktjYRGxSHq2TXVoQnCNGzMANN5aJLk7EQ3N",
+      "hold_secs": 901,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 5.88,
+      "recorded_peak_pnl_pct": 40.94,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "Chewchan",
+      "mint": "GMdkBYSKJuWnqd4vGdSnxiELNQTPhMhvdCmPb77dpump",
+      "pair_address": "H1MHbKjDPqRhCRCKQfDqX1KtieGDeEe9sKneMPSAcd8A",
+      "hold_secs": 926,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 9.83,
+      "recorded_peak_pnl_pct": 23.97,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "PHILCOIN",
+      "mint": "Ea5dBrJZN58yV1nm1Q4DybJNYKeTvwpb2GEkXyW64bUH",
+      "pair_address": "7trrZ4UAcd8QkuXpfL1zvnFzaZVfH1wTTT15sHSXP1yd",
+      "hold_secs": 901,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 8.71,
+      "recorded_peak_pnl_pct": 8.97,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "Edmond",
+      "mint": "E7cdaueM9tCakwmaRiZxs5h6QMTMMaC369dVAYfRpump",
+      "pair_address": "G7Znf5vQYdCRrURcSKBAMHYSCq61mtTJnsE3WbZSUvRg",
+      "hold_secs": 329,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 26.41,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "penguin",
+      "mint": "Ge9u2FUrrcDVZmEpQgyRqPhcxXABWDz4kJWQ2KQBpump",
+      "pair_address": "G63aEjXLnbDd63C41Z8PKBrri1EjHjRUChNG3h4NDDQg",
+      "hold_secs": 151,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 25.45,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "GTA",
+      "mint": "9vrEeQSTctTPSCdzbiHWLrb4xcjSn91YcoJFLDyopump",
+      "pair_address": "4XBsV7YFtzzEaXdjK77SGTeAS1MEhWBb73gHuWhvJ8Sg",
+      "hold_secs": 228,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 20.66,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "COGE",
+      "mint": "ES9FintJPSGcoVuJhkLAsfSoug6B69bDoeTb3hJYpump",
+      "pair_address": "6WspZPcQkbQsagyuo6e2kdQ3DmHDgBE4jXapyqZRaa3h",
+      "hold_secs": 901,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 9.26,
+      "recorded_peak_pnl_pct": 18.43,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "TOYS4KIDS",
+      "mint": "FqJu1nmcNP8fCJfAW7Y4dGmp6fF9iF2RxrqMSFAcpump",
+      "pair_address": "4vwe2r1wtqSHfLAvS4bUCBFBpYi6aPbpfjYddK5iPhF8",
+      "hold_secs": 661,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 22.19,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "COPE",
+      "mint": "g8FFFJHQnd84dcbHGjvTRMLzRPaE7FVV2bmNs2wpump",
+      "pair_address": "Cbx3kxFz1AMpM87JpFtVZ1XNxkmzTZZmXLfXwUEZysNG",
+      "hold_secs": 617,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 27.03,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "IFHC",
+      "mint": "EJaknLSRiM3Xbd9oKEJ8X2ZxQ6AkiwC6RUwfE4suEVjv",
+      "pair_address": "5kgzg3Tdk4KBxXHHg4ZmQTgH9wUSvEwqBorJY2HLyWxq",
+      "hold_secs": 901,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 2.08,
+      "recorded_peak_pnl_pct": 6.91,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "coin",
+      "mint": "GdY4Z6pYUcr3HFrABV5FEZay3J4GnjN1Uzsw6Dvxpump",
+      "pair_address": "GaCmBdqtW7HbUEv6BWe583Yxw5gS9gjGr59GYmvygTRi",
+      "hold_secs": 668,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 46.56,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "Diamond",
+      "mint": "5VCEFq1aATjga39QtDunYjJqYBx67w8V8TXwHrqopump",
+      "pair_address": "GhFSaPdvu75KCpsUVk7CZ8A1tdjYeo6YvZx1QiBgwfSJ",
+      "hold_secs": 369,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 18.39,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "bracket",
+      "mint": "EFWotn2UtV2c5QXMMHbSzmyrkU7wnfj7VpkNQGr1wk1z",
+      "pair_address": "5wDfxkkVaXL6rN9JcfzdgtGiBSZDB7QGZWQqytBc3srk",
+      "hold_secs": 1241,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 8.46,
+      "recorded_peak_pnl_pct": 45.94,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "fun",
+      "mint": "5BWHo2duxhkRR4ftnZWErnB8GoXpFgZ4ZR9UN8LDpump",
+      "pair_address": "EygtRprRwHgtCDDk6GUFnKzCk6U5su7NAekCProatiFc",
+      "hold_secs": 881,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 23.75,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "RM",
+      "mint": "EW1b9rcLAJe634mgxb5r4bVYxDoGU37o7YazBzjTpump",
+      "pair_address": "639HxYRwtpmBKv6qJeYFd7WGckGQ3KsRKZixB9hjcRbv",
+      "hold_secs": 1369,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 13.4,
+      "recorded_peak_pnl_pct": 41.4,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "RM",
+      "mint": "EW1b9rcLAJe634mgxb5r4bVYxDoGU37o7YazBzjTpump",
+      "pair_address": "639HxYRwtpmBKv6qJeYFd7WGckGQ3KsRKZixB9hjcRbv",
+      "hold_secs": 787,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 36.95,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "RM",
+      "mint": "EW1b9rcLAJe634mgxb5r4bVYxDoGU37o7YazBzjTpump",
+      "pair_address": "639HxYRwtpmBKv6qJeYFd7WGckGQ3KsRKZixB9hjcRbv",
+      "hold_secs": 901,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 2.66,
+      "recorded_peak_pnl_pct": 7.51,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "RM",
+      "mint": "EW1b9rcLAJe634mgxb5r4bVYxDoGU37o7YazBzjTpump",
+      "pair_address": "639HxYRwtpmBKv6qJeYFd7WGckGQ3KsRKZixB9hjcRbv",
+      "hold_secs": 943,
+      "exit_rule": "Stagnation TTL Exit",
+      "realized_pnl_pct": 0.86,
+      "recorded_peak_pnl_pct": 6.64,
+      "reasons": [
+        "STAGNATION_TTL_MOMENTUM_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "HALO",
+      "mint": "G2apw4XQdSfTv9836JHWhRZGyqG43m93eMEF4zjnpump",
+      "pair_address": "BQEGbgPbo9Z2Wyv5tW8a1B3urhLh6knpCFv2r6k8UdNL",
+      "hold_secs": 533,
+      "exit_rule": "Breakeven Guard (+3%)",
+      "realized_pnl_pct": 3.0,
+      "recorded_peak_pnl_pct": 43.28,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    },
+    {
+      "symbol": "Degen",
+      "mint": "AgnsZbSP5MMiVCK8G2MJuxWEYV9X8PUUL1NtP6papump",
+      "pair_address": "9mqbLF1NY11hM5tywTJ6WwgqhXCPjw57A7HZXroNZ8Zd",
+      "hold_secs": 467,
+      "exit_rule": "Breakeven Guard (+12%)",
+      "realized_pnl_pct": 6.24,
+      "recorded_peak_pnl_pct": 42.98,
+      "reasons": [
+        "BREAKEVEN_GUARD_PREMATURE_CUTOFF"
+      ]
+    }
+  ]
+}

@@ -246,22 +246,32 @@ impl SybilAndEntropyGate {
 pub struct WalkForwardBayesCohortGate {
     pub prior_alpha: f64,
     pub prior_beta: f64,
+    pub min_sample_size: u32,
     pub cohort_registry: HashMap<String, (u32, u32)>,
     pub quarantine: AntiChurnQuarantineGate,
 }
 
 impl WalkForwardBayesCohortGate {
-    pub fn new(prior_alpha: f64, prior_beta: f64) -> Self {
+    pub const DEFAULT_MIN_SAMPLE_SIZE: u32 = 6;
+    pub const DEFAULT_PRIOR_ALPHA: f64 = 3.0;
+    pub const DEFAULT_PRIOR_BETA: f64 = 3.0;
+
+    pub fn new(prior_alpha: f64, prior_beta: f64, min_sample_size: u32) -> Self {
         Self {
             prior_alpha,
             prior_beta,
+            min_sample_size,
             cohort_registry: HashMap::new(),
             quarantine: AntiChurnQuarantineGate::new(),
         }
     }
 
-    pub fn from_config(cfg: &SandboxConfig) -> Self {
-        Self::new(cfg.bayes_prior_alpha, cfg.bayes_prior_beta)
+    pub fn from_config(_cfg: &SandboxConfig) -> Self {
+        Self::new(
+            Self::DEFAULT_PRIOR_ALPHA,
+            Self::DEFAULT_PRIOR_BETA,
+            Self::DEFAULT_MIN_SAMPLE_SIZE,
+        )
     }
 
     pub fn derive_cohort_key(ctx: &PreEntryContext) -> String {
@@ -296,11 +306,24 @@ impl WalkForwardBayesCohortGate {
         format!("{}_{}_{}", liq_tier, fdv_tier, bonding_stage)
     }
 
+    /// Posterior mean p_hat = (W + alpha) / (N + alpha + beta)
     pub fn cohort_score(&self, cohort_key: &str) -> f64 {
         let (wins, total) = self.cohort_registry.get(cohort_key).copied().unwrap_or((0, 0));
         let num = wins as f64 + self.prior_alpha;
         let den = total as f64 + self.prior_alpha + self.prior_beta;
         num / den
+    }
+
+    /// Upper confidence bound: p_hat + sqrt(p_hat * (1 - p_hat) / N)
+    pub fn cohort_ucb(&self, cohort_key: &str) -> f64 {
+        let (_wins, total) = self.cohort_registry.get(cohort_key).copied().unwrap_or((0, 0));
+        let p_hat = self.cohort_score(cohort_key);
+        if total == 0 {
+            return p_hat;
+        }
+        let n = total as f64;
+        let variance = (p_hat * (1.0 - p_hat)).max(0.0) / n;
+        p_hat + variance.sqrt()
     }
 
     pub fn validate_pre_entry(
@@ -312,13 +335,20 @@ impl WalkForwardBayesCohortGate {
         // 1. Anti-Churn Quarantine check
         self.quarantine.validate_pre_entry(ctx, risk_cfg)?;
 
-        // 2. Microstructure Cohort Walk-Forward Score
+        // 2. Microstructure Cohort Walk-Forward Score with UCB & minimum sample size
         let key = Self::derive_cohort_key(ctx);
-        let score = self.cohort_score(&key);
-        if score < sandbox_cfg.bayes_min_wallet_score {
-            return Err("EMPIRICAL_BAYES_SCORE_TOO_LOW");
+        let (_wins, total) = self.cohort_registry.get(&key).copied().unwrap_or((0, 0));
+        let p_hat = self.cohort_score(&key);
+
+        // Only block if sample size in cohort >= min_sample_size (6) and UCB < min_score (0.42)
+        if total >= self.min_sample_size {
+            let ucb = self.cohort_ucb(&key);
+            if ucb < sandbox_cfg.bayes_min_wallet_score {
+                return Err("EMPIRICAL_BAYES_SCORE_TOO_LOW");
+            }
         }
-        Ok(score)
+
+        Ok(p_hat)
     }
 
     pub fn record_settled_trade(
@@ -654,13 +684,19 @@ mod tests {
         let mut gate = WalkForwardBayesCohortGate::from_config(&sandbox_cfg);
         let ctx = sample_ctx();
 
-        // Baseline unobserved cohort: score = 2 / 5 = 0.40 (< 0.42)
-        assert_eq!(gate.validate_pre_entry(&ctx, &risk_cfg, &sandbox_cfg), Err("EMPIRICAL_BAYES_SCORE_TOO_LOW"));
+        // Baseline unobserved cohort (N=0 < 6): exploration phase -> passes!
+        assert!(gate.validate_pre_entry(&ctx, &risk_cfg, &sandbox_cfg).is_ok());
 
-        // Record a win for this cohort from a previous settled trade
-        gate.record_settled_trade(&ctx, ctx.entry_epoch - 60, true, false);
-        // Score becomes (1 + 2) / (1 + 5) = 3 / 6 = 0.50 (>= 0.42)
-        assert!(gate.cohort_score(&WalkForwardBayesCohortGate::derive_cohort_key(&ctx)) >= sandbox_cfg.bayes_min_wallet_score);
+        // Record 8 consecutive losses from other tokens in the same cohort
+        for i in 0..8 {
+            let mut other_ctx = ctx.clone();
+            other_ctx.token_mint = format!("OtherMint{}", i);
+            other_ctx.symbol = format!("OTH{}", i);
+            gate.record_settled_trade(&other_ctx, ctx.entry_epoch - 800 + i * 50, false, false);
+        }
+        // Total N=8, Wins=0: score = (0 + 3) / (8 + 6) = 3/14 = 0.214
+        // UCB = 0.214 + sqrt(0.214 * 0.786 / 8) = 0.214 + 0.145 = 0.359 < 0.42 -> BLOCKED!
+        assert_eq!(gate.validate_pre_entry(&ctx, &risk_cfg, &sandbox_cfg), Err("EMPIRICAL_BAYES_SCORE_TOO_LOW"));
     }
 
     #[test]
