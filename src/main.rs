@@ -1,3 +1,4 @@
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RadarCandidate {
     pub symbol: String,
@@ -509,7 +510,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
 
                                     serde_json::to_string(&serde_json::json!({
-                                        "initial_bankroll_sol": guard.initial_bankroll_sol,
+                                        "system_version": APP_VERSION,
+                    "initial_bankroll_sol": guard.initial_bankroll_sol,
                                         "current_bankroll_sol": live_reconciled_bankroll,
                                         "total_trades": pg_total,
                                         "wins": pg_wins,
