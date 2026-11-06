@@ -629,7 +629,7 @@
       </div>
       <div class="tele-stat"><span class="badge badge-live">AI LAUNCH AGENT</span></div>
       <div class="tele-stat"><span class="badge badge-jito">AI CRUISE AGENT</span></div>
-      <div class="tele-stat">KELLY: <b style="color:var(--cyan)">7.5% NAV</b></div>
+      <div class="tele-stat">KELLY: <b id="tele-kelly-tag" style="color:var(--cyan)">7.5% NAV</b></div>
       <div class="tele-stat">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
     </div>
         <div class="header-right" style="display:flex; gap:6px; align-items:center;">
@@ -692,7 +692,7 @@
       </div>
       <div class="metric-right">
         <div>15% Headroom</div>
-        <div style="font-size:8px; color:var(--green)">10,000 Tip Floor</div>
+        <div id="tip-floor-badge" style="font-size:8px; color:var(--green)">10,000 Tip Floor</div>
       </div>
     </div>
     <div class="metric-card">
@@ -976,8 +976,9 @@
         }
 
       const container = document.getElementById("positions-container");
-      document.getElementById("concurrency-badge").innerText = `${positions.length}/4`;
-      document.getElementById("margin-pct").innerText = `Slots: ${positions.length}/4`;
+      const maxSlots = (window.activeRiskConfig && window.activeRiskConfig.max_active_slots) || 4;
+      document.getElementById("concurrency-badge").innerText = `${positions.length}/${maxSlots}`;
+      document.getElementById("margin-pct").innerText = `Slots: ${positions.length}/${maxSlots}`;
 
       if (!positions || positions.length === 0) {
         container.innerHTML = '<div style="grid-column: span 2; padding: 20px; text-align: center; color: var(--text-dim); font-size: 11px;" class="mono">Scanning mempool via Pre-Trade Gate...</div>';
@@ -1096,15 +1097,16 @@
         `;
       }).join('');
 
-      // Fill remaining slots up to 4 with high-density vacant slot cards
-      const vacantSlots = Math.max(0, 4 - positions.length);
+      // Fill remaining slots up to max_active_slots with high-density vacant slot cards
+      const vacantSlots = Math.max(0, maxSlots - positions.length);
+      const kellyPct = (window.activeRiskConfig && window.activeRiskConfig.kelly_fraction_nav_pct) || 7.5;
       for (let i = 0; i < vacantSlots; i++) {
         const slotNum = positions.length + i + 1;
         cardsHtml += `
           <div class="pos-card" style="border: 1px dashed var(--border-subtle); background: rgba(16, 24, 40, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 8px;">
             <div class="mono" style="font-size: 10px; color: var(--cyan); letter-spacing: 0.08em; font-weight: 700;">SLOT ${slotNum} // READY</div>
             <div style="font-size: 9px; color: var(--text-dim);" class="mono">Awaiting High-Conviction Queue Pop</div>
-            <span class="badge badge-jito" style="font-size: 8px;">KELLY 7.5% NAV</span>
+            <span class="badge badge-jito" style="font-size: 8px;">KELLY ${kellyPct}% NAV</span>
           </div>
         `;
       }
@@ -1280,13 +1282,26 @@
         console.error("Win rate sync error", e);
       }
     }
+    function syncRiskConfigUI(rc) {
+      if (!rc) return;
+      window.activeRiskConfig = rc;
+      if (rc.kelly_fraction_nav_pct !== undefined) {
+        const el = document.getElementById("tele-kelly-tag");
+        if (el) el.innerText = `${rc.kelly_fraction_nav_pct}% NAV`;
+      }
+      if (rc.jito_tip_lamports !== undefined) {
+        const el = document.getElementById("tip-floor-badge");
+        if (el) el.innerText = `${rc.jito_tip_lamports.toLocaleString()} Tip Floor`;
+      }
+    }
+
     async function fetchInitialState() {
       try {
         const res = await fetch('/api/state');
         if (res.ok) {
           const data = await res.json();
           if (data.risk_config) {
-            window.activeRiskConfig = data.risk_config;
+            syncRiskConfigUI(data.risk_config);
           }
         }
       } catch (e) {
@@ -1303,7 +1318,7 @@
       try {
         const data = JSON.parse(event.data);
         if (data.risk_config) {
-          window.activeRiskConfig = data.risk_config;
+          syncRiskConfigUI(data.risk_config);
         }
         const bankroll = data.current_bankroll_sol || 0.5556;
         const initial = data.initial_bankroll_sol || 0.5556;

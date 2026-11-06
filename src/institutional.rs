@@ -37,7 +37,7 @@ pub fn calculate_dynamic_size(bankroll_sol: f64, pool_liquidity_usd: f64, cfg: &
     };
 
     let impact_ceiling = cfg.max_price_impact_ratio * pool_sol_reserve;
-    let kelly_allocation = cfg.kelly_nav_fraction * bankroll_sol;
+    let kelly_allocation = (cfg.risk.kelly_fraction_nav_pct / 100.0) * bankroll_sol;
     let computed = impact_ceiling.min(kelly_allocation).min(cfg.max_entry_sol);
     computed.max(cfg.min_entry_sol)
 }

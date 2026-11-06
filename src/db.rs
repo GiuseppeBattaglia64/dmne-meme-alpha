@@ -216,20 +216,21 @@ pub async fn toggle_user_mode(client: &Client, user_id: &str) -> Option<String> 
     None
 }
 
-/// Fetches the latest dynamic parameter override published by an AI Agent
-pub async fn fetch_latest_override(client: &Client, agent_id: &str) -> Option<(f64, f64, i32)> {
+/// Fetches the latest dynamic parameter override published by an AI Agent within max_age_secs
+pub async fn fetch_latest_override(client: &Client, agent_id: &str, max_age_secs: i64) -> Option<(f64, f64, i32)> {
     let stmt = "
         SELECT hhi_ceiling, volatility_trail_multiplier, stagnation_ttl_seconds
         FROM agent_parameter_overrides
         WHERE agent_id = $1 AND applied_to_engine = true
+          AND timestamp >= NOW() - ($2 * interval '1 second')
         ORDER BY timestamp DESC
         LIMIT 1
     ";
-    if let Ok(rows) = client.query(stmt, &[&agent_id]).await {
+    if let Ok(rows) = client.query(stmt, &[&agent_id, &max_age_secs]).await {
         if let Some(row) = rows.first() {
             let hhi: f64 = row.get::<_, Option<f64>>(0).unwrap_or(0.280);
             let trail: f64 = row.get::<_, Option<f64>>(1).unwrap_or(2.20);
-            let ttl: i32 = row.get::<_, Option<i32>>(2).unwrap_or(900);
+            let ttl: i32 = row.get::<_, Option<i32>>(2).unwrap_or(240);
             return Some((hhi, trail, ttl));
         }
     }

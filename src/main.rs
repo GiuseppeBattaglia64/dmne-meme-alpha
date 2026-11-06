@@ -1054,67 +1054,93 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Concurrency Queue Consumer: Populate vacant slots from pre-audited candidate_queue
             {
-                let mut state = eval_state.write().await;
-                let now_epoch = chrono::Utc::now().timestamp() as u64;
-                while !state.is_scanner_paused && state.active_positions.len() < 4 && !state.candidate_queue.is_empty() {
-                    let candidate = state.candidate_queue.remove(0);
-                    let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint || p.symbol == candidate.symbol);
-                    let is_quarantined = state.closed_trades.iter().any(|t| {
-                        let is_match = (!t.token_mint.is_empty() && t.token_mint == candidate.token_mint) || (!t.symbol.is_empty() && t.symbol == candidate.symbol);
-                        if !is_match {
-                            return false;
-                        }
-                        let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &eval_cfg.risk);
-                        if eval_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade {
-                            println!("[ANTI-CHURN] Permanent ban active for toxic token: {} ({})", candidate.symbol, candidate.token_mint);
-                            return true;
-                        }
-                        if now_epoch < t.closed_at_epoch.saturating_add(eval_cfg.risk.reentry_cooldown_secs) {
-                            let rem = t.closed_at_epoch.saturating_add(eval_cfg.risk.reentry_cooldown_secs).saturating_sub(now_epoch);
-                            println!("[ANTI-CHURN] Token {} ({}) in quarantine ({}s remaining)", candidate.symbol, candidate.token_mint, rem);
-                            return true;
-                        }
-                        false
-                    });
-
-                    // Verify candidate not already in active positions or quarantined
-                    if !is_active && !is_quarantined
-                    {
-                        state.total_trades += 1;
-                        let trade_id = state.total_trades;
-                        let current_nav = state.current_bankroll_sol;
-                        let dynamic_entry_sol = (current_nav * eval_cfg.kelly_nav_fraction).max(0.0100).min(0.0450);
-                        let now_epoch = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
-                        let now_iso = chrono::Utc::now().to_rfc3339();
-                        let initial_spot = 1.0e-5;
-                        println!("[QUEUE CONSUMER] Filling vacant slot with candidate: {} ({}) | Sized: {:.4} SOL", 
-                            candidate.symbol, candidate.token_mint, dynamic_entry_sol);
-                        
-                        state.active_positions.push(Position {
-                            id: format!("pos_{}", trade_id),
-                            token_mint: candidate.token_mint,
-                            pair_address: "".to_string(),
-                            symbol: candidate.symbol,
-                            entry_time_iso: now_iso,
-                            entry_timestamp_epoch: now_epoch,
-                            entry_price_sol: initial_spot,
-                            current_price_sol: initial_spot,
-                            last_price_sol: initial_spot,
-                            initial_size_sol: dynamic_entry_sol,
-                            size_sol: dynamic_entry_sol,
-                            tranche_1_taken: false,
-                            tranche_2_taken: false,
-                            pnl_pct: 0.0,
-                            status: "Active".to_string(),
-                            peak_price_sol: initial_spot,
-                            trough_price_sol: initial_spot,
-                            liquidity_usd: candidate.liquidity_usd,
-                            fdv_usd: candidate.liquidity_usd * 2.0,
-                            price_buffer: vec![initial_spot],
+                let mut candidate_to_eval = None;
+                {
+                    let mut state = eval_state.write().await;
+                    let now_epoch = chrono::Utc::now().timestamp() as u64;
+                    while !state.is_scanner_paused && state.active_positions.len() < eval_cfg.risk.max_active_slots && !state.candidate_queue.is_empty() {
+                        let candidate = state.candidate_queue.remove(0);
+                        let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint || p.symbol == candidate.symbol);
+                        let is_quarantined = state.closed_trades.iter().any(|t| {
+                            let is_match = (!t.token_mint.is_empty() && t.token_mint == candidate.token_mint) || (!t.symbol.is_empty() && t.symbol == candidate.symbol);
+                            if !is_match {
+                                return false;
+                            }
+                            let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &eval_cfg.risk);
+                            if eval_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade {
+                                println!("[ANTI-CHURN] Permanent ban active for toxic token: {} ({})", candidate.symbol, candidate.token_mint);
+                                return true;
+                            }
+                            if now_epoch < t.closed_at_epoch.saturating_add(eval_cfg.risk.reentry_cooldown_secs) {
+                                let rem = t.closed_at_epoch.saturating_add(eval_cfg.risk.reentry_cooldown_secs).saturating_sub(now_epoch);
+                                println!("[ANTI-CHURN] Token {} ({}) in quarantine ({}s remaining)", candidate.symbol, candidate.token_mint, rem);
+                                return true;
+                            }
+                            false
                         });
+
+                        if !is_active && !is_quarantined {
+                            candidate_to_eval = Some(candidate);
+                            break;
+                        }
+                    }
+                }
+
+                if let Some(candidate) = candidate_to_eval {
+                    if let Some(snap) = fetch_live_price(&eval_client, &candidate.token_mint).await {
+                        if let Err(reject_reason) = risk::validate_entry_gates(
+                            snap.liquidity_usd,
+                            snap.fdv_usd,
+                            snap.m5_price_change_pct,
+                            snap.h1_price_change_pct,
+                            snap.buy_sell_ratio,
+                            snap.m5_txns,
+                            snap.m5_volume_usd,
+                            &eval_cfg.risk,
+                        ) {
+                            println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated while in queue: {}", candidate.symbol, candidate.token_mint, reject_reason);
+                            let mut state = eval_state.write().await;
+                            state.rejections_count += 1;
+                        } else {
+                            let mut state = eval_state.write().await;
+                            if state.active_positions.len() < eval_cfg.risk.max_active_slots {
+                                state.total_trades += 1;
+                                let trade_id = state.total_trades;
+                                let current_nav = state.current_bankroll_sol;
+                                let dynamic_entry_sol = (current_nav * (eval_cfg.risk.kelly_fraction_nav_pct / 100.0)).max(0.0100).min(0.0450);
+                                let now_epoch = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+                                let now_iso = chrono::Utc::now().to_rfc3339();
+                                let initial_spot = snap.price_sol;
+                                println!("[QUEUE CONSUMER] Filling vacant slot with candidate: {} ({}) | Price: {:.10e} | Sized: {:.4} SOL", 
+                                    candidate.symbol, candidate.token_mint, initial_spot, dynamic_entry_sol);
+                                
+                                state.active_positions.push(Position {
+                                    id: format!("pos_{}", trade_id),
+                                    token_mint: candidate.token_mint,
+                                    pair_address: snap.pair_address,
+                                    symbol: candidate.symbol,
+                                    entry_time_iso: now_iso,
+                                    entry_timestamp_epoch: now_epoch,
+                                    entry_price_sol: initial_spot,
+                                    current_price_sol: initial_spot,
+                                    last_price_sol: initial_spot,
+                                    initial_size_sol: dynamic_entry_sol,
+                                    size_sol: dynamic_entry_sol,
+                                    tranche_1_taken: false,
+                                    tranche_2_taken: false,
+                                    pnl_pct: 0.0,
+                                    status: "Active".to_string(),
+                                    peak_price_sol: initial_spot,
+                                    trough_price_sol: initial_spot,
+                                    liquidity_usd: snap.liquidity_usd,
+                                    fdv_usd: snap.fdv_usd,
+                                    price_buffer: vec![initial_spot],
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -1147,11 +1173,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            // Dynamically query AI Cruise Agent overrides from PostgreSQL
-            let mut dynamic_trail_mult = eval_cfg.volatility_trail_multiplier;
-            let mut dynamic_ttl_secs = eval_cfg.risk.stagnation_ttl_secs;
+            // Dynamically query AI Cruise Agent overrides from PostgreSQL (within max_stagnation_ttl_secs)
+            let mut dynamic_trail_mult = eval_cfg.risk.cruise_baseline_trail_mult;
+            let mut dynamic_ttl_secs = eval_cfg.risk.cruise_baseline_ttl_secs;
             if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                if let Some((_, trail, ttl)) = db::fetch_latest_override(&pg_client, "CRUISE_AGENT").await {
+                if let Some((_, trail, ttl)) = db::fetch_latest_override(&pg_client, "CRUISE_AGENT", eval_cfg.risk.max_stagnation_ttl_secs as i64).await {
                     dynamic_trail_mult = trail;
                     dynamic_ttl_secs = ttl.max(0) as u64;
                 }
@@ -1401,8 +1427,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let liq = snap.liquidity_usd;
                                         let fdv = snap.fdv_usd;
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
-                                        let min_liq = scanner_cfg.risk.min_entry_liquidity_usd;
-                                        if liq < min_liq {
+                                        if let Err(reject_reason) = risk::validate_entry_gates(
+                                            liq,
+                                            fdv,
+                                            snap.m5_price_change_pct,
+                                            snap.h1_price_change_pct,
+                                            snap.buy_sell_ratio,
+                                            snap.m5_txns,
+                                            snap.m5_volume_usd,
+                                            &scanner_cfg.risk,
+                                        ) {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
@@ -1414,134 +1448,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 freeze_revoked: false,
                                                 lp_burned: false,
                                                 admitted: false,
-                                                rejection_reason: format!("LIQUIDITY_BELOW_FLOOR (${:.0} < ${:.0})", liq, min_liq),
-                                            });
-                                            continue;
-                                        }
-
-                                        // Entry Momentum Gate: Lower bound
-                                        if snap.m5_price_change_pct < scanner_cfg.risk.min_entry_price_change_pct {
-                                            scanner_state.write().await.rejections_count += 1;
-                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr.clone(),
-                                                dex_id: dex_id.to_string(),
-                                                liquidity_usd: liq,
-                                                hhi_concentration: 0.35,
-                                                mint_revoked: false,
-                                                freeze_revoked: false,
-                                                lp_burned: false,
-                                                admitted: false,
-                                                rejection_reason: format!("ENTRY_MOMENTUM_BELOW_THRESHOLD ({:+.2}% < +{:.2}%)", snap.m5_price_change_pct, scanner_cfg.risk.min_entry_price_change_pct),
-                                            });
-                                            continue;
-                                        }
-
-                                        // Entry Momentum Gate: Upper bound (FOMO / Overextension ceiling)
-                                        if snap.m5_price_change_pct > scanner_cfg.risk.max_entry_price_change_pct {
-                                            scanner_state.write().await.rejections_count += 1;
-                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr.clone(),
-                                                dex_id: dex_id.to_string(),
-                                                liquidity_usd: liq,
-                                                hhi_concentration: 0.35,
-                                                mint_revoked: false,
-                                                freeze_revoked: false,
-                                                lp_burned: false,
-                                                admitted: false,
-                                                rejection_reason: format!("ENTRY_MOMENTUM_OVEREXTENDED (+{:.1}% > +{:.1}%)", snap.m5_price_change_pct, scanner_cfg.risk.max_entry_price_change_pct),
-                                            });
-                                            continue;
-                                        }
-
-                                        // Buy/Sell Orderflow Ratio Gate (Net buying pressure check)
-                                        if snap.buy_sell_ratio < scanner_cfg.risk.min_entry_buy_sell_ratio {
-                                            scanner_state.write().await.rejections_count += 1;
-                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr.clone(),
-                                                dex_id: dex_id.to_string(),
-                                                liquidity_usd: liq,
-                                                hhi_concentration: 0.35,
-                                                mint_revoked: false,
-                                                freeze_revoked: false,
-                                                lp_burned: false,
-                                                admitted: false,
-                                                rejection_reason: format!("BUY_SELL_RATIO_BELOW_THRESHOLD ({:.2} < {:.2})", snap.buy_sell_ratio, scanner_cfg.risk.min_entry_buy_sell_ratio),
-                                            });
-                                            continue;
-                                        }
-
-                                        // 5-Minute Minimum Transaction Count Gate
-                                        if snap.m5_txns < scanner_cfg.risk.min_entry_m5_txns {
-                                            scanner_state.write().await.rejections_count += 1;
-                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr.clone(),
-                                                dex_id: dex_id.to_string(),
-                                                liquidity_usd: liq,
-                                                hhi_concentration: 0.35,
-                                                mint_revoked: false,
-                                                freeze_revoked: false,
-                                                lp_burned: false,
-                                                admitted: false,
-                                                rejection_reason: format!("M5_TXNS_BELOW_FLOOR ({} < {})", snap.m5_txns, scanner_cfg.risk.min_entry_m5_txns),
-                                            });
-                                            continue;
-                                        }
-
-                                        // 5-Minute Minimum Volume Gate
-                                        if snap.m5_volume_usd < scanner_cfg.risk.min_entry_m5_volume_usd {
-                                            scanner_state.write().await.rejections_count += 1;
-                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr.clone(),
-                                                dex_id: dex_id.to_string(),
-                                                liquidity_usd: liq,
-                                                hhi_concentration: 0.35,
-                                                mint_revoked: false,
-                                                freeze_revoked: false,
-                                                lp_burned: false,
-                                                admitted: false,
-                                                rejection_reason: format!("M5_VOLUME_BELOW_FLOOR (${:.0} < ${:.0})", snap.m5_volume_usd, scanner_cfg.risk.min_entry_m5_volume_usd),
-                                            });
-                                            continue;
-                                        }
-
-                                        // 1-Hour Trend Gate: Reject bearish/dumping tokens
-                                        if snap.h1_price_change_pct < scanner_cfg.risk.min_entry_h1_price_change_pct {
-                                            scanner_state.write().await.rejections_count += 1;
-                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr.clone(),
-                                                dex_id: dex_id.to_string(),
-                                                liquidity_usd: liq,
-                                                hhi_concentration: 0.35,
-                                                mint_revoked: false,
-                                                freeze_revoked: false,
-                                                lp_burned: false,
-                                                admitted: false,
-                                                rejection_reason: format!("H1_TREND_BEARISH ({:+.1}% < {:+.1}%)", snap.h1_price_change_pct, scanner_cfg.risk.min_entry_h1_price_change_pct),
-                                            });
-                                            continue;
-                                        }
-
-                                        // FDV to Liquidity Ratio Gate: Reject heavily diluted / hollow pools
-                                        if snap.liquidity_usd > 0.0 && (snap.fdv_usd / snap.liquidity_usd) > scanner_cfg.risk.max_entry_fdv_to_liquidity_ratio {
-                                            let fdv_liq_ratio = snap.fdv_usd / snap.liquidity_usd;
-                                            scanner_state.write().await.rejections_count += 1;
-                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                token_mint: mint.clone(),
-                                                pair_address: pair_addr.clone(),
-                                                dex_id: dex_id.to_string(),
-                                                liquidity_usd: liq,
-                                                hhi_concentration: 0.35,
-                                                mint_revoked: false,
-                                                freeze_revoked: false,
-                                                lp_burned: false,
-                                                admitted: false,
-                                                rejection_reason: format!("FDV_LIQ_RATIO_EXCEEDED ({:.1}x > {:.1}x)", fdv_liq_ratio, scanner_cfg.risk.max_entry_fdv_to_liquidity_ratio),
+                                                rejection_reason: reject_reason.to_string(),
                                             });
                                             continue;
                                         }
@@ -1564,7 +1471,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                         let mut dynamic_hhi = scanner_cfg.hhi_concentration_ceiling;
                                         if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                            if let Some((hhi, _, _)) = db::fetch_latest_override(&pg_client, "LAUNCH_AGENT").await {
+                                            if let Some((hhi, _, _)) = db::fetch_latest_override(&pg_client, "LAUNCH_AGENT", scanner_cfg.risk.max_stagnation_ttl_secs as i64).await {
                                                 dynamic_hhi = hhi;
                                             }
                                         }
@@ -1740,7 +1647,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             }
                                         }
                                         let mut g = scanner_state.write().await;
-                                        if g.active_positions.len() < 4 {
+                                        if g.active_positions.len() < scanner_cfg.risk.max_active_slots {
                                             g.total_trades += 1;
                                             let trade_id = g.total_trades;
                                             let log_msg = format!("SNIPED NEW TOKEN: {} ({}) at {:.4e} SOL", sym, &mint[..8], initial_price);
@@ -1756,7 +1663,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             let now_iso = chrono::Utc::now().to_rfc3339();
                                             // Dynamic Half-Kelly sizing calibrated strictly against live reconciled bankroll
                                             let current_nav = g.current_bankroll_sol;
-                                            let dynamic_entry_sol = (current_nav * scanner_cfg.kelly_nav_fraction).max(0.0100).min(0.0450);
+                                            let dynamic_entry_sol = (current_nav * (scanner_cfg.risk.kelly_fraction_nav_pct / 100.0)).max(0.0100).min(0.0450);
 
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),

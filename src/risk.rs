@@ -155,6 +155,43 @@ pub fn is_historical_exit_toxic(exit_pnl_pct: f64, cfg: &RiskConfig) -> bool {
     exit_pnl_pct < cfg.stagnation_band_min_pct || exit_pnl_pct <= cfg.stop_loss_pct
 }
 
+pub fn validate_entry_gates(
+    liquidity_usd: f64,
+    fdv_usd: f64,
+    m5_price_change_pct: f64,
+    h1_price_change_pct: f64,
+    buy_sell_ratio: f64,
+    m5_txns: u32,
+    m5_volume_usd: f64,
+    cfg: &RiskConfig,
+) -> Result<(), &'static str> {
+    if liquidity_usd < cfg.min_entry_liquidity_usd {
+        return Err("LIQUIDITY_BELOW_FLOOR");
+    }
+    if liquidity_usd > 0.0 && (fdv_usd / liquidity_usd) > cfg.max_entry_fdv_to_liquidity_ratio {
+        return Err("FDV_LIQ_RATIO_EXCEEDED");
+    }
+    if m5_price_change_pct < cfg.min_entry_price_change_pct {
+        return Err("ENTRY_MOMENTUM_BELOW_THRESHOLD");
+    }
+    if m5_price_change_pct > cfg.max_entry_price_change_pct {
+        return Err("ENTRY_MOMENTUM_OVEREXTENDED");
+    }
+    if h1_price_change_pct < cfg.min_entry_h1_price_change_pct {
+        return Err("H1_TREND_BEARISH");
+    }
+    if buy_sell_ratio < cfg.min_entry_buy_sell_ratio {
+        return Err("BUY_SELL_RATIO_BELOW_THRESHOLD");
+    }
+    if m5_txns < cfg.min_entry_m5_txns {
+        return Err("M5_TXNS_BELOW_FLOOR");
+    }
+    if m5_volume_usd < cfg.min_entry_m5_volume_usd {
+        return Err("M5_VOLUME_BELOW_FLOOR");
+    }
+    Ok(())
+}
+
 pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String {
     if pos.tp2_executed {
         let runner_pct = (1.0 - cfg.tp1_sell_fraction - cfg.tp2_sell_fraction) * 100.0;
@@ -350,5 +387,36 @@ mod tests {
 
         pos.tp2_executed = true;
         assert_eq!(format_position_status(&pos, &cfg), "25% Runner Moonbag");
+    }
+
+    #[test]
+    fn test_validate_entry_gates() {
+        let cfg = RiskConfig::default();
+        // Passing valid baseline
+        assert!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg).is_ok());
+
+        // 1. Liquidity below floor ($20,000 < $25,000)
+        assert_eq!(validate_entry_gates(20_000.0, 100_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
+
+        // 2. FDV to Liquidity ratio exceeded (FDV $500,000 / Liq $30,000 = 16.6x > 15.0x)
+        assert_eq!(validate_entry_gates(30_000.0, 500_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+
+        // 3. Entry momentum below threshold (+0.5% < +1.5%)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 0.5, 2.0, 1.5, 25, 5_000.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
+
+        // 4. Entry momentum overextended (+90.0% > +85.0%)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 90.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("ENTRY_MOMENTUM_OVEREXTENDED"));
+
+        // 5. H1 trend bearish (-12.0% < -10.0%)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, -12.0, 1.5, 25, 5_000.0, &cfg), Err("H1_TREND_BEARISH"));
+
+        // 6. Buy/sell ratio below threshold (1.0 < 1.2)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.0, 25, 5_000.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
+
+        // 7. M5 txns below floor (10 < 15)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 10, 5_000.0, &cfg), Err("M5_TXNS_BELOW_FLOOR"));
+
+        // 8. M5 volume below floor ($1,000 < $2,500)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 1_000.0, &cfg), Err("M5_VOLUME_BELOW_FLOOR"));
     }
 }

@@ -109,6 +109,14 @@ pub struct RiskConfig {
     pub min_entry_h1_price_change_pct: f64,
     #[serde(default = "default_max_entry_fdv_to_liquidity_ratio")]
     pub max_entry_fdv_to_liquidity_ratio: f64,
+    #[serde(default = "default_kelly_fraction_nav_pct")]
+    pub kelly_fraction_nav_pct: f64,
+    #[serde(default = "default_max_active_slots")]
+    pub max_active_slots: usize,
+    #[serde(default = "default_dex_roundtrip_fee_pct")]
+    pub dex_roundtrip_fee_pct: f64,
+    #[serde(default = "default_jito_tip_lamports")]
+    pub jito_tip_lamports: u64,
 }
 
 fn default_flash_dump_tick_pct() -> f64 { -15.0 }
@@ -117,7 +125,7 @@ fn default_max_slippage_loss_pct() -> f64 { -25.0 }
 fn default_cruise_baseline_trail_mult() -> f64 { 2.20 }
 fn default_min_runner_trailing_drop_pct() -> f64 { 12.0 }
 fn default_max_runner_trailing_drop_pct() -> f64 { 25.0 }
-fn default_cruise_baseline_ttl_secs() -> u64 { 180 }
+fn default_cruise_baseline_ttl_secs() -> u64 { 240 }
 fn default_min_stagnation_ttl_secs() -> u64 { 120 }
 fn default_max_stagnation_ttl_secs() -> u64 { 360 }
 fn default_reentry_cooldown_secs() -> u64 { 3600 }
@@ -130,6 +138,10 @@ fn default_min_entry_m5_txns() -> u32 { 15 }
 fn default_min_entry_m5_volume_usd() -> f64 { 2500.0 }
 fn default_min_entry_h1_price_change_pct() -> f64 { -10.0 }
 fn default_max_entry_fdv_to_liquidity_ratio() -> f64 { 15.0 }
+fn default_kelly_fraction_nav_pct() -> f64 { 7.5 }
+fn default_max_active_slots() -> usize { 4 }
+fn default_dex_roundtrip_fee_pct() -> f64 { 0.60 }
+fn default_jito_tip_lamports() -> u64 { 10000 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -149,7 +161,7 @@ impl Default for RiskConfig {
             min_runner_trailing_drop_pct: 12.0,
             max_runner_trailing_drop_pct: 25.0,
             stagnation_ttl_secs: 240,
-            cruise_baseline_ttl_secs: 180,
+            cruise_baseline_ttl_secs: 240,
             min_stagnation_ttl_secs: 120,
             max_stagnation_ttl_secs: 360,
             stagnation_max_peak_pct: 12.0,
@@ -165,6 +177,10 @@ impl Default for RiskConfig {
             min_entry_m5_volume_usd: 2500.0,
             min_entry_h1_price_change_pct: -10.0,
             max_entry_fdv_to_liquidity_ratio: 15.0,
+            kelly_fraction_nav_pct: 7.5,
+            max_active_slots: 4,
+            dex_roundtrip_fee_pct: 0.60,
+            jito_tip_lamports: 10000,
         }
     }
 }
