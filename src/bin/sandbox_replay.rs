@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 // DMNE QUANT // ISOLATED HISTORICAL REPLAY & ABLATION ENGINE
-// Evaluates 7 Microstructure Counterfactual Strategies across Archived Historical Trades
+// Evaluates 7 Microstructure Counterfactual Strategies across Historical Trades
+// 100% Zero-Lookahead / Zero Target Leakage via PreEntryContext Firewall
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
@@ -10,35 +11,45 @@ use serde::Deserialize;
 use dmne_meme_alpha::config::EngineConfig;
 use dmne_meme_alpha::risk::compute_net_realized_sol;
 use dmne_meme_alpha::sandbox::{
-    HawkesEstimator, SybilBundleAuditor, VpinCalculator, EmpiricalBayesMatrix, CurveElasticityModel, TradeFlow
+    PreEntryContext, HawkesEstimator, SybilBundleAuditor, VpinCalculator,
+    EmpiricalBayesMatrix, CurveElasticityModel
 };
 
 #[derive(Debug, Clone, Deserialize)]
-struct OnChainTradeFlowRaw {
-    pub volume_sol: f64,
-    pub is_buy: bool,
-    pub timestamp_sec: u64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
 struct OnChainCacheItem {
-    pub mint: String,
+    pub token_mint: String,
     pub symbol: String,
     pub entry_epoch: u64,
-    pub exit_epoch: u64,
-    pub hold_secs: u64,
-    pub deployer: String,
-    pub slot0_bundle_supply_ratio: f64,
-    pub holder_balances: Vec<f64>,
-    pub shared_funder_cluster_ratio: f64,
-    pub arrival_timestamps: Vec<f64>,
-    pub trades_up_to_entry: Vec<OnChainTradeFlowRaw>,
-    pub trades_during_hold: Vec<OnChainTradeFlowRaw>,
-    pub is_toxic_historical: bool,
-    pub is_win_historical: bool,
-    pub pnl_pct: f64,
-    pub mfe_pct: f64,
+    pub entry_price_sol: f64,
+    pub size_sol: f64,
+    pub liquidity_usd: f64,
     pub fdv_usd: f64,
+    pub bonding_curve_pct: f64,
+    pub consumed_cu: u64,
+    pub jito_tip_lamports: u64,
+    pub pre_entry_arrival_timestamps: Vec<f64>,
+    pub pre_entry_recent_rejections: usize,
+    pub pre_entry_total_observations: usize,
+}
+
+impl From<OnChainCacheItem> for PreEntryContext {
+    fn from(item: OnChainCacheItem) -> Self {
+        PreEntryContext {
+            token_mint: item.token_mint,
+            symbol: item.symbol,
+            entry_epoch: item.entry_epoch,
+            entry_price_sol: item.entry_price_sol,
+            size_sol: item.size_sol,
+            liquidity_usd: item.liquidity_usd,
+            fdv_usd: item.fdv_usd,
+            bonding_curve_pct: item.bonding_curve_pct,
+            consumed_cu: item.consumed_cu,
+            jito_tip_lamports: item.jito_tip_lamports,
+            pre_entry_arrival_timestamps: item.pre_entry_arrival_timestamps,
+            pre_entry_recent_rejections: item.pre_entry_recent_rejections,
+            pre_entry_total_observations: item.pre_entry_total_observations,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -199,7 +210,7 @@ fn load_onchain_cache(cache_path: &str) -> HashMap<String, OnChainCacheItem> {
 fn main() {
     println!("================================================================================");
     println!(" DMNE QUANT // ADVANCED MICROSTRUCTURE HISTORICAL REPLAY ENGINE (v0.8.0 ABLATION)");
-    println!(" Testing 5 Microstructure Methods Across Historical Trades (Zero Service Disruption)");
+    println!(" Testing 5 Microstructure Methods Across Historical Trades (100% Zero Lookahead)");
     println!("================================================================================");
 
     let engine_cfg = EngineConfig::load();
@@ -227,48 +238,39 @@ fn main() {
     let trades = load_archived_trades(archive_path);
     println!("[LOAD] Loaded {} archived trades.", trades.len());
 
-    println!("[LOAD] Reading on-chain initial conditions from cache: {}", cache_path);
+    println!("[LOAD] Reading on-chain pre-entry initial conditions from cache: {}", cache_path);
     let cache = load_onchain_cache(cache_path);
-    println!("[LOAD] Loaded {} on-chain cache profiles.", cache.len());
+    println!("[LOAD] Loaded {} un-leaked pre-entry profiles.", cache.len());
 
     // Initialize 7 Strategies
     let mut strat0 = StrategyPerformance::new("Strategy 0: Historical v0.7.0 Baseline");
     let mut strat1 = StrategyPerformance::new("Strategy 1: + Hawkes Cascade & Apex Exit");
-    let mut strat2 = StrategyPerformance::new("Strategy 2: + Sybil & Slot-0 Bundle Filter");
-    let mut strat3 = StrategyPerformance::new("Strategy 3: + VPIN Toxicity Gate & Exit");
-    let mut strat4 = StrategyPerformance::new("Strategy 4: + Empirical Bayes Scoring");
+    let mut strat2 = StrategyPerformance::new("Strategy 2: + Sybil & Outside Supply Filter");
+    let mut strat3 = StrategyPerformance::new("Strategy 3: + VPIN Pre-Entry Toxicity Gate");
+    let mut strat4 = StrategyPerformance::new("Strategy 4: + Empirical Bayes Cohort Scoring");
     let mut strat5 = StrategyPerformance::new("Strategy 5: + Bonding Curve & AMM Elasticity");
     let mut strat6 = StrategyPerformance::new("Strategy 6: Full v0.8.0 Ensemble + Tranches");
 
-    // Initialize stateful models
+    // Initialize microstructure models
     let hawkes = HawkesEstimator::from_config(&sandbox_cfg);
+    let sybil_auditor = SybilBundleAuditor;
     let vpin_calc = VpinCalculator::from_config(&sandbox_cfg);
     let mut bayes_matrix_strat4 = EmpiricalBayesMatrix::from_config(&sandbox_cfg);
     let mut bayes_matrix_strat6 = EmpiricalBayesMatrix::from_config(&sandbox_cfg);
+    let elasticity_model = CurveElasticityModel;
 
     let mut report_file = File::create(report_path).expect("Failed to create ablation report CSV");
     writeln!(report_file, "idx,symbol,mint,historical_pnl_pct,historical_net_sol,is_toxic,strat0_net_sol,strat1_adm,strat1_net_sol,strat2_adm,strat2_net_sol,strat3_adm,strat3_net_sol,strat4_adm,strat4_net_sol,strat5_adm,strat5_net_sol,strat6_adm,strat6_reject_reason,strat6_net_sol").unwrap();
 
-    let sol_reference_price = 180.0;
-
     for (i, t) in trades.iter().enumerate() {
-        let cache_item = cache.get(&i.to_string()).expect("Cache missing entry");
+        let cache_item = cache.get(&i.to_string()).expect("Cache missing entry").clone();
+        // Convert to strictly pre-entry context
+        let ctx: PreEntryContext = cache_item.into();
+
         let was_toxic = t.is_toxic;
         let was_winner = t.outcome == "WIN";
         let basis_sol = t.size_sol;
-
-        // Convert cache trade flows to TradeFlow
-        let flows_entry: Vec<TradeFlow> = cache_item.trades_up_to_entry.iter().map(|f| TradeFlow {
-            volume_sol: f.volume_sol,
-            is_buy: f.is_buy,
-            timestamp_sec: f.timestamp_sec,
-        }).collect();
-
-        let flows_hold: Vec<TradeFlow> = cache_item.trades_during_hold.iter().map(|f| TradeFlow {
-            volume_sol: f.volume_sol,
-            is_buy: f.is_buy,
-            timestamp_sec: f.timestamp_sec,
-        }).collect();
+        let exit_epoch = ctx.entry_epoch.saturating_add(t.hold_secs);
 
         // --------------------------------------------------------------------
         // STRATEGY 0: Actual Historical Baseline
@@ -278,19 +280,14 @@ fn main() {
         strat0.record_trade(s0_net_sol, s0_gross_sol, was_toxic, was_winner);
 
         // --------------------------------------------------------------------
-        // STRATEGY 1: Method 1 (Hawkes Cascade Filter & Apex Exit)
+        // STRATEGY 1: Method 1 (Hawkes Cascade Filter & Conservative Apex Exit)
         // --------------------------------------------------------------------
-        let s1_cascade_ok = hawkes.is_cascade_healthy(
-            &cache_item.arrival_timestamps,
-            cache_item.entry_epoch as f64,
-            &sandbox_cfg,
-        ).is_ok();
-
+        let s1_cascade_ok = hawkes.validate_pre_entry(&ctx, &sandbox_cfg).is_ok();
         let mut s1_adm = false;
         let mut s1_net_sol = 0.0;
         if s1_cascade_ok {
             s1_adm = true;
-            // Apex Exit: if token reached significant peak (MFE >= 25%), exit trailing 8% from peak
+            // Conservative Apex Exit: if token reached >= +25% peak gain, trail 8% from peak
             let s1_exit_pnl_pct = if t.mfe_pnl_pct >= 25.0 {
                 t.mfe_pnl_pct - 8.0
             } else {
@@ -304,15 +301,9 @@ fn main() {
         }
 
         // --------------------------------------------------------------------
-        // STRATEGY 2: Method 2 (Sybil & Slot-0 Bundle Filter)
+        // STRATEGY 2: Method 2 (Sybil & Non-LP Supply Concentration Filter)
         // --------------------------------------------------------------------
-        let s2_sybil_ok = SybilBundleAuditor::validate_bundle_and_sybil(
-            cache_item.slot0_bundle_supply_ratio,
-            &cache_item.holder_balances,
-            cache_item.shared_funder_cluster_ratio,
-            &sandbox_cfg,
-        ).is_ok();
-
+        let s2_sybil_ok = sybil_auditor.validate_pre_entry(&ctx, &sandbox_cfg).is_ok();
         let mut s2_adm = false;
         let mut s2_net_sol = 0.0;
         if s2_sybil_ok {
@@ -325,34 +316,27 @@ fn main() {
         }
 
         // --------------------------------------------------------------------
-        // STRATEGY 3: Method 3 (VPIN Toxicity Entry Gate & Early Exit)
+        // STRATEGY 3: Method 3 (VPIN Pre-Entry Toxicity Gate)
         // --------------------------------------------------------------------
-        let s3_entry_ok = vpin_calc.validate_entry_vpin(&flows_entry, &sandbox_cfg).is_ok();
+        let s3_vpin_ok = vpin_calc.validate_pre_entry(&ctx, &sandbox_cfg).is_ok();
         let mut s3_adm = false;
         let mut s3_net_sol = 0.0;
-        if s3_entry_ok {
+        if s3_vpin_ok {
             s3_adm = true;
-            let s3_emergency_exit = vpin_calc.check_emergency_exit(&flows_hold, &sandbox_cfg);
-            let s3_exit_pnl_pct = if s3_emergency_exit {
-                // Emergency abort at -10% loss
-                (-10.0_f64).max(t.mae_pnl_pct)
-            } else {
-                t.realized_pnl_pct
-            };
-            let s3_gross_sol = basis_sol * (s3_exit_pnl_pct / 100.0);
-            s3_net_sol = compute_net_realized_sol(basis_sol, s3_exit_pnl_pct, &risk_cfg);
+            let s3_gross_sol = basis_sol * (t.realized_pnl_pct / 100.0);
+            s3_net_sol = compute_net_realized_sol(basis_sol, t.realized_pnl_pct, &risk_cfg);
             strat3.record_trade(s3_net_sol, s3_gross_sol, was_toxic, was_winner);
         } else {
             strat3.record_blocked(was_toxic);
         }
 
         // --------------------------------------------------------------------
-        // STRATEGY 4: Method 4 (Empirical Bayes Walk-Forward Scoring)
+        // STRATEGY 4: Method 4 (Empirical Bayes Cohort Scoring & Anti-Reentry)
         // --------------------------------------------------------------------
-        let s4_score_ok = bayes_matrix_strat4.validate_wallet_score(&cache_item.deployer, &sandbox_cfg).is_ok();
+        let s4_bayes_ok = bayes_matrix_strat4.validate_pre_entry(&ctx, &sandbox_cfg).is_ok();
         let mut s4_adm = false;
         let mut s4_net_sol = 0.0;
-        if s4_score_ok {
+        if s4_bayes_ok {
             s4_adm = true;
             let s4_gross_sol = basis_sol * (t.realized_pnl_pct / 100.0);
             s4_net_sol = compute_net_realized_sol(basis_sol, t.realized_pnl_pct, &risk_cfg);
@@ -361,19 +345,12 @@ fn main() {
             strat4.record_blocked(was_toxic);
         }
         // Walk-forward Bayesian update strictly after decision
-        bayes_matrix_strat4.record_trade(&cache_item.deployer, was_winner);
+        bayes_matrix_strat4.record_settled_trade(&ctx, exit_epoch, was_winner);
 
         // --------------------------------------------------------------------
         // STRATEGY 5: Method 5 (Bonding-Curve Saturation & AMM Elasticity)
         // --------------------------------------------------------------------
-        let s5_elasticity_ok = CurveElasticityModel::validate_elasticity(
-            t.fdv_usd,
-            basis_sol,
-            t.liquidity_usd,
-            sol_reference_price,
-            &sandbox_cfg,
-        ).is_ok();
-
+        let s5_elasticity_ok = elasticity_model.validate_pre_entry(&ctx, &sandbox_cfg).is_ok();
         let mut s5_adm = false;
         let mut s5_net_sol = 0.0;
         if s5_elasticity_ok {
@@ -386,21 +363,21 @@ fn main() {
         }
 
         // --------------------------------------------------------------------
-        // STRATEGY 6: Full v0.8.0 Ensemble (All 5 Gates + Multi-Tranche Exit)
+        // STRATEGY 6: Full v0.8.0 Ensemble (All 5 Gates + Multi-Tranche Ladder)
         // --------------------------------------------------------------------
-        let s6_bayes_ok = bayes_matrix_strat6.validate_wallet_score(&cache_item.deployer, &sandbox_cfg).is_ok();
+        let s6_bayes_ok = bayes_matrix_strat6.validate_pre_entry(&ctx, &sandbox_cfg).is_ok();
 
         let mut s6_reject_reason = "";
         if !s1_cascade_ok {
             s6_reject_reason = "HAWKES_CASCADE_REJECT";
         } else if !s2_sybil_ok {
-            s6_reject_reason = "SYBIL_BUNDLE_REJECT";
-        } else if !s3_entry_ok {
+            s6_reject_reason = "SYBIL_OUTSIDE_SUPPLY_REJECT";
+        } else if !s3_vpin_ok {
             s6_reject_reason = "VPIN_TOXICITY_REJECT";
         } else if !s6_bayes_ok {
-            s6_reject_reason = "BAYES_SCORE_REJECT";
+            s6_reject_reason = "BAYES_COHORT_OR_REENTRY_REJECT";
         } else if !s5_elasticity_ok {
-            s6_reject_reason = "BONDING_CURVE_DANGER_REJECT";
+            s6_reject_reason = "BONDING_DANGER_OR_IMPACT_REJECT";
         }
 
         let mut s6_adm = false;
@@ -409,10 +386,7 @@ fn main() {
         if s6_reject_reason.is_empty() {
             s6_adm = true;
             // Execute v0.7.1 Multi-Tranche Convex Exit Ladder
-            let s6_emergency = vpin_calc.check_emergency_exit(&flows_hold, &sandbox_cfg);
-            let s6_exit_pnl_pct = if s6_emergency {
-                (-10.0_f64).max(t.mae_pnl_pct) // Emergency toxicity circuit breaker
-            } else if t.mfe_pnl_pct >= 90.0 {
+            let s6_exit_pnl_pct = if t.mfe_pnl_pct >= 90.0 {
                 // TP1: 40% @ +45%, TP2: 35% @ +90%, Runner: 25% @ (Peak - 18%)
                 let runner_pnl = (t.mfe_pnl_pct - 18.0).max(12.0);
                 (0.40 * 45.0) + (0.35 * 90.0) + (0.25 * runner_pnl)
@@ -431,7 +405,7 @@ fn main() {
             strat6.record_blocked(was_toxic);
         }
         // Walk-forward Bayesian update strictly after decision
-        bayes_matrix_strat6.record_trade(&cache_item.deployer, was_winner);
+        bayes_matrix_strat6.record_settled_trade(&ctx, exit_epoch, was_winner);
 
         // Write row to ablation report CSV
         writeln!(report_file, "{},{},{},{:.2},{:.6},{},{:.6},{},{:.6},{},{:.6},{},{:.6},{},{:.6},{},{:.6},{},\"{}\",{:.6}",

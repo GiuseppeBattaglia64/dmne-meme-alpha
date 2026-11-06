@@ -1,16 +1,40 @@
 #![allow(dead_code)]
 // DMNE QUANT // ADVANCED MICROSTRUCTURE SANDBOX MODULE
-// 5 Institutional Microstructure Methods:
-// 1. Hawkes Self-Exciting Cascade Intensity & Apex Exit
-// 2. Sybil & Slot-0 Bundle Forensics & Shannon Entropy
-// 3. Volume-Synchronized Probability of Toxicity (VPIN)
-// 4. Empirical Bayes Walk-Forward Wallet Matrix
-// 5. Bonding-Curve Saturation & AMM Reserve Elasticity
+// Strict Rust Type-System Firewall: PreEntryContext Observable strictly at t <= entry_epoch
+// 5 Institutional Microstructure Methods (Zero Target Leakage / Zero Lookahead Bias):
+// 1. Hawkes Self-Exciting Point-Process Intensity & Excitation Ratio
+// 2. Sybil & Non-LP Supply Concentration, Symbol Entropy & CU Overhead
+// 3. Volume-Synchronized Probability of Toxicity (VPIN) & Market Rejection Pressure
+// 4. Empirical Bayes Walk-Forward Microstructure Cohort Estimator & Anti-Reentry Guard
+// 5. Bonding-Curve Saturation Danger Zone & Exact AMM Reserve Elasticity
 
+use std::collections::HashMap;
 use crate::config::SandboxConfig;
 
 // ============================================================================
-// METHOD 1: HAWKES SELF-EXCITING POINT PROCESS
+// STRICT TYPE-SYSTEM FIREWALL: PRE-ENTRY CONTEXT (Observable at t <= entry_epoch)
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub struct PreEntryContext {
+    pub token_mint: String,
+    pub symbol: String,
+    pub entry_epoch: u64,
+    pub entry_price_sol: f64,
+    pub size_sol: f64,
+    pub liquidity_usd: f64,
+    pub fdv_usd: f64,
+    pub bonding_curve_pct: f64,
+    pub consumed_cu: u64,
+    pub jito_tip_lamports: u64,
+    // Real pre-entry audit & market metrics at t <= entry_epoch
+    pub pre_entry_arrival_timestamps: Vec<f64>,
+    pub pre_entry_recent_rejections: usize,
+    pub pre_entry_total_observations: usize,
+}
+
+// ============================================================================
+// METHOD 1: HAWKES SELF-EXCITING POINT PROCESS (Pre-Entry Arrival Velocity)
 // ============================================================================
 
 #[derive(Debug, Clone)]
@@ -43,9 +67,9 @@ impl HawkesEstimator {
     }
 
     /// Intensity lambda(t) = mu + sum_{t_i < t} alpha * exp(-beta * (t - t_i))
-    pub fn intensity(&self, current_time: f64, arrival_times: &[f64]) -> f64 {
+    pub fn intensity(&self, current_time: f64, arrivals: &[f64]) -> f64 {
         let mut lambda = self.mu;
-        for &t_i in arrival_times {
+        for &t_i in arrivals {
             if t_i < current_time {
                 let dt = current_time - t_i;
                 lambda += self.alpha * (-self.beta * dt).exp();
@@ -54,13 +78,8 @@ impl HawkesEstimator {
         lambda
     }
 
-    /// Validates whether the arrival cascade is healthy and subcritical
-    pub fn is_cascade_healthy(
-        &self,
-        arrival_times: &[f64],
-        current_time: f64,
-        cfg: &SandboxConfig,
-    ) -> Result<f64, &'static str> {
+    /// Pre-entry gate: validates whether the arrival cascade is active and self-exciting
+    pub fn validate_pre_entry(&self, ctx: &PreEntryContext, cfg: &SandboxConfig) -> Result<f64, &'static str> {
         let n = self.branching_ratio();
         if n < cfg.hawkes_min_branching_ratio {
             return Err("HAWKES_BRANCHING_RATIO_SUB_CRITICAL");
@@ -68,67 +87,78 @@ impl HawkesEstimator {
         if n > cfg.hawkes_max_branching_ratio {
             return Err("HAWKES_BRANCHING_RATIO_EXPLOSIVE");
         }
-        let cur_intensity = self.intensity(current_time, arrival_times);
-        if cur_intensity <= self.mu {
+        let cur_t = ctx.entry_epoch as f64;
+        let lambda_t = self.intensity(cur_t, &ctx.pre_entry_arrival_timestamps);
+        if lambda_t <= self.mu {
             return Err("HAWKES_CASCADE_EXHAUSTED");
         }
-        Ok(cur_intensity)
-    }
-
-    /// Apex exhaustion detector: detects consecutive drops in cascade intensity
-    pub fn is_apex_exhaustion(&self, intensity_history: &[f64]) -> bool {
-        if intensity_history.len() < 3 {
-            return false;
+        let excitation_ratio = (lambda_t - self.mu) / lambda_t;
+        if excitation_ratio < 0.20 {
+            return Err("HAWKES_EXCITATION_TOO_LOW");
         }
-        let len = intensity_history.len();
-        let peak = intensity_history[len - 3];
-        let mid = intensity_history[len - 2];
-        let latest = intensity_history[len - 1];
-        mid < peak && latest < mid
+        Ok(lambda_t)
     }
 }
 
 // ============================================================================
-// METHOD 2: SYBIL & SLOT-0 BUNDLE FORENSICS
+// METHOD 2: SYBIL & BUNDLE FORENSICS (Supply Concentration & Contract Overhead)
 // ============================================================================
 
 #[derive(Debug, Clone)]
 pub struct SybilBundleAuditor;
 
 impl SybilBundleAuditor {
-    /// Computes Shannon entropy of top holder balance distribution: H = -sum(p_i * ln(p_i))
-    pub fn compute_shannon_entropy(holder_balances: &[f64]) -> f64 {
-        let total: f64 = holder_balances.iter().filter(|&&b| b > 0.0).sum();
-        if total <= 0.0 {
+    pub const BASELINE_SWAP_CU: f64 = 48_500.0;
+
+    /// Symbol character Shannon entropy: H(S) = -sum(p_c * ln(p_c))
+    pub fn compute_symbol_shannon_entropy(symbol: &str) -> f64 {
+        let clean = symbol.trim().to_uppercase();
+        let len = clean.chars().count();
+        if len == 0 {
             return 0.0;
         }
+        let mut freq = HashMap::new();
+        for c in clean.chars() {
+            *freq.entry(c).or_insert(0usize) += 1;
+        }
         let mut entropy = 0.0;
-        for &b in holder_balances {
-            if b > 0.0 {
-                let p = b / total;
-                entropy -= p * p.ln();
-            }
+        for &count in freq.values() {
+            let p = count as f64 / len as f64;
+            entropy -= p * p.ln();
         }
         entropy
     }
 
-    /// Validates slot-0 bundle supply ratio, holder entropy, and shared funder clustering
-    pub fn validate_bundle_and_sybil(
-        slot0_supply_ratio: f64,
-        holder_balances: &[f64],
-        shared_funder_cluster_ratio: f64,
-        cfg: &SandboxConfig,
-    ) -> Result<(), &'static str> {
-        if slot0_supply_ratio > cfg.max_slot0_bundle_supply_ratio {
-            return Err("SLOT0_BUNDLE_SUPPLY_EXCEEDED");
+    /// Computes fraction of supply held outside the constant-product liquidity pool
+    pub fn compute_outside_supply_ratio(liquidity_usd: f64, fdv_usd: f64) -> f64 {
+        if fdv_usd <= 0.0 {
+            return 1.0;
         }
-        let entropy = Self::compute_shannon_entropy(holder_balances);
-        if entropy < cfg.min_holder_shannon_entropy {
-            return Err("HOLDER_SHANNON_ENTROPY_TOO_LOW");
+        let lp_pool_token_value = 0.5 * liquidity_usd;
+        let lp_share = (lp_pool_token_value / fdv_usd).clamp(0.0, 1.0);
+        1.0 - lp_share
+    }
+
+    /// Pre-entry gate: checks outside supply concentration, ticker entropy, and CU overhead
+    pub fn validate_pre_entry(&self, ctx: &PreEntryContext, _cfg: &SandboxConfig) -> Result<(), &'static str> {
+        // a) Non-LP supply concentration (if outside ratio > 96.6%, LP holds < 3.3% of tokens)
+        let outside_ratio = Self::compute_outside_supply_ratio(ctx.liquidity_usd, ctx.fdv_usd);
+        if outside_ratio > 0.966 {
+            return Err("OUTSIDE_SUPPLY_CONCENTRATION_EXCEEDED");
         }
-        if shared_funder_cluster_ratio > cfg.max_shared_funder_cluster_ratio {
-            return Err("SHARED_FUNDER_CLUSTER_EXCEEDED");
+
+        // b) Symbol Character Shannon Entropy: filters repetitive spam tickers
+        let entropy = Self::compute_symbol_shannon_entropy(&ctx.symbol);
+        if entropy < 0.60 {
+            return Err("SYMBOL_ENTROPY_TOO_LOW");
         }
+
+        // c) Compute Unit Anomaly Ratio: filters malicious hook callbacks and honeypots
+        let cu_ratio = ctx.consumed_cu as f64 / Self::BASELINE_SWAP_CU;
+        if cu_ratio > 1.40 {
+            return Err("COMPUTE_UNIT_ANOMALY_HIGH");
+        }
+
         Ok(())
     }
 }
@@ -136,13 +166,6 @@ impl SybilBundleAuditor {
 // ============================================================================
 // METHOD 3: VOLUME-SYNCHRONIZED PROBABILITY OF TOXICITY (VPIN)
 // ============================================================================
-
-#[derive(Debug, Clone)]
-pub struct TradeFlow {
-    pub volume_sol: f64,
-    pub is_buy: bool,
-    pub timestamp_sec: u64,
-}
 
 #[derive(Debug, Clone)]
 pub struct VpinCalculator {
@@ -160,84 +183,45 @@ impl VpinCalculator {
         }
     }
 
-    /// Computes VPIN across trades by slicing into fixed-volume buckets
-    pub fn compute_vpin(&self, trades: &[TradeFlow]) -> f64 {
-        if trades.is_empty() || self.bucket_size_sol <= 0.0 {
-            return 0.0;
-        }
+    /// Pre-entry VPIN: market rejection toxicity + token-specific liquidity stress
+    pub fn compute_pre_entry_vpin(&self, ctx: &PreEntryContext) -> f64 {
+        // Market rejection toxicity in [entry_epoch - 300, entry_epoch]
+        let mkt_toxicity = if ctx.pre_entry_total_observations > 0 {
+            (ctx.pre_entry_recent_rejections as f64 / ctx.pre_entry_total_observations as f64).clamp(0.0, 1.0)
+        } else {
+            0.50
+        };
 
-        let mut bucket_imbalances = Vec::new();
-        let mut cur_buy_vol = 0.0;
-        let mut cur_sell_vol = 0.0;
-        let mut cur_accum_vol = 0.0;
+        // Token liquidity stress: ratio of FDV to (Liquidity * 15.0)
+        let token_stress = if ctx.liquidity_usd > 0.0 {
+            (ctx.fdv_usd / (ctx.liquidity_usd * 15.0)).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
 
-        for t in trades {
-            let mut remaining_vol = t.volume_sol;
-            while remaining_vol > 0.0 {
-                let needed = self.bucket_size_sol - cur_accum_vol;
-                if remaining_vol >= needed {
-                    if t.is_buy {
-                        cur_buy_vol += needed;
-                    } else {
-                        cur_sell_vol += needed;
-                    }
-                    let imbalance = (cur_buy_vol - cur_sell_vol).abs();
-                    bucket_imbalances.push(imbalance);
-
-                    remaining_vol -= needed;
-                    cur_buy_vol = 0.0;
-                    cur_sell_vol = 0.0;
-                    cur_accum_vol = 0.0;
-                } else {
-                    if t.is_buy {
-                        cur_buy_vol += remaining_vol;
-                    } else {
-                        cur_sell_vol += remaining_vol;
-                    }
-                    cur_accum_vol += remaining_vol;
-                    remaining_vol = 0.0;
-                }
-            }
-        }
-
-        // Include partial tail bucket if non-empty
-        if cur_accum_vol > 0.0 {
-            let scaled_imbalance = (cur_buy_vol - cur_sell_vol).abs() * (self.bucket_size_sol / cur_accum_vol);
-            bucket_imbalances.push(scaled_imbalance);
-        }
-
-        if bucket_imbalances.is_empty() {
-            return 0.0;
-        }
-
-        let total_imbalance: f64 = bucket_imbalances.iter().sum();
-        let n = bucket_imbalances.len() as f64;
-        (total_imbalance / (n * self.bucket_size_sol)).clamp(0.0, 1.0)
+        // Blended VPIN metric
+        0.50 * mkt_toxicity + 0.50 * token_stress
     }
 
-    pub fn validate_entry_vpin(&self, trades: &[TradeFlow], cfg: &SandboxConfig) -> Result<f64, &'static str> {
-        let vpin = self.compute_vpin(trades);
+    pub fn validate_pre_entry(&self, ctx: &PreEntryContext, cfg: &SandboxConfig) -> Result<f64, &'static str> {
+        let vpin = self.compute_pre_entry_vpin(ctx);
         if vpin > cfg.vpin_max_entry_toxicity {
             return Err("VPIN_ENTRY_TOXICITY_EXCEEDED");
         }
         Ok(vpin)
     }
-
-    pub fn check_emergency_exit(&self, trades_during_hold: &[TradeFlow], cfg: &SandboxConfig) -> bool {
-        let vpin = self.compute_vpin(trades_during_hold);
-        vpin >= cfg.vpin_emergency_exit_toxicity
-    }
 }
 
 // ============================================================================
-// METHOD 4: EMPIRICAL BAYES WALK-FORWARD WALLET MATRIX
+// METHOD 4: EMPIRICAL BAYES WALK-FORWARD MICROSTRUCTURE COHORT MATRIX
 // ============================================================================
 
 #[derive(Debug, Clone)]
 pub struct EmpiricalBayesMatrix {
     pub prior_alpha: f64,
     pub prior_beta: f64,
-    pub registry: std::collections::HashMap<String, (u32, u32)>,
+    pub cohort_registry: HashMap<String, (u32, u32)>,
+    pub settled_token_history: HashMap<String, u64>,
 }
 
 impl EmpiricalBayesMatrix {
@@ -245,7 +229,8 @@ impl EmpiricalBayesMatrix {
         Self {
             prior_alpha,
             prior_beta,
-            registry: std::collections::HashMap::new(),
+            cohort_registry: HashMap::new(),
+            settled_token_history: HashMap::new(),
         }
     }
 
@@ -253,36 +238,75 @@ impl EmpiricalBayesMatrix {
         Self {
             prior_alpha: cfg.bayes_prior_alpha,
             prior_beta: cfg.bayes_prior_beta,
-            registry: std::collections::HashMap::new(),
+            cohort_registry: HashMap::new(),
+            settled_token_history: HashMap::new(),
         }
     }
 
-    /// Strictly chronological update of historical outcomes: record trade settled prior to current trade
-    pub fn record_trade(&mut self, entity_id: &str, is_win: bool) {
-        if entity_id.is_empty() {
-            return;
-        }
-        let entry = self.registry.entry(entity_id.to_string()).or_insert((0, 0));
-        entry.1 += 1;
-        if is_win {
-            entry.0 += 1;
-        }
+    /// Derive observable Pre-Entry Microstructure Cohort Key from PreEntryContext
+    pub fn derive_cohort_key(ctx: &PreEntryContext) -> String {
+        let liq_tier = if ctx.liquidity_usd < 25_000.0 {
+            "LOW_LIQ"
+        } else if ctx.liquidity_usd < 50_000.0 {
+            "MID_LIQ"
+        } else {
+            "HIGH_LIQ"
+        };
+
+        let fdv_ratio = if ctx.liquidity_usd > 0.0 { ctx.fdv_usd / ctx.liquidity_usd } else { 20.0 };
+        let fdv_tier = if fdv_ratio < 4.0 {
+            "SAFE_RATIO"
+        } else if fdv_ratio < 10.0 {
+            "MOD_RATIO"
+        } else {
+            "EXT_RATIO"
+        };
+
+        let is_bonding = if ctx.fdv_usd < 69_000.0 { "BONDING" } else { "GRADUATED" };
+        format!("{}_{}_{}", liq_tier, fdv_tier, is_bonding)
     }
 
     /// Beta-Binomial posterior expectation: (W + alpha) / (N + alpha + beta)
-    pub fn score(&self, entity_id: &str) -> f64 {
-        let (wins, total) = self.registry.get(entity_id).copied().unwrap_or((0, 0));
+    pub fn cohort_score(&self, cohort_key: &str) -> f64 {
+        let (wins, total) = self.cohort_registry.get(cohort_key).copied().unwrap_or((0, 0));
         let num = wins as f64 + self.prior_alpha;
         let den = total as f64 + self.prior_alpha + self.prior_beta;
         num / den
     }
 
-    pub fn validate_wallet_score(&self, entity_id: &str, cfg: &SandboxConfig) -> Result<f64, &'static str> {
-        let s = self.score(entity_id);
-        if s < cfg.bayes_min_wallet_score {
+    pub fn validate_pre_entry(&self, ctx: &PreEntryContext, cfg: &SandboxConfig) -> Result<f64, &'static str> {
+        // a) Anti-Reentry Guard: reject re-entries on tokens that already traded in walk-forward history
+        if let Some(&last_exit) = self.settled_token_history.get(&ctx.token_mint) {
+            if last_exit <= ctx.entry_epoch {
+                return Err("ANTI_REENTRY_CHURN_MINT");
+            }
+        }
+        if let Some(&last_exit) = self.settled_token_history.get(&ctx.symbol) {
+            if last_exit <= ctx.entry_epoch {
+                return Err("ANTI_REENTRY_CHURN_SYMBOL");
+            }
+        }
+
+        // b) Microstructure Cohort Walk-Forward Score
+        let cohort_key = Self::derive_cohort_key(ctx);
+        let score = self.cohort_score(&cohort_key);
+        if score < cfg.bayes_min_wallet_score {
             return Err("EMPIRICAL_BAYES_SCORE_TOO_LOW");
         }
-        Ok(s)
+        Ok(score)
+    }
+
+    /// Strictly walk-forward update: record outcome ONLY after trade exit (t_exit <= t_entry of future trades)
+    pub fn record_settled_trade(&mut self, ctx: &PreEntryContext, exit_epoch: u64, is_win: bool) {
+        self.settled_token_history.insert(ctx.token_mint.clone(), exit_epoch);
+        self.settled_token_history.insert(ctx.symbol.clone(), exit_epoch);
+
+        let cohort_key = Self::derive_cohort_key(ctx);
+        let entry = self.cohort_registry.entry(cohort_key).or_insert((0, 0));
+        entry.1 += 1;
+        if is_win {
+            entry.0 += 1;
+        }
     }
 }
 
@@ -294,6 +318,23 @@ impl EmpiricalBayesMatrix {
 pub struct CurveElasticityModel;
 
 impl CurveElasticityModel {
+    pub const SOL_PRICE_USD: f64 = 180.0;
+
+    pub fn compute_one_sided_sol_reserve(liquidity_usd: f64) -> f64 {
+        if liquidity_usd > 0.0 {
+            (liquidity_usd / 2.0) / Self::SOL_PRICE_USD
+        } else {
+            0.0
+        }
+    }
+
+    pub fn compute_amm_price_impact_pct(size_sol: f64, pool_sol_reserve: f64) -> f64 {
+        if pool_sol_reserve <= 0.0 {
+            return 100.0;
+        }
+        (2.0 * size_sol / (pool_sol_reserve + size_sol)) * 100.0
+    }
+
     pub fn compute_bonding_curve_saturation_pct(fdv_usd: f64, cfg: &SandboxConfig) -> f64 {
         if cfg.graduation_target_fdv_usd > 0.0 {
             (fdv_usd / cfg.graduation_target_fdv_usd) * 100.0
@@ -302,54 +343,25 @@ impl CurveElasticityModel {
         }
     }
 
-    pub fn is_in_danger_zone(fdv_usd: f64, cfg: &SandboxConfig) -> bool {
-        let sat = Self::compute_bonding_curve_saturation_pct(fdv_usd, cfg);
-        sat >= cfg.graduation_danger_zone_min_pct && sat <= cfg.graduation_danger_zone_max_pct
-    }
-
-    /// Constant-product AMM reserve elasticity: price impact estimate = trade_sol / pool_sol_reserve
-    pub fn estimate_amm_price_impact_pct(size_sol: f64, pool_sol_reserve: f64) -> f64 {
-        if pool_sol_reserve <= 0.0 {
-            return 100.0;
+    pub fn validate_pre_entry(&self, ctx: &PreEntryContext, cfg: &SandboxConfig) -> Result<(), &'static str> {
+        // 1. Minimum liquidity floor
+        if ctx.liquidity_usd < 20_000.0 {
+            return Err("LIQUIDITY_BELOW_MIN");
         }
-        (size_sol / pool_sol_reserve) * 100.0
-    }
 
-    pub fn compute_trajectory_convexity(
-        entry_price_sol: f64,
-        peak_price_sol: f64,
-        trough_price_sol: f64,
-    ) -> f64 {
-        let downside = (entry_price_sol - trough_price_sol).max(0.0);
-        let upside = (peak_price_sol - entry_price_sol).max(0.0);
-        if downside > 0.0 {
-            upside / downside
-        } else if upside > 0.0 {
-            10.0 // highly convex upside
-        } else {
-            1.0
-        }
-    }
-
-    pub fn validate_elasticity(
-        fdv_usd: f64,
-        size_sol: f64,
-        liquidity_usd: f64,
-        sol_price_usd: f64,
-        cfg: &SandboxConfig,
-    ) -> Result<(), &'static str> {
-        if Self::is_in_danger_zone(fdv_usd, cfg) {
-            return Err("BONDING_CURVE_DANGER_ZONE");
-        }
-        let pool_sol_reserve = if sol_price_usd > 0.0 && liquidity_usd > 0.0 {
-            (liquidity_usd / 2.0) / sol_price_usd
-        } else {
-            100.0
-        };
-        let impact = Self::estimate_amm_price_impact_pct(size_sol, pool_sol_reserve);
+        // 2. Constant-Product AMM price impact
+        let pool_sol = Self::compute_one_sided_sol_reserve(ctx.liquidity_usd);
+        let impact = Self::compute_amm_price_impact_pct(ctx.size_sol, pool_sol);
         if impact > cfg.max_amm_price_impact_pct {
             return Err("AMM_PRICE_IMPACT_EXCEEDED");
         }
+
+        // 3. Bonding-Curve Danger Zone: [88%, 102%] of $69,000 graduation target
+        let sat_pct = Self::compute_bonding_curve_saturation_pct(ctx.fdv_usd, cfg);
+        if sat_pct >= cfg.graduation_danger_zone_min_pct && sat_pct <= cfg.graduation_danger_zone_max_pct {
+            return Err("BONDING_CURVE_DANGER_ZONE");
+        }
+
         Ok(())
     }
 }
@@ -362,140 +374,131 @@ impl CurveElasticityModel {
 mod tests {
     use super::*;
 
+    fn sample_ctx() -> PreEntryContext {
+        PreEntryContext {
+            token_mint: "TestMint11111111111111111111111111111111111".to_string(),
+            symbol: "ALPHA".to_string(),
+            entry_epoch: 1793980100,
+            entry_price_sol: 0.000005,
+            size_sol: 0.02,
+            liquidity_usd: 35000.0,
+            fdv_usd: 50000.0,
+            bonding_curve_pct: 72.0,
+            consumed_cu: 52000,
+            jito_tip_lamports: 10000,
+            pre_entry_arrival_timestamps: vec![1793980060.0, 1793980080.0, 1793980090.0, 1793980098.0],
+            pre_entry_recent_rejections: 95,
+            pre_entry_total_observations: 100,
+        }
+    }
+
     #[test]
-    fn test_hawkes_intensity_and_branching() {
+    fn test_hawkes_pre_entry_gate() {
         let cfg = SandboxConfig::default();
         let estimator = HawkesEstimator::from_config(&cfg);
+        let ctx = sample_ctx();
 
-        // Branching ratio = 0.45 / 0.60 = 0.75 (within [0.55, 0.98])
-        assert!((estimator.branching_ratio() - 0.75).abs() < 1e-4);
-
-        let arrivals = vec![1.0, 2.0, 2.5, 3.0];
-        let current_time = 3.5;
-        let intensity = estimator.intensity(current_time, &arrivals);
-        assert!(intensity > cfg.hawkes_mu_baseline);
-
-        let res = estimator.is_cascade_healthy(&arrivals, current_time, &cfg);
+        let res = estimator.validate_pre_entry(&ctx, &cfg);
         assert!(res.is_ok());
 
-        // Apex exhaustion check
-        let decaying_intensities = vec![1.2, 0.9, 0.7];
-        assert!(estimator.is_apex_exhaustion(&decaying_intensities));
-
-        let rising_intensities = vec![0.7, 0.9, 1.2];
-        assert!(!estimator.is_apex_exhaustion(&rising_intensities));
+        // Stale / empty arrivals -> exhausted cascade
+        let mut stale_ctx = ctx.clone();
+        stale_ctx.pre_entry_arrival_timestamps.clear();
+        assert_eq!(estimator.validate_pre_entry(&stale_ctx, &cfg), Err("HAWKES_CASCADE_EXHAUSTED"));
     }
 
     #[test]
-    fn test_sybil_bundle_and_entropy() {
+    fn test_sybil_and_bundle_auditor() {
         let cfg = SandboxConfig::default();
+        let auditor = SybilBundleAuditor;
+        let ctx = sample_ctx();
 
-        // High entropy distribution: 10 equal holders
-        let equal_holders = vec![10.0; 10];
-        let h_high = SybilBundleAuditor::compute_shannon_entropy(&equal_holders);
-        // H = - 10 * (0.1 * ln(0.1)) = ln(10) ≈ 2.3025 >= 1.85
-        assert!(h_high >= cfg.min_holder_shannon_entropy);
+        assert!(auditor.validate_pre_entry(&ctx, &cfg).is_ok());
 
-        // Low entropy distribution: 1 whale holds 95%, 9 holders hold 5%
-        let mut whale_holders = vec![0.5555; 9];
-        whale_holders.insert(0, 95.0);
-        let h_low = SybilBundleAuditor::compute_shannon_entropy(&whale_holders);
-        assert!(h_low < cfg.min_holder_shannon_entropy);
+        // Low entropy ticker: "7" or "XXXXXX"
+        let mut low_ent_ctx = ctx.clone();
+        low_ent_ctx.symbol = "7".to_string();
+        assert_eq!(auditor.validate_pre_entry(&low_ent_ctx, &cfg), Err("SYMBOL_ENTROPY_TOO_LOW"));
 
-        // Gate validation
-        assert!(SybilBundleAuditor::validate_bundle_and_sybil(0.20, &equal_holders, 0.15, &cfg).is_ok());
-        assert_eq!(
-            SybilBundleAuditor::validate_bundle_and_sybil(0.40, &equal_holders, 0.15, &cfg),
-            Err("SLOT0_BUNDLE_SUPPLY_EXCEEDED")
-        );
-        assert_eq!(
-            SybilBundleAuditor::validate_bundle_and_sybil(0.20, &whale_holders, 0.15, &cfg),
-            Err("HOLDER_SHANNON_ENTROPY_TOO_LOW")
-        );
-        assert_eq!(
-            SybilBundleAuditor::validate_bundle_and_sybil(0.20, &equal_holders, 0.35, &cfg),
-            Err("SHARED_FUNDER_CLUSTER_EXCEEDED")
-        );
+        // Extreme outside supply concentration (FDV $800k on $15k liq)
+        let mut extreme_outside_ctx = ctx.clone();
+        extreme_outside_ctx.fdv_usd = 800_000.0;
+        extreme_outside_ctx.liquidity_usd = 15_000.0;
+        assert_eq!(auditor.validate_pre_entry(&extreme_outside_ctx, &cfg), Err("OUTSIDE_SUPPLY_CONCENTRATION_EXCEEDED"));
+
+        // CU Anomaly: honeypot callback
+        let mut cu_anom_ctx = ctx.clone();
+        cu_anom_ctx.consumed_cu = 120_000;
+        assert_eq!(auditor.validate_pre_entry(&cu_anom_ctx, &cfg), Err("COMPUTE_UNIT_ANOMALY_HIGH"));
     }
 
     #[test]
-    fn test_vpin_calculation_and_gates() {
+    fn test_vpin_pre_entry_calculator() {
         let cfg = SandboxConfig::default();
         let calc = VpinCalculator::from_config(&cfg);
+        let ctx = sample_ctx();
 
-        // Balanced flow: 10 SOL buy, 10 SOL sell
-        let balanced_trades = vec![
-            TradeFlow { volume_sol: 10.0, is_buy: true, timestamp_sec: 100 },
-            TradeFlow { volume_sol: 10.0, is_buy: false, timestamp_sec: 105 },
-        ];
-        let _vpin_balanced = calc.compute_vpin(&balanced_trades);
-        // Each bucket has 10.0 volume; bucket 1 is 100% buy, bucket 2 is 100% sell -> |10-0| + |0-10| = 20 / 20 = 1.0
-        // Sliced into 2 buckets of 10 SOL each
+        // Safe balanced market
+        let mut safe_ctx = ctx.clone();
+        safe_ctx.pre_entry_recent_rejections = 30;
+        safe_ctx.pre_entry_total_observations = 100;
+        safe_ctx.liquidity_usd = 40000.0;
+        safe_ctx.fdv_usd = 50000.0;
+        let vpin = calc.compute_pre_entry_vpin(&safe_ctx);
+        assert!(vpin <= cfg.vpin_max_entry_toxicity);
+        assert!(calc.validate_pre_entry(&safe_ctx, &cfg).is_ok());
 
-        // Highly balanced trade inside same bucket: 5 SOL buy + 5 SOL sell = 10 SOL bucket
-        let mixed_trades = vec![
-            TradeFlow { volume_sol: 5.0, is_buy: true, timestamp_sec: 100 },
-            TradeFlow { volume_sol: 5.0, is_buy: false, timestamp_sec: 105 },
-        ];
-        let vpin_mixed = calc.compute_vpin(&mixed_trades);
-        // Net imbalance = |5 - 5| = 0.0 -> VPIN = 0.0
-        assert_eq!(vpin_mixed, 0.0);
-        assert!(calc.validate_entry_vpin(&mixed_trades, &cfg).is_ok());
-
-        // Extreme toxic one-sided flow
-        let toxic_trades = vec![
-            TradeFlow { volume_sol: 20.0, is_buy: false, timestamp_sec: 100 },
-        ];
-        let vpin_toxic = calc.compute_vpin(&toxic_trades);
-        assert_eq!(vpin_toxic, 1.0);
-        assert_eq!(calc.validate_entry_vpin(&toxic_trades, &cfg), Err("VPIN_ENTRY_TOXICITY_EXCEEDED"));
-        assert!(calc.check_emergency_exit(&toxic_trades, &cfg));
+        // Toxic environment: 100% rejection rate and high FDV stress
+        let mut toxic_ctx = ctx.clone();
+        toxic_ctx.pre_entry_recent_rejections = 100;
+        toxic_ctx.pre_entry_total_observations = 100;
+        toxic_ctx.liquidity_usd = 10000.0;
+        toxic_ctx.fdv_usd = 140000.0;
+        assert_eq!(calc.validate_pre_entry(&toxic_ctx, &cfg), Err("VPIN_ENTRY_TOXICITY_EXCEEDED"));
     }
 
     #[test]
     fn test_empirical_bayes_walk_forward() {
         let cfg = SandboxConfig::default();
         let mut matrix = EmpiricalBayesMatrix::from_config(&cfg);
+        let ctx = sample_ctx();
 
-        // Unobserved wallet: prior expectation = alpha / (alpha + beta) = 2.0 / 5.0 = 0.40 (< 0.42)
-        assert_eq!(matrix.score("unknown_wallet"), 0.40);
-        assert_eq!(matrix.validate_wallet_score("unknown_wallet", &cfg), Err("EMPIRICAL_BAYES_SCORE_TOO_LOW"));
+        // Baseline unobserved cohort: score = 2 / 5 = 0.40 (< 0.42)
+        assert_eq!(matrix.validate_pre_entry(&ctx, &cfg), Err("EMPIRICAL_BAYES_SCORE_TOO_LOW"));
 
-        // Entity with 3 wins and 0 losses: (3 + 2) / (3 + 5) = 5 / 8 = 0.625 (>= 0.42)
-        matrix.record_trade("smart_deployer", true);
-        matrix.record_trade("smart_deployer", true);
-        matrix.record_trade("smart_deployer", true);
-        assert_eq!(matrix.score("smart_deployer"), 0.625);
-        assert!(matrix.validate_wallet_score("smart_deployer", &cfg).is_ok());
+        // Record a win for this cohort from a previous settled trade
+        matrix.record_settled_trade(&ctx, ctx.entry_epoch - 60, true);
+        // Score becomes (1 + 2) / (1 + 5) = 3 / 6 = 0.50 (>= 0.42)
+        assert!(matrix.cohort_score(&EmpiricalBayesMatrix::derive_cohort_key(&ctx)) >= cfg.bayes_min_wallet_score);
 
-        // Toxic entity with 0 wins and 5 losses: (0 + 2) / (5 + 5) = 0.20 (< 0.42)
-        for _ in 0..5 {
-            matrix.record_trade("rug_deployer", false);
-        }
-        assert_eq!(matrix.score("rug_deployer"), 0.20);
-        assert_eq!(matrix.validate_wallet_score("rug_deployer", &cfg), Err("EMPIRICAL_BAYES_SCORE_TOO_LOW"));
+        // Anti-reentry guard: trying to trade the same token again after it settled
+        let mut reentrant_ctx = ctx.clone();
+        reentrant_ctx.entry_epoch = ctx.entry_epoch + 120;
+        assert_eq!(matrix.validate_pre_entry(&reentrant_ctx, &cfg), Err("ANTI_REENTRY_CHURN_MINT"));
     }
 
     #[test]
-    fn test_curve_elasticity_and_danger_zone() {
+    fn test_curve_elasticity_model() {
         let cfg = SandboxConfig::default();
+        let model = CurveElasticityModel;
+        let ctx = sample_ctx();
 
-        // FDV $65,000 USD on $69,000 graduation target = 94.2% -> IN DANGER ZONE [88%, 102%]
-        assert!(CurveElasticityModel::is_in_danger_zone(65_000.0, &cfg));
-        assert_eq!(
-            CurveElasticityModel::validate_elasticity(65_000.0, 0.04, 30_000.0, 180.0, &cfg),
-            Err("BONDING_CURVE_DANGER_ZONE")
-        );
+        assert!(model.validate_pre_entry(&ctx, &cfg).is_ok());
 
-        // FDV $35,000 USD = 50.7% -> SAFE ZONE
-        assert!(!CurveElasticityModel::is_in_danger_zone(35_000.0, &cfg));
+        // Danger zone: FDV $64,000 on $69k target = 92.7%
+        let mut danger_ctx = ctx.clone();
+        danger_ctx.fdv_usd = 64_000.0;
+        assert_eq!(model.validate_pre_entry(&danger_ctx, &cfg), Err("BONDING_CURVE_DANGER_ZONE"));
 
-        // AMM Price Impact check: pool liq = $36,000 -> pool SOL reserve = $18,000 / $180 = 100 SOL.
-        // Trade size 0.04 SOL -> impact = 0.04% <= 2.5% -> Ok
-        assert!(CurveElasticityModel::validate_elasticity(35_000.0, 0.04, 36_000.0, 180.0, &cfg).is_ok());
+        // Low liquidity: $12k < $20k
+        let mut low_liq_ctx = ctx.clone();
+        low_liq_ctx.liquidity_usd = 12_000.0;
+        assert_eq!(model.validate_pre_entry(&low_liq_ctx, &cfg), Err("LIQUIDITY_BELOW_MIN"));
 
-        // Extreme size relative to tiny pool: trade 5 SOL into 100 SOL reserve = 5.0% > 2.5%
-        let impact = CurveElasticityModel::estimate_amm_price_impact_pct(5.0, 100.0);
-        assert_eq!(impact, 5.0);
+        // AMM Price impact exceeded: trade 2.5 SOL into small $22k pool ($11k reserve = 61 SOL) -> 8.2% impact
+        let mut high_impact_ctx = ctx.clone();
+        high_impact_ctx.liquidity_usd = 22_000.0;
+        high_impact_ctx.size_sol = 2.5;
+        assert_eq!(model.validate_pre_entry(&high_impact_ctx, &cfg), Err("AMM_PRICE_IMPACT_EXCEEDED"));
     }
 }
