@@ -24,3 +24,4 @@ jobs:
           cd ios/DMNEAlpha
           swiftc -typecheck DMNEAlphaApp.swift ContentView.swift DeskViewModel.swift -sdk $(xcrun --sdk iphonesimulator --show-sdk-path) -target arm64-apple-ios17.0-simulator
           echo "✅ Native SwiftUI code compiles cleanly without errors!"
+
