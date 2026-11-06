@@ -155,13 +155,6 @@ pub fn is_historical_exit_toxic(exit_pnl_pct: f64, cfg: &RiskConfig) -> bool {
     exit_pnl_pct <= cfg.stop_loss_pct || exit_pnl_pct <= cfg.flash_dump_tick_pct
 }
 
-pub fn is_toxic_exit(reason: &str, pnl_pct: f64, cfg: &RiskConfig) -> bool {
-    reason.contains("Stop-Loss")
-        || reason.contains("Flash Dump")
-        || reason.contains("Max Slippage")
-        || is_historical_exit_toxic(pnl_pct, cfg)
-}
-
 pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String {
     if pos.tp2_executed {
         let runner_pct = (1.0 - cfg.tp1_sell_fraction - cfg.tp2_sell_fraction) * 100.0;
@@ -339,16 +332,6 @@ mod tests {
         assert!(!is_historical_exit_toxic(-10.0, &cfg));
         assert!(!is_historical_exit_toxic(0.0, &cfg));
         assert!(!is_historical_exit_toxic(45.0, &cfg));
-    }
-
-    #[test]
-    fn test_toxic_exit_detection() {
-        let cfg = RiskConfig::default();
-        assert!(is_toxic_exit("Stop-Loss (-20%)", -20.5, &cfg));
-        assert!(is_toxic_exit("Flash Dump Breaker (-15%)", -16.0, &cfg));
-        assert!(is_toxic_exit("Max Slippage Loss (-25%)", -26.0, &cfg));
-        assert!(!is_toxic_exit("TP1 Scale-Out (+45%)", 45.0, &cfg));
-        assert!(!is_toxic_exit("Trailing Runner (Peak +60.0%)", 41.0, &cfg));
     }
 
     #[test]
