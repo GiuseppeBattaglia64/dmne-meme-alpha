@@ -1,3 +1,16 @@
+pub fn execute_live_jito_swap(user_id: &str, mint: &str, action: &str, amount_sol: f64) -> bool {
+    let output = std::process::Command::new("/home/ubuntu/dmne-meme-alpha/jito_bundle.py")
+        .args([user_id, mint, action, &amount_sol.to_string()])
+        .output();
+    match output {
+        Ok(out) => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.contains("\"success\": true")
+        }
+        Err(_) => false,
+    }
+}
+
 /// Calculates Shannon character entropy H(X) in bits for a string
 pub fn calculate_string_entropy(s: &str) -> f64 {
     if s.is_empty() { return 0.0; }
@@ -830,6 +843,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "has_started": started,
                                 "status": if started { "ACTIVATED" } else { "FAILED" }
                             }).to_string();
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                                                } else if req.starts_with("GET /api/test-jito") || req.starts_with("POST /api/test-jito") {
+                            let user_id = req.split("user=").nth(1).unwrap_or("admin").split(&[' ', '&', '\r', '\n'][..]).next().unwrap_or("admin");
+                            let success = execute_live_jito_swap(user_id, "EW1b9rcLAJe634mgxb5r4bVYxDoGU37o7YazBzjTpump", "buy", 0.010);
+                            let json_resp = format!("{{\"live_jito_dispatched\":{}}}", success);
                             let res = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                                 json_resp.len(),
