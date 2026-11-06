@@ -3,6 +3,18 @@ name = "dmne-meme-alpha"
 version = "0.7.1"
 edition = "2021"
 
+[lib]
+name = "dmne_meme_alpha"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dmne-meme-alpha"
+path = "src/main.rs"
+
+[[bin]]
+name = "sandbox_replay"
+path = "src/bin/sandbox_replay.rs"
+
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
 tokio-tungstenite = { version = "0.23", features = ["native-tls"] }

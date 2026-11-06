@@ -48,6 +48,9 @@ pub struct EngineConfig {
 
     // Institutional Risk Envelope
     pub risk: RiskConfig,
+
+    // Sandbox & Replay Configuration
+    pub sandbox: SandboxConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,8 +229,130 @@ impl Default for RiskConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxConfig {
+    #[serde(default = "default_hawkes_mu_baseline")]
+    pub hawkes_mu_baseline: f64,
+    #[serde(default = "default_hawkes_alpha_jump")]
+    pub hawkes_alpha_jump: f64,
+    #[serde(default = "default_hawkes_beta_decay")]
+    pub hawkes_beta_decay: f64,
+    #[serde(default = "default_hawkes_min_branching_ratio")]
+    pub hawkes_min_branching_ratio: f64,
+    #[serde(default = "default_hawkes_max_branching_ratio")]
+    pub hawkes_max_branching_ratio: f64,
+
+    #[serde(default = "default_max_slot0_bundle_supply_ratio")]
+    pub max_slot0_bundle_supply_ratio: f64,
+    #[serde(default = "default_min_holder_shannon_entropy")]
+    pub min_holder_shannon_entropy: f64,
+    #[serde(default = "default_max_shared_funder_cluster_ratio")]
+    pub max_shared_funder_cluster_ratio: f64,
+
+    #[serde(default = "default_vpin_bucket_size_sol")]
+    pub vpin_bucket_size_sol: f64,
+    #[serde(default = "default_vpin_max_entry_toxicity")]
+    pub vpin_max_entry_toxicity: f64,
+    #[serde(default = "default_vpin_emergency_exit_toxicity")]
+    pub vpin_emergency_exit_toxicity: f64,
+
+    #[serde(default = "default_bayes_prior_alpha")]
+    pub bayes_prior_alpha: f64,
+    #[serde(default = "default_bayes_prior_beta")]
+    pub bayes_prior_beta: f64,
+    #[serde(default = "default_bayes_min_wallet_score")]
+    pub bayes_min_wallet_score: f64,
+
+    #[serde(default = "default_graduation_target_fdv_usd")]
+    pub graduation_target_fdv_usd: f64,
+    #[serde(default = "default_graduation_danger_zone_min_pct")]
+    pub graduation_danger_zone_min_pct: f64,
+    #[serde(default = "default_graduation_danger_zone_max_pct")]
+    pub graduation_danger_zone_max_pct: f64,
+    #[serde(default = "default_max_amm_price_impact_pct")]
+    pub max_amm_price_impact_pct: f64,
+
+    #[serde(default = "default_rpc_backfill_timeout_ms")]
+    pub rpc_backfill_timeout_ms: u64,
+    #[serde(default = "default_cache_path")]
+    pub cache_path: String,
+    #[serde(default = "default_report_path")]
+    pub report_path: String,
+}
+
+fn default_hawkes_mu_baseline() -> f64 { 0.05 }
+fn default_hawkes_alpha_jump() -> f64 { 0.45 }
+fn default_hawkes_beta_decay() -> f64 { 0.60 }
+fn default_hawkes_min_branching_ratio() -> f64 { 0.55 }
+fn default_hawkes_max_branching_ratio() -> f64 { 0.98 }
+
+fn default_max_slot0_bundle_supply_ratio() -> f64 { 0.35 }
+fn default_min_holder_shannon_entropy() -> f64 { 1.85 }
+fn default_max_shared_funder_cluster_ratio() -> f64 { 0.30 }
+
+fn default_vpin_bucket_size_sol() -> f64 { 10.0 }
+fn default_vpin_max_entry_toxicity() -> f64 { 0.62 }
+fn default_vpin_emergency_exit_toxicity() -> f64 { 0.78 }
+
+fn default_bayes_prior_alpha() -> f64 { 2.0 }
+fn default_bayes_prior_beta() -> f64 { 3.0 }
+fn default_bayes_min_wallet_score() -> f64 { 0.42 }
+
+fn default_graduation_target_fdv_usd() -> f64 { 69000.0 }
+fn default_graduation_danger_zone_min_pct() -> f64 { 88.0 }
+fn default_graduation_danger_zone_max_pct() -> f64 { 102.0 }
+fn default_max_amm_price_impact_pct() -> f64 { 2.5 }
+
+fn default_rpc_backfill_timeout_ms() -> u64 { 2500 }
+fn default_cache_path() -> String { "logs/sandbox_onchain_cache.json".to_string() }
+fn default_report_path() -> String { "logs/sandbox_ablation_report.csv".to_string() }
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            hawkes_mu_baseline: default_hawkes_mu_baseline(),
+            hawkes_alpha_jump: default_hawkes_alpha_jump(),
+            hawkes_beta_decay: default_hawkes_beta_decay(),
+            hawkes_min_branching_ratio: default_hawkes_min_branching_ratio(),
+            hawkes_max_branching_ratio: default_hawkes_max_branching_ratio(),
+            max_slot0_bundle_supply_ratio: default_max_slot0_bundle_supply_ratio(),
+            min_holder_shannon_entropy: default_min_holder_shannon_entropy(),
+            max_shared_funder_cluster_ratio: default_max_shared_funder_cluster_ratio(),
+            vpin_bucket_size_sol: default_vpin_bucket_size_sol(),
+            vpin_max_entry_toxicity: default_vpin_max_entry_toxicity(),
+            vpin_emergency_exit_toxicity: default_vpin_emergency_exit_toxicity(),
+            bayes_prior_alpha: default_bayes_prior_alpha(),
+            bayes_prior_beta: default_bayes_prior_beta(),
+            bayes_min_wallet_score: default_bayes_min_wallet_score(),
+            graduation_target_fdv_usd: default_graduation_target_fdv_usd(),
+            graduation_danger_zone_min_pct: default_graduation_danger_zone_min_pct(),
+            graduation_danger_zone_max_pct: default_graduation_danger_zone_max_pct(),
+            max_amm_price_impact_pct: default_max_amm_price_impact_pct(),
+            rpc_backfill_timeout_ms: default_rpc_backfill_timeout_ms(),
+            cache_path: default_cache_path(),
+            report_path: default_report_path(),
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl SandboxConfig {
+    pub fn load() -> Self {
+        let path = "/home/ubuntu/dmne-meme-alpha/config.toml";
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(toml_file) = toml::from_str::<TomlConfigFile>(&content) {
+                if let Some(sb) = toml_file.sandbox {
+                    return sb;
+                }
+            }
+        }
+        Self::default()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct TomlConfigFile {
     pub risk: Option<RiskConfig>,
+    pub sandbox: Option<SandboxConfig>,
 }
 
 impl Default for EngineConfig {
@@ -265,6 +390,7 @@ impl Default for EngineConfig {
             min_sim_cu_threshold: 15_000,        // Rejection floor for no-op transactions
             default_rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
             risk: RiskConfig::default(),
+            sandbox: SandboxConfig::default(),
         }
     }
 }
@@ -286,6 +412,9 @@ impl EngineConfig {
                     cfg.tranche_2_scale_ratio = r.tp2_sell_fraction;
                     cfg.stagnation_ttl_seconds = r.stagnation_ttl_secs as i64;
                     cfg.risk = r;
+                }
+                if let Some(sb) = toml_file.sandbox {
+                    cfg.sandbox = sb;
                 }
             }
         }

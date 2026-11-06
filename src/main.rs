@@ -45,6 +45,7 @@ mod db;
 mod amm;
 mod ws_ingest;
 mod risk;
+mod sandbox;
 
 pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
 

@@ -53,3 +53,32 @@ kelly_fraction_nav_pct = 7.5
 max_active_slots = 4
 dex_roundtrip_fee_pct = 0.60
 jito_tip_lamports = 10000
+
+[sandbox]
+hawkes_mu_baseline = 0.05
+hawkes_alpha_jump = 0.45
+hawkes_beta_decay = 0.60
+hawkes_min_branching_ratio = 0.55
+hawkes_max_branching_ratio = 0.98
+
+max_slot0_bundle_supply_ratio = 0.35
+min_holder_shannon_entropy = 1.85
+max_shared_funder_cluster_ratio = 0.30
+
+vpin_bucket_size_sol = 10.0
+vpin_max_entry_toxicity = 0.62
+vpin_emergency_exit_toxicity = 0.78
+
+bayes_prior_alpha = 2.0
+bayes_prior_beta = 3.0
+bayes_min_wallet_score = 0.42
+
+graduation_target_fdv_usd = 69000.0
+graduation_danger_zone_min_pct = 88.0
+graduation_danger_zone_max_pct = 102.0
+max_amm_price_impact_pct = 2.5
+
+rpc_backfill_timeout_ms = 2500
+cache_path = "logs/sandbox_onchain_cache.json"
+report_path = "logs/sandbox_ablation_report.csv"
+
