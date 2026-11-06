@@ -662,7 +662,7 @@
       </div>
       <div class="metric-right">
         <div id="nav-fiat">≈ €50.00 EUR</div>
-        <div style="font-size:8px; color:var(--text-dim);">Baseline: $100 USD</div>
+        <div style="font-size:8px; color:var(--text-dim);"><span id="baseline-subtext">Virtual Baseline: 0.5000 SOL</span></div>
       </div>
     </div>
     <div class="metric-card accent-green">
@@ -929,6 +929,8 @@
           const navEurEl = document.getElementById('nav-eur') || document.getElementById('nav-fiat') || (navValEl ? navValEl.nextElementSibling : null);
           if (navEurEl) {
             navEurEl.innerHTML = '<span style="color:#10b981; font-weight:700;">Paper Capital: 0.5000 SOL</span>';
+          const baseSub = document.getElementById('baseline-subtext');
+          if (baseSub) baseSub.innerText = 'Unallocated Fresh Desk';
           }
 
           // 2. Reset PnL & Stats for fresh desk
@@ -1501,6 +1503,17 @@
     function updateUserUI() {
       const u = usersMap[currentUser];
       if (!u) return;
+
+      const baseSub = document.getElementById('baseline-subtext');
+      if (baseSub) {
+        if (currentUser === 'giovanni' && !window.giovanniStarted) {
+          baseSub.innerText = 'Unallocated Fresh Desk';
+        } else if (u.mode === 'LIVE') {
+          baseSub.innerText = 'Real On-Chain Capital';
+        } else {
+          baseSub.innerText = `Baseline: ${u.paper_bankroll.toFixed(4)} SOL`;
+        }
+      }
 
       // Update Deposit modal pubkey
       const modalPk = document.getElementById('modal-pubkey');
