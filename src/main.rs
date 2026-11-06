@@ -154,6 +154,9 @@ pub struct BotState {
     pub initial_bankroll_sol: f64,
     pub current_bankroll_sol: f64,
     pub live_onchain_sol: f64,
+    pub is_scanner_paused: bool,
+    pub panic_mode: bool,
+    pub consecutive_losses: u32,
     pub wallet_pubkey: String,
     pub total_trades: usize,
     pub wins: usize,
@@ -173,6 +176,9 @@ impl BotState {
             initial_bankroll_sol: initial_sol, // $100.00 USD initial capital
             current_bankroll_sol: initial_sol,
             live_onchain_sol: 0.0,
+            is_scanner_paused: false,
+            panic_mode: false,
+            consecutive_losses: 0,
             wallet_pubkey: "CwBPS16Pz6RonsKmYPJAjZR7RbFpbKwJN6CcvJikj55j".to_string(),
             total_trades: 0,
             wins: 0,
@@ -573,6 +579,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     serde_json::to_string(&serde_json::json!({
                                         "system_version": APP_VERSION,
                     "live_onchain_sol": guard.live_onchain_sol,
+                    "is_scanner_paused": guard.is_scanner_paused,
+                    "panic_mode": guard.panic_mode,
                     "wallet_pubkey": guard.wallet_pubkey.clone(),
                     "initial_bankroll_sol": guard.initial_bankroll_sol,
                                         "current_bankroll_sol": live_reconciled_bankroll,
@@ -591,6 +599,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     break;
                                 }
                             }
+                        } else if req.starts_with("GET /api/pause") || req.starts_with("POST /api/pause") {
+                            let mut g = st.write().await;
+                            g.is_scanner_paused = !g.is_scanner_paused;
+                            let status = if g.is_scanner_paused { "PAUSED" } else { "RUNNING" };
+                            let json_resp = format!("{{\"status\":\"{}\"}}", status);
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /api/panic") || req.starts_with("POST /api/panic") {
+                            let mut g = st.write().await;
+                            g.panic_mode = true;
+                            g.is_scanner_paused = true;
+                            for pos in &mut g.active_positions {
+                                pos.pnl_pct = -99.0;
+                            }
+                            let json_resp = "{\"status\":\"PANIC_TRIGGERED\"}";
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
                         } else if req.starts_with("GET /api/trades") {
                             let mut trades = Vec::new();
                             if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
@@ -663,7 +696,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Concurrency Queue Consumer: Populate vacant slots from pre-audited candidate_queue
             {
                 let mut state = eval_state.write().await;
-                while state.active_positions.len() < 4 && !state.candidate_queue.is_empty() {
+                while !state.is_scanner_paused && state.active_positions.len() < 4 && !state.candidate_queue.is_empty() {
                     let candidate = state.candidate_queue.remove(0);
                     // Verify candidate not already in active positions or closed trades
                     if !state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint)
@@ -834,8 +867,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let bankroll_after = state.current_bankroll_sol;
                 if pnl_sol > 0.0 {
                     state.wins += 1;
+                    state.consecutive_losses = 0;
                 } else {
                     state.losses += 1;
+                    state.consecutive_losses += 1;
                 }
                 append_comprehensive_trade_log(
                     &pos,
