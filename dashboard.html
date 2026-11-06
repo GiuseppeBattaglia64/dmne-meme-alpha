@@ -416,7 +416,107 @@
       font-size: 10px;
     }
     .close-btn:hover { color: #fff; border-color: var(--red); }
-  </style>
+  
+  /* --- MOBILE & IPAD RESPONSIVE STYLES --- */
+  @media (max-width: 900px) {
+    body {
+      overflow-y: auto !important;
+      height: auto !important;
+      padding-bottom: 70px !important;
+    }
+    header, .header-nav {
+      flex-wrap: wrap !important;
+      gap: 6px !important;
+      padding: 8px 12px !important;
+      height: auto !important;
+    }
+    .telemetry-row {
+      flex-wrap: wrap !important;
+      gap: 6px !important;
+    }
+    .metrics-grid, .top-stats-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 6px !important;
+      margin-bottom: 10px !important;
+    }
+    .workspace, .main-terminal-grid {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 16px !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+    .col-radar, .col-desk, .col-ledger {
+      width: 100% !important;
+      min-width: 100% !important;
+      display: none !important; /* Controlled by mobile tabs */
+    }
+    .col-desk.mobile-active,
+    .col-radar.mobile-active,
+    .col-ledger.mobile-active {
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    .positions-grid, .pos-card-grid {
+      grid-template-columns: 1fr !important; /* Stack 1 card per row */
+      gap: 12px !important;
+    }
+    .pos-card {
+      padding: 14px !important;
+      font-size: 13px !important;
+    }
+
+    /* Fixed Native Mobile Bottom Bar */
+    .mobile-tab-bar {
+      display: flex !important;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: rgba(10, 15, 29, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid #1e293b;
+      z-index: 9999;
+      justify-content: space-around;
+      align-items: center;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .mobile-tab-btn {
+      flex: 1;
+      height: 100%;
+      background: none;
+      border: none;
+      color: #64748b;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+    }
+    .mobile-tab-btn.active {
+      color: #00f2fe;
+      border-top: 2px solid #00f2fe;
+    }
+  }
+
+  @media (min-width: 901px) {
+    .mobile-tab-bar {
+      display: none !important;
+    }
+    .col-radar, .col-desk, .col-ledger {
+      display: flex !important;
+    }
+  }
+
+</style>
 </head>
 <body>
 
@@ -498,7 +598,7 @@
   <div class="workspace">
     
     <!-- COLUMN 1: MEMESCOPE RADAR -->
-    <div class="panel">
+    <div class="panel col-radar">
       <div class="panel-header">
         <div class="panel-title">
           <span>MEMESCOPE RADAR // DISCOVERY STREAM</span>
@@ -511,7 +611,7 @@
     </div>
 
     <!-- COLUMN 2: ACTIVE DESK -->
-    <div class="panel">
+    <div class="panel col-desk">
       <div class="panel-header">
         <div class="panel-title">
           <span>ACTIVE DESK // CRUISE CONTROL SUPERVISOR</span>
@@ -524,7 +624,7 @@
     </div>
 
     <!-- COLUMN 3: SETTLED LEDGER & TERMINAL -->
-    <div class="col-right">
+    <div class="col-right col-ledger">
       <div class="panel" style="flex: 1.2;">
         <div class="panel-header">
           <div class="panel-title">FORENSIC SETTLED TRADES</div>
@@ -1054,5 +1154,48 @@
       }
     };
   </script>
+
+  <!-- Mobile Native Tab Bar -->
+  <div class="mobile-tab-bar">
+    <button class="mobile-tab-btn active" onclick="switchMobileTab('desk')">
+      <span>⚡ ACTIVE DESK</span>
+    </button>
+    <button class="mobile-tab-btn" onclick="switchMobileTab('radar')">
+      <span>📡 RADAR</span>
+    </button>
+    <button class="mobile-tab-btn" onclick="switchMobileTab('ledger')">
+      <span>📜 LEDGER</span>
+    </button>
+  </div>
+
+  <script>
+    function switchMobileTab(tab) {
+      document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.remove('active'));
+      const colRadar = document.querySelector('.col-radar') || document.querySelectorAll('.workspace > div')[0];
+      const colDesk = document.querySelector('.col-desk') || document.querySelectorAll('.workspace > div')[1];
+      const colLedger = document.querySelector('.col-ledger') || document.querySelectorAll('.workspace > div')[2];
+
+      if (colRadar) colRadar.classList.remove('mobile-active');
+      if (colDesk) colDesk.classList.remove('mobile-active');
+      if (colLedger) colLedger.classList.remove('mobile-active');
+
+      if (tab === 'desk' && colDesk) {
+        colDesk.classList.add('mobile-active');
+        if (event && event.currentTarget) event.currentTarget.classList.add('active');
+      } else if (tab === 'radar' && colRadar) {
+        colRadar.classList.add('mobile-active');
+        if (event && event.currentTarget) event.currentTarget.classList.add('active');
+      } else if (tab === 'ledger' && colLedger) {
+        colLedger.classList.add('mobile-active');
+        if (event && event.currentTarget) event.currentTarget.classList.add('active');
+      }
+    }
+    // Set default active tab on load
+    document.addEventListener("DOMContentLoaded", () => {
+      const colDesk = document.querySelector('.col-desk') || document.querySelectorAll('.workspace > div')[1];
+      if (colDesk) colDesk.classList.add('mobile-active');
+    });
+  </script>
+
 </body>
 </html>
