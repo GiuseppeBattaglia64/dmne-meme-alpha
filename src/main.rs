@@ -1236,6 +1236,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match action {
                     risk::ExitAction::PartialSell { sol_basis_closed, rule_label, .. } => {
                         let realized = risk::compute_net_realized_sol(sol_basis_closed, pos.pnl_pct, &effective_risk_cfg);
+                        let net_exit_pnl_pct = risk::compute_net_pnl_pct(sol_basis_closed, realized);
                         let bankroll_before = state.current_bankroll_sol;
                         state.current_bankroll_sol += realized;
                         state.total_realized_pnl_sol += realized;
@@ -1248,8 +1249,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             state.consecutive_losses = 0;
                         }
                         println!(
-                            "[CRUISE CONTROL] {} on {} (+{:.1}%): Recaptured capital + {:.5} SOL gain.",
-                            rule_label, pos.symbol, pos.pnl_pct, realized
+                            "[CRUISE CONTROL] {} on {} (Net: {:+.1}%, Gross: {:+.1}%): Recaptured capital + {:.5} SOL gain.",
+                            rule_label, pos.symbol, net_exit_pnl_pct, pos.pnl_pct, realized
                         );
 
                         // 1. Append to trades_forensic.csv
@@ -1257,7 +1258,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         pos_partial.size_sol = sol_basis_closed;
                         append_comprehensive_trade_log(
                             &pos_partial,
-                            pos.pnl_pct,
+                            net_exit_pnl_pct,
                             realized,
                             &rule_label,
                             bankroll_before,
@@ -1277,7 +1278,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let db_after = bankroll_after;
                         let db_rule = rule_label.clone();
                         let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
-                        let pnl_pct = pos.pnl_pct;
+                        let pnl_pct = net_exit_pnl_pct;
                         tokio::spawn(async move {
                             if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
                                 db::record_settled_trade(
@@ -1294,7 +1295,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             symbol: pos.symbol.clone(),
                             size_sol: sol_basis_closed,
                             pnl_sol: realized,
-                            pnl_pct: pos.pnl_pct,
+                            pnl_pct: net_exit_pnl_pct,
                             reason: rule_label,
                             closed_at_epoch: now_epoch,
                             is_toxic: false,
@@ -1303,11 +1304,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     risk::ExitAction::FullExit { rule_label, is_toxic } => {
                         let exit_pnl = pos.pnl_pct;
                         let realized = risk::compute_net_realized_sol(pos.size_sol, exit_pnl, &effective_risk_cfg);
+                        let net_exit_pnl_pct = risk::compute_net_pnl_pct(pos.size_sol, realized);
                         println!(
-                            "[CRUISE CONTROL] Exit triggered on {} by {} (PnL: {:+.1}%, toxic: {}).",
-                            pos.symbol, rule_label, exit_pnl, is_toxic
+                            "[CRUISE CONTROL] Exit triggered on {} by {} (Net PnL: {:+.1}%, Gross: {:+.1}%, toxic: {}).",
+                            pos.symbol, rule_label, net_exit_pnl_pct, exit_pnl, is_toxic
                         );
-                        closed_indices.push((idx, rule_label, realized, exit_pnl, is_toxic));
+                        closed_indices.push((idx, rule_label, realized, net_exit_pnl_pct, is_toxic));
                     }
                     risk::ExitAction::Hold => {}
                 }

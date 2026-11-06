@@ -571,6 +571,38 @@
     }
   }
 
+  @media (max-width: 768px) {
+    .header-row-top {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .header-row-bottom {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+    .header-workspace-group {
+      flex-wrap: wrap;
+      width: 100%;
+      gap: 8px;
+    }
+    .header-workspace-group select#user-select {
+      flex: 1;
+      min-width: 140px;
+    }
+    .header-actions-group {
+      flex-wrap: wrap;
+      width: 100%;
+      gap: 6px;
+    }
+    .header-actions-group .wallet-btn {
+      flex: 1 1 auto;
+      padding: 0 10px;
+      font-size: 0.72rem;
+    }
+  }
+
   @media (min-width: 901px) {
     .mobile-tab-bar {
       display: none !important;

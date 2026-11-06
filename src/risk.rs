@@ -196,9 +196,19 @@ pub const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
 
 pub fn compute_net_realized_sol(basis_sol: f64, gross_pnl_pct: f64, cfg: &RiskConfig) -> f64 {
     let gross_sol = basis_sol * (gross_pnl_pct / 100.0);
-    let dex_fee_sol = basis_sol * (cfg.dex_roundtrip_fee_pct / 100.0);
+    let exit_notional_sol = (basis_sol + gross_sol).max(0.0);
+    let half_fee_rate = (cfg.dex_roundtrip_fee_pct / 2.0) / 100.0;
+    let dex_fee_sol = (basis_sol * half_fee_rate) + (exit_notional_sol * half_fee_rate);
     let jito_tip_sol = (cfg.jito_tip_lamports as f64) / LAMPORTS_PER_SOL;
     gross_sol - dex_fee_sol - jito_tip_sol
+}
+
+pub fn compute_net_pnl_pct(basis_sol: f64, net_realized_sol: f64) -> f64 {
+    if basis_sol > 0.0 {
+        (net_realized_sol / basis_sol) * 100.0
+    } else {
+        0.0
+    }
 }
 
 pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String {
@@ -436,15 +446,22 @@ mod tests {
             jito_tip_lamports: 10_000,
             ..RiskConfig::default()
         };
-        let basis_sol = 0.10;
-        let gross_pnl_pct = 50.0;
-        let gross_sol = basis_sol * (gross_pnl_pct / 100.0); // 0.05 SOL
-        let dex_fee_sol = basis_sol * (cfg.dex_roundtrip_fee_pct / 100.0); // 0.0006 SOL
-        let jito_tip_sol = (cfg.jito_tip_lamports as f64) / LAMPORTS_PER_SOL; // 0.00001 SOL
-        let expected_net = gross_sol - dex_fee_sol - jito_tip_sol;
+        let basis_sol: f64 = 0.10;
+        let gross_pnl_pct: f64 = 50.0;
+        let gross_sol: f64 = basis_sol * (gross_pnl_pct / 100.0); // 0.05 SOL
+        let exit_notional_sol: f64 = (basis_sol + gross_sol).max(0.0); // 0.15 SOL
+        let half_fee_rate: f64 = (cfg.dex_roundtrip_fee_pct / 2.0) / 100.0; // 0.003
+        let dex_fee_sol: f64 = (basis_sol * half_fee_rate) + (exit_notional_sol * half_fee_rate); // 0.00075 SOL
+        let jito_tip_sol: f64 = (cfg.jito_tip_lamports as f64) / LAMPORTS_PER_SOL; // 0.00001 SOL
+        let expected_net: f64 = gross_sol - dex_fee_sol - jito_tip_sol;
 
         let net = compute_net_realized_sol(basis_sol, gross_pnl_pct, &cfg);
         assert!((net - expected_net).abs() < 1e-12);
         assert!(net < gross_sol);
+
+        let net_pnl_pct = compute_net_pnl_pct(basis_sol, net);
+        let expected_pnl_pct = (net / basis_sol) * 100.0;
+        assert!((net_pnl_pct - expected_pnl_pct).abs() < 1e-12);
+        assert_eq!(compute_net_pnl_pct(0.0, 1.0), 0.0);
     }
 }

@@ -243,7 +243,7 @@ pub async fn fetch_aggregate_stats(client: &Client) -> (i64, i64, f64) {
     let stmt = "
         SELECT 
             COUNT(*)::bigint AS total_trades,
-            COUNT(*) FILTER (WHERE pnl_pct > 0)::bigint AS wins,
+            COUNT(*) FILTER (WHERE realized_pnl_sol > 0.0)::bigint AS wins,
             COALESCE(SUM(realized_pnl_sol), 0.0) AS net_realized
         FROM settled_trades
     ";
@@ -264,7 +264,7 @@ pub async fn fetch_complete_system_stats(client: &Client) -> (i64, i64, f64, i64
     let stats_stmt = "
         SELECT 
             COUNT(*)::bigint AS total_trades,
-            COUNT(*) FILTER (WHERE pnl_pct > 0)::bigint AS wins,
+            COUNT(*) FILTER (WHERE realized_pnl_sol > 0.0)::bigint AS wins,
             COALESCE(SUM(realized_pnl_sol), 0.0) AS net_realized
         FROM settled_trades
     ";
