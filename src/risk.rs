@@ -129,6 +129,19 @@ pub fn is_toxic_exit(reason: &str, pnl_pct: f64, cfg: &RiskConfig) -> bool {
         || pnl_pct <= cfg.stop_loss_pct
 }
 
+pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String {
+    if pos.tp2_executed {
+        let runner_pct = (1.0 - cfg.tp1_sell_fraction - cfg.tp2_sell_fraction) * 100.0;
+        format!("{:.0}% Runner Moonbag", runner_pct)
+    } else if pos.tp1_executed {
+        format!("TP1 Harvested (+{:.0}%)", cfg.tp1_trigger_pct)
+    } else if pos.peak_pnl_pct >= cfg.breakeven_arm_pct {
+        format!("Breakeven Armed (+{:.0}% Floor)", cfg.breakeven_floor_pct)
+    } else {
+        "Monitoring Momentum".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,6 +271,23 @@ mod tests {
         assert!(is_toxic_exit("Max Slippage Loss (-25%)", -26.0, &cfg));
         assert!(!is_toxic_exit("TP1 Scale-Out (+45%)", 45.0, &cfg));
         assert!(!is_toxic_exit("Trailing Runner (Peak +60.0%)", 41.0, &cfg));
+    }
+
+    #[test]
+    fn test_format_position_status() {
+        let mut pos = setup_test_position();
+        let cfg = RiskConfig::default();
+
+        assert_eq!(format_position_status(&pos, &cfg), "Monitoring Momentum");
+
+        pos.peak_pnl_pct = 36.0;
+        assert_eq!(format_position_status(&pos, &cfg), "Breakeven Armed (+12% Floor)");
+
+        pos.tp1_executed = true;
+        assert_eq!(format_position_status(&pos, &cfg), "TP1 Harvested (+45%)");
+
+        pos.tp2_executed = true;
+        assert_eq!(format_position_status(&pos, &cfg), "25% Runner Moonbag");
     }
 }
 

@@ -1076,13 +1076,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 // UI status milestones
-                if pos.tranche_2_taken && !pos.status.contains("Runner") {
-                    pos.status = "25% Runner Moonbag".to_string();
-                } else if pos.tranche_1_taken && pos.status == "Active" {
-                    pos.status = "TP1 Harvested (+45%)".to_string();
-                } else if peak_pct >= effective_risk_cfg.breakeven_arm_pct && pos.status == "Active" {
-                    pos.status = "Breakeven Armed (+12% Floor)".to_string();
-                }
+                let active_pos_status = risk::ActivePosition {
+                    token_mint: pos.token_mint.clone(),
+                    symbol: pos.symbol.clone(),
+                    entry_price: pos.entry_price_sol,
+                    initial_size_sol: pos.initial_size_sol,
+                    remaining_size_sol: pos.size_sol,
+                    remaining_token_amount: 0,
+                    peak_pnl_pct: peak_pct,
+                    tp1_executed: pos.tranche_1_taken,
+                    tp2_executed: pos.tranche_2_taken,
+                    opened_at_epoch: pos.entry_timestamp_epoch,
+                };
+                pos.status = risk::format_position_status(&active_pos_status, &effective_risk_cfg);
 
                 // Update last observed tick price for flash dump detection
                 pos.last_price_sol = pos.current_price_sol;
