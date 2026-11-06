@@ -149,11 +149,15 @@ pub fn evaluate_position_exit(
     ExitAction::Hold
 }
 
+pub fn is_historical_exit_toxic(exit_pnl_pct: f64, cfg: &RiskConfig) -> bool {
+    exit_pnl_pct <= cfg.stop_loss_pct || exit_pnl_pct <= cfg.flash_dump_tick_pct
+}
+
 pub fn is_toxic_exit(reason: &str, pnl_pct: f64, cfg: &RiskConfig) -> bool {
     reason.contains("Stop-Loss")
         || reason.contains("Flash Dump")
         || reason.contains("Max Slippage")
-        || pnl_pct <= cfg.stop_loss_pct
+        || is_historical_exit_toxic(pnl_pct, cfg)
 }
 
 pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String {
@@ -320,6 +324,19 @@ mod tests {
             }
             _ => panic!("Expected Max Slippage Loss exit"),
         }
+    }
+
+    #[test]
+    fn test_is_historical_exit_toxic() {
+        let cfg = RiskConfig::default();
+        // stop_loss_pct = -20.0, flash_dump_tick_pct = -15.0
+        assert!(is_historical_exit_toxic(-20.0, &cfg));
+        assert!(is_historical_exit_toxic(-22.0, &cfg));
+        assert!(is_historical_exit_toxic(-15.0, &cfg));
+        assert!(is_historical_exit_toxic(-17.5, &cfg));
+        assert!(!is_historical_exit_toxic(-10.0, &cfg));
+        assert!(!is_historical_exit_toxic(0.0, &cfg));
+        assert!(!is_historical_exit_toxic(45.0, &cfg));
     }
 
     #[test]

@@ -958,7 +958,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if t.token_mint != candidate.token_mint {
                             return false;
                         }
-                        if eval_cfg.risk.toxic_exit_permanent_ban && t.is_toxic {
+                        let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &eval_cfg.risk);
+                        if eval_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade {
                             println!("[ANTI-CHURN] Permanent ban active for toxic token: {} ({})", candidate.symbol, candidate.token_mint);
                             return true;
                         }
@@ -1166,7 +1167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     pnl_pct,
                     reason,
                     closed_at_epoch: now_epoch,
-                    is_toxic,
+                    is_toxic: is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk),
                 });
             }
         }
@@ -1194,7 +1195,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let now_sec = chrono::Utc::now().timestamp() as u64;
                                 let is_quarantined = guard.closed_trades.iter().any(|t| {
                                     if t.token_mint != mint { return false; }
-                                    if scanner_cfg.risk.toxic_exit_permanent_ban && t.is_toxic { return true; }
+                                    let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &scanner_cfg.risk);
+                                    if scanner_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade { return true; }
                                     if now_sec < t.closed_at_epoch.saturating_add(scanner_cfg.risk.reentry_cooldown_secs) { return true; }
                                     false
                                 });
