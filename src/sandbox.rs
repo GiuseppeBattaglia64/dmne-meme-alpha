@@ -480,12 +480,18 @@ impl VpinCalculator {
 // STEP 2: DETERMINISTIC v0.7.1 EXIT ENVELOPE COUNTERFACTUAL
 // ============================================================================
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopLossExecutionMode {
+    Ideal,
+    RealisticGapSlippage,
+}
+
 /// Computes the exact gross PnL % and exit rule according to the deterministic v0.7.1 exit ladder:
 /// - Case A: peak_pnl_pct >= tp2_trigger_pct (+90%) -> TP1 (40% @ +45%), TP2 (35% @ +90%), Runner (25% @ Peak - 18% rel drop)
 /// - Case B: peak_pnl_pct >= tp1_trigger_pct (+45%) -> TP1 (40% @ +45%), Remaining (60% @ Peak - 18% rel drop)
 /// - Case C: peak_pnl_pct >= breakeven_arm_pct (+35%) -> exits at max(actual_exit_pnl_pct, breakeven_floor_pct [+12%])
 /// - Case D: peak_pnl_pct < early_abort_max_peak_pct (+1%) AND hold_secs >= early_abort_window_secs (45s) AND actual <= early_abort_loss_pct (-10%) -> early abort (-10%)
-/// - Case E: actual_exit_pnl_pct <= stop_loss_pct (-20%) -> hard stop loss (-20%)
+/// - Case E: actual_exit_pnl_pct <= stop_loss_pct (-20%) -> Ideal (-20%) or Realistic Gap-Slippage Stop-Loss
 /// - Case F: Otherwise natural exit at actual_exit_pnl_pct
 pub fn compute_v071_gross_pnl_pct(
     entry_price: f64,
@@ -493,6 +499,7 @@ pub fn compute_v071_gross_pnl_pct(
     actual_exit_price: f64,
     hold_secs: u64,
     risk_cfg: &RiskConfig,
+    sl_mode: StopLossExecutionMode,
 ) -> (f64, &'static str) {
     if entry_price <= 0.0 {
         return (0.0, "INVALID_ENTRY_PRICE");
@@ -536,9 +543,16 @@ pub fn compute_v071_gross_pnl_pct(
         return (risk_cfg.early_abort_loss_pct, "EARLY_ABORT_EXIT");
     }
 
-    // Case E: Hard Stop-Loss
+    // Case E: Hard Stop-Loss (Ideal vs Realistic Gap-Slippage Mode)
     if actual_exit_pnl_pct <= risk_cfg.stop_loss_pct {
-        return (risk_cfg.stop_loss_pct, "HARD_STOP_LOSS_EXIT");
+        let gross = match sl_mode {
+            StopLossExecutionMode::Ideal => risk_cfg.stop_loss_pct,
+            StopLossExecutionMode::RealisticGapSlippage => {
+                (risk_cfg.stop_loss_pct + 0.35 * (actual_exit_pnl_pct - risk_cfg.stop_loss_pct))
+                    .max(risk_cfg.max_slippage_loss_pct * 1.35)
+            }
+        };
+        return (gross, "HARD_STOP_LOSS_EXIT");
     }
 
     // Case F: Natural Exit
@@ -552,6 +566,7 @@ pub fn simulate_v071_exit(
     hold_secs: u64,
     size_sol: f64,
     risk_cfg: &RiskConfig,
+    sl_mode: StopLossExecutionMode,
 ) -> (f64, f64, String) {
     let (gross_pnl_pct, reason) = compute_v071_gross_pnl_pct(
         entry_price,
@@ -559,6 +574,7 @@ pub fn simulate_v071_exit(
         actual_exit_price,
         hold_secs,
         risk_cfg,
+        sl_mode,
     );
     let net_sol = compute_net_realized_sol(size_sol, gross_pnl_pct, risk_cfg);
     let net_pnl_pct = compute_net_pnl_pct(size_sol, net_sol);
@@ -706,32 +722,37 @@ mod tests {
         let size_sol = 0.10;
 
         // Case A: peak +100% (>= 90%) -> TP2 Runner Exit
-        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 2.0, 1.5, 300, size_sol, &risk_cfg);
+        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 2.0, 1.5, 300, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);
         assert_eq!(reason, "TP2_RUNNER_EXIT");
         assert!(net_pnl > 60.0);
 
         // Case B: peak +60% (>= 45%, < 90%) -> TP1 Trailing Exit
-        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.6, 1.2, 200, size_sol, &risk_cfg);
+        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.6, 1.2, 200, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);
         assert_eq!(reason, "TP1_TRAILING_EXIT");
         assert!(net_pnl > 30.0);
 
         // Case C: peak +40% (>= 35%, < 45%), exit at 0.95 (-5%) -> Breakeven Guard (+12% floor)
-        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.4, 0.95, 150, size_sol, &risk_cfg);
+        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.4, 0.95, 150, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);
         assert_eq!(reason, "BREAKEVEN_GUARD_EXIT");
         assert!(net_pnl > 10.0);
 
         // Case D: peak +0.5% (< 1%), hold 50s (>= 45s), exit at 0.85 (-15% <= -10%) -> Early Abort (-10%)
-        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.005, 0.85, 50, size_sol, &risk_cfg);
+        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.005, 0.85, 50, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);
         assert_eq!(reason, "EARLY_ABORT_EXIT");
         assert!(net_pnl <= -10.0 && net_pnl > -15.0);
 
-        // Case E: exit at 0.50 (-50% <= -20%) -> Hard Stop Loss (-20%)
-        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.10, 0.50, 100, size_sol, &risk_cfg);
+        // Case E (Ideal SL): exit at 0.50 (-50% <= -20%) -> Hard Stop Loss (-20%)
+        let (net_pnl_ideal, _net_sol, reason) = simulate_v071_exit(entry_price, 1.10, 0.50, 100, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);
         assert_eq!(reason, "HARD_STOP_LOSS_EXIT");
-        assert!(net_pnl <= -20.0 && net_pnl > -25.0);
+        assert!(net_pnl_ideal <= -20.0 && net_pnl_ideal > -25.0);
+
+        // Case E (Realistic Gap-Slippage SL): exit at 0.50 (-50%) -> Gap exit around -30.5% gross (-31.2% net)
+        let (net_pnl_gap, _net_sol, reason) = simulate_v071_exit(entry_price, 1.10, 0.50, 100, size_sol, &risk_cfg, StopLossExecutionMode::RealisticGapSlippage);
+        assert_eq!(reason, "HARD_STOP_LOSS_EXIT");
+        assert!(net_pnl_gap < -25.0 && net_pnl_gap >= -35.0);
 
         // Case F: peak +15%, exit at 1.08 (+8%) -> Natural Exit
-        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.15, 1.08, 100, size_sol, &risk_cfg);
+        let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.15, 1.08, 100, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);
         assert_eq!(reason, "NATURAL_EXIT");
         assert!(net_pnl > 6.0 && net_pnl < 8.0);
     }
