@@ -9,6 +9,7 @@ pub struct ActivePosition {
     pub token_mint: String,
     pub symbol: String,
     pub entry_price: f64,
+    pub last_price: f64,
     pub initial_size_sol: f64,
     pub remaining_size_sol: f64,
     pub remaining_token_amount: u64,
@@ -28,6 +29,7 @@ pub enum ExitAction {
     },
     FullExit {
         rule_label: String,
+        is_toxic: bool,
     },
 }
 
@@ -38,42 +40,56 @@ pub fn evaluate_position_exit(
     cfg: &RiskConfig,
 ) -> ExitAction {
     let pnl_pct = (((current_price - pos.entry_price) / pos.entry_price) * 100.0 * 1e6).round() / 1e6;
+    let tick_drop_pct = if pos.last_price > 0.0 {
+        ((current_price - pos.last_price) / pos.last_price) * 100.0
+    } else {
+        0.0
+    };
 
-    // Update high-water mark
     if pnl_pct > pos.peak_pnl_pct {
         pos.peak_pnl_pct = pnl_pct;
     }
 
     let elapsed_secs = now_epoch.saturating_sub(pos.opened_at_epoch);
 
-    // 0. Max Slippage Loss Protection (-25%)
+    // 1. Max Adverse Slippage Cutoff
     if pnl_pct <= cfg.max_slippage_loss_pct {
         return ExitAction::FullExit {
             rule_label: format!("Max Slippage Loss ({:.0}%)", cfg.max_slippage_loss_pct),
+            is_toxic: true,
         };
     }
 
-    // 1. Hard Stop-Loss (-20%)
+    // 2. Hard Stop-Loss
     if pnl_pct <= cfg.stop_loss_pct {
         return ExitAction::FullExit {
             rule_label: format!("Stop-Loss ({:.0}%)", cfg.stop_loss_pct),
+            is_toxic: true,
         };
     }
 
-    // 2. Tier 1 Take-Profit (+45% -> Sell 40% of initial position)
+    // 3. Flash Dump Circuit Breaker (Only triggers when underwater <= flash_dump_max_pnl_pct)
+    if tick_drop_pct <= cfg.flash_dump_tick_pct && pnl_pct <= cfg.flash_dump_max_pnl_pct {
+        return ExitAction::FullExit {
+            rule_label: format!("Flash Dump Breaker ({:.0}%)", cfg.flash_dump_tick_pct),
+            is_toxic: true,
+        };
+    }
+
+    // 4. Tier 1 Take-Profit
     if !pos.tp1_executed && pnl_pct >= cfg.tp1_trigger_pct {
         pos.tp1_executed = true;
         let sol_closed = pos.initial_size_sol * cfg.tp1_sell_fraction;
         pos.remaining_size_sol = (pos.remaining_size_sol - sol_closed).max(0.0);
 
         return ExitAction::PartialSell {
-            sell_fraction_of_remaining: cfg.tp1_sell_fraction, // 40% of total tokens
+            sell_fraction_of_remaining: cfg.tp1_sell_fraction,
             sol_basis_closed: sol_closed,
             rule_label: format!("TP1 Scale-Out (+{:.0}%)", cfg.tp1_trigger_pct),
         };
     }
 
-    // 3. Tier 2 Take-Profit (+90% -> Sell 35% of initial = 58.33% of remaining 60%)
+    // 5. Tier 2 Take-Profit
     if pos.tp1_executed && !pos.tp2_executed && pnl_pct >= cfg.tp2_trigger_pct {
         pos.tp2_executed = true;
         let sol_closed = pos.initial_size_sol * cfg.tp2_sell_fraction;
@@ -87,27 +103,26 @@ pub fn evaluate_position_exit(
         };
     }
 
-    // 4. Moonbag / Post-TP1 Trailing Stop (-18% drawdown from Peak)
+    // 6. Moonbag Trailing Stop (Post-TP1)
     if pos.tp1_executed && pnl_pct <= (pos.peak_pnl_pct - cfg.runner_trailing_drop_pct) {
         return ExitAction::FullExit {
-            rule_label: format!(
-                "Trailing Runner (Peak +{:.1}%)",
-                pos.peak_pnl_pct
-            ),
+            rule_label: format!("Trailing Runner (Peak +{:.1}%)", pos.peak_pnl_pct),
+            is_toxic: false,
         };
     }
 
-    // 5. Uncapped Breakeven Floor Guard (Armed at +35%, Floor at +12%)
+    // 7. Uncapped Breakeven Guard
     if !pos.tp1_executed
         && pos.peak_pnl_pct >= cfg.breakeven_arm_pct
         && pnl_pct <= cfg.breakeven_floor_pct
     {
         return ExitAction::FullExit {
             rule_label: format!("Breakeven Guard (+{:.0}%)", cfg.breakeven_floor_pct),
+            is_toxic: false,
         };
     }
 
-    // 6. Conditional Stagnation TTL (240s, only if token never showed momentum)
+    // 8. Conditional Stagnation TTL
     if !pos.tp1_executed
         && elapsed_secs >= cfg.stagnation_ttl_secs as u64
         && pos.peak_pnl_pct < cfg.stagnation_max_peak_pct
@@ -116,6 +131,7 @@ pub fn evaluate_position_exit(
     {
         return ExitAction::FullExit {
             rule_label: "Stagnation TTL Exit".to_string(),
+            is_toxic: false,
         };
     }
 
@@ -151,6 +167,7 @@ mod tests {
             token_mint: "EW1b9rcLAJe634mgxb5r4bVYxDoGU37o7YazBzjTpump".to_string(),
             symbol: "RM".to_string(),
             entry_price: 1.0,
+            last_price: 1.0,
             initial_size_sol: 0.10,
             remaining_size_sol: 0.10,
             remaining_token_amount: 1_000_000,
@@ -167,8 +184,27 @@ mod tests {
         let cfg = RiskConfig::default();
         let action = evaluate_position_exit(&mut pos, 0.79, 1050, &cfg);
         match action {
-            ExitAction::FullExit { rule_label } => assert!(rule_label.contains("Stop-Loss")),
+            ExitAction::FullExit { rule_label, is_toxic } => {
+                assert!(rule_label.contains("Stop-Loss"));
+                assert!(is_toxic);
+            }
             _ => panic!("Expected Stop-Loss exit"),
+        }
+    }
+
+    #[test]
+    fn test_flash_dump_breaker() {
+        let mut pos = setup_test_position();
+        let cfg = RiskConfig::default();
+
+        // Single-tick drop of -16% from last_price 1.0 to 0.84, with PnL <= 0%
+        let action = evaluate_position_exit(&mut pos, 0.84, 1050, &cfg);
+        match action {
+            ExitAction::FullExit { rule_label, is_toxic } => {
+                assert!(rule_label.contains("Flash Dump Breaker"));
+                assert!(is_toxic);
+            }
+            _ => panic!("Expected Flash Dump Breaker exit"),
         }
     }
 
@@ -214,7 +250,10 @@ mod tests {
         // Pull back from +60% to +41% (drawdown 19% > 18%)
         let action = evaluate_position_exit(&mut pos, 1.41, 1060, &cfg);
         match action {
-            ExitAction::FullExit { rule_label } => assert!(rule_label.contains("Trailing Runner")),
+            ExitAction::FullExit { rule_label, is_toxic } => {
+                assert!(rule_label.contains("Trailing Runner"));
+                assert!(!is_toxic);
+            }
             _ => panic!("Expected Trailing Runner exit"),
         }
     }
@@ -232,7 +271,10 @@ mod tests {
         // Retrace to +11% (below +12% floor)
         let action = evaluate_position_exit(&mut pos, 1.11, 1060, &cfg);
         match action {
-            ExitAction::FullExit { rule_label } => assert!(rule_label.contains("Breakeven Guard")),
+            ExitAction::FullExit { rule_label, is_toxic } => {
+                assert!(rule_label.contains("Breakeven Guard"));
+                assert!(!is_toxic);
+            }
             _ => panic!("Expected Breakeven Guard exit"),
         }
     }
@@ -245,7 +287,10 @@ mod tests {
         // After 250s, peak was only +4%, currently -2%
         let action = evaluate_position_exit(&mut pos, 0.98, 1250, &cfg);
         match action {
-            ExitAction::FullExit { rule_label } => assert!(rule_label.contains("Stagnation TTL")),
+            ExitAction::FullExit { rule_label, is_toxic } => {
+                assert!(rule_label.contains("Stagnation TTL"));
+                assert!(!is_toxic);
+            }
             _ => panic!("Expected Stagnation TTL exit"),
         }
     }
@@ -258,7 +303,10 @@ mod tests {
         // Gap down to -26% (exceeds -25% max slippage)
         let action = evaluate_position_exit(&mut pos, 0.74, 1050, &cfg);
         match action {
-            ExitAction::FullExit { rule_label } => assert!(rule_label.contains("Max Slippage Loss")),
+            ExitAction::FullExit { rule_label, is_toxic } => {
+                assert!(rule_label.contains("Max Slippage Loss"));
+                assert!(is_toxic);
+            }
             _ => panic!("Expected Max Slippage Loss exit"),
         }
     }
@@ -290,4 +338,3 @@ mod tests {
         assert_eq!(format_position_status(&pos, &cfg), "25% Runner Moonbag");
     }
 }
-

@@ -1036,67 +1036,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // DCS CRUISE CONTROL EXECUTION SUPERVISOR
                 // ==========================================
 
-                // Rule 1: Flash Dump Circuit Breaker (Detect sudden tick collapse on sub-breakeven positions)
-                let tick_drop_pct = if pos.last_price_sol > 0.0 {
-                    ((pos.current_price_sol - pos.last_price_sol) / pos.last_price_sol) * 100.0
-                } else {
-                    0.0
-                };
-                if tick_drop_pct <= effective_risk_cfg.flash_dump_tick_pct && pos.pnl_pct <= effective_risk_cfg.flash_dump_max_pnl_pct {
-                    let exit_pnl = pos.pnl_pct;
-                    let realized = pos.size_sol * (exit_pnl / 100.0);
-                    println!(
-                        "[CRUISE CONTROL] Flash Dump detected on {} ({:.1}% tick drop <= {:.1}%, PnL {:.1}% <= {:.1}%). Emergency Exit.",
-                        pos.symbol, tick_drop_pct, effective_risk_cfg.flash_dump_tick_pct, pos.pnl_pct, effective_risk_cfg.flash_dump_max_pnl_pct
-                    );
-                    closed_indices.push((idx, format!("Flash Dump Breaker ({:.0}%)", effective_risk_cfg.flash_dump_tick_pct), realized, exit_pnl));
-                } else {
-                    let mut active_pos = risk::ActivePosition {
-                        token_mint: pos.token_mint.clone(),
-                        symbol: pos.symbol.clone(),
-                        entry_price: pos.entry_price_sol,
-                        initial_size_sol: pos.initial_size_sol,
-                        remaining_size_sol: pos.size_sol,
-                        remaining_token_amount: 0,
-                        peak_pnl_pct: peak_pct,
-                        tp1_executed: pos.tranche_1_taken,
-                        tp2_executed: pos.tranche_2_taken,
-                        opened_at_epoch: pos.entry_timestamp_epoch,
-                    };
-
-                    let action = risk::evaluate_position_exit(
-                        &mut active_pos,
-                        pos.current_price_sol,
-                        now_epoch,
-                        &effective_risk_cfg,
-                    );
-
-                    match action {
-                        risk::ExitAction::PartialSell { sol_basis_closed, rule_label, .. } => {
-                            let realized = sol_basis_closed * (pos.pnl_pct / 100.0);
-                            state.current_bankroll_sol += sol_basis_closed + realized;
-                            pos.size_sol = active_pos.remaining_size_sol;
-                            pos.tranche_1_taken = active_pos.tp1_executed;
-                            pos.tranche_2_taken = active_pos.tp2_executed;
-                            println!(
-                                "[CRUISE CONTROL] {} on {} (+{:.1}%): Recaptured capital + {:.5} SOL gain.",
-                                rule_label, pos.symbol, pos.pnl_pct, realized
-                            );
-                        }
-                        risk::ExitAction::FullExit { rule_label } => {
-                            let exit_pnl = pos.pnl_pct;
-                            let realized = pos.size_sol * (exit_pnl / 100.0);
-                            closed_indices.push((idx, rule_label, realized, exit_pnl));
-                        }
-                        risk::ExitAction::Hold => {}
-                    }
-                }
-
-                // UI status milestones
-                let active_pos_status = risk::ActivePosition {
+                let mut active_pos = risk::ActivePosition {
                     token_mint: pos.token_mint.clone(),
                     symbol: pos.symbol.clone(),
                     entry_price: pos.entry_price_sol,
+                    last_price: pos.last_price_sol,
                     initial_size_sol: pos.initial_size_sol,
                     remaining_size_sol: pos.size_sol,
                     remaining_token_amount: 0,
@@ -1105,13 +1049,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tp2_executed: pos.tranche_2_taken,
                     opened_at_epoch: pos.entry_timestamp_epoch,
                 };
-                pos.status = risk::format_position_status(&active_pos_status, &effective_risk_cfg);
+
+                let action = risk::evaluate_position_exit(
+                    &mut active_pos,
+                    pos.current_price_sol,
+                    now_epoch,
+                    &effective_risk_cfg,
+                );
+
+                match action {
+                    risk::ExitAction::PartialSell { sol_basis_closed, rule_label, .. } => {
+                        let realized = sol_basis_closed * (pos.pnl_pct / 100.0);
+                        state.current_bankroll_sol += sol_basis_closed + realized;
+                        pos.size_sol = active_pos.remaining_size_sol;
+                        pos.tranche_1_taken = active_pos.tp1_executed;
+                        pos.tranche_2_taken = active_pos.tp2_executed;
+                        println!(
+                            "[CRUISE CONTROL] {} on {} (+{:.1}%): Recaptured capital + {:.5} SOL gain.",
+                            rule_label, pos.symbol, pos.pnl_pct, realized
+                        );
+                    }
+                    risk::ExitAction::FullExit { rule_label, is_toxic } => {
+                        let exit_pnl = pos.pnl_pct;
+                        let realized = pos.size_sol * (exit_pnl / 100.0);
+                        println!(
+                            "[CRUISE CONTROL] Exit triggered on {} by {} (PnL: {:+.1}%, toxic: {}).",
+                            pos.symbol, rule_label, exit_pnl, is_toxic
+                        );
+                        closed_indices.push((idx, rule_label, realized, exit_pnl, is_toxic));
+                    }
+                    risk::ExitAction::Hold => {}
+                }
+
+                // UI status milestones
+                pos.status = risk::format_position_status(&active_pos, &effective_risk_cfg);
 
                 // Update last observed tick price for flash dump detection
                 pos.last_price_sol = pos.current_price_sol;
             }
 
-            for (idx, reason, pnl_sol, pnl_pct) in closed_indices.into_iter().rev() {
+            for (idx, reason, pnl_sol, pnl_pct, is_toxic) in closed_indices.into_iter().rev() {
                 let bankroll_before = state.current_bankroll_sol;
                 let pos = state.active_positions.remove(idx);
                 state.current_bankroll_sol += pnl_sol;
@@ -1151,7 +1128,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         ).await;
                     }
                 });
-                let is_toxic = risk::is_toxic_exit(&reason, pnl_pct, &effective_risk_cfg);
                 state.closed_trades.push(ClosedTrade {
                     token_mint: pos.token_mint,
                     symbol: pos.symbol,
