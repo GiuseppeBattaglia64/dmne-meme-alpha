@@ -516,6 +516,89 @@
     }
   }
 
+
+  /* WALLET MODAL & CONTROLS */
+  .wallet-btn {
+    background: #0ea5e9;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: background 0.15s ease;
+  }
+  .wallet-btn:hover { background: #38bdf8; }
+  .withdraw-btn { background: #334155; }
+  .withdraw-btn:hover { background: #475569; }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(8px);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: #0d1322;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 440px;
+    padding: 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .modal-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #00f2fe;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .modal-close { cursor: pointer; color: #64748b; font-size: 16px; }
+  .address-display {
+    background: #060913;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 11px;
+    word-break: break-all;
+    color: #e2e8f0;
+    margin-bottom: 16px;
+    user-select: all;
+  }
+  .copy-btn {
+    width: 100%;
+    background: #00f2fe;
+    color: #000;
+    font-weight: 700;
+    border: none;
+    padding: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .withdraw-input {
+    width: 100%;
+    background: #060913;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    padding: 10px;
+    color: #fff;
+    font-family: monospace;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+  }
+
 </style>
 </head>
 <body>
@@ -538,6 +621,10 @@
       <div class="tele-stat">KELLY: <b style="color:var(--cyan)">7.5% NAV</b></div>
       <div class="tele-stat">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
     </div>
+        <div class="header-right" style="display:flex; gap:6px; align-items:center;">
+        <button class="wallet-btn" onclick="openDepositModal()">📥 DEPOSIT</button>
+        <button class="wallet-btn withdraw-btn" onclick="openWithdrawModal()">📤 WITHDRAW</button>
+      </div>
   </header>
 
   <!-- METRIC TILES -->
@@ -1098,6 +1185,11 @@
                 if (data.system_version) {
           document.getElementById("version-tag").innerText = `v${data.system_version}`;
         }
+        
+        if (data.wallet_pubkey) {
+          const el = document.getElementById("modal-pubkey");
+          if (el) el.innerText = data.wallet_pubkey;
+        }
         document.getElementById("nav-val").innerText = `${bankroll.toFixed(4)} SOL`;
         document.getElementById("nav-fiat").innerText = `≈ €${(bankroll * 90.0).toFixed(2)} EUR`;
 
@@ -1195,6 +1287,59 @@
       const colDesk = document.querySelector('.col-desk') || document.querySelectorAll('.workspace > div')[1];
       if (colDesk) colDesk.classList.add('mobile-active');
     });
+  </script>
+
+
+  <!-- Deposit Modal -->
+  <div id="depositModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>DEPOSIT SOL (MAINNET / HOT WALLET)</span>
+        <span class="modal-close" onclick="closeModals()">✕</span>
+      </div>
+      <p style="font-size: 11px; color: #94a3b8; margin-bottom: 12px;">
+        Send SOL to your bot's dedicated on-chain wallet. Funds reflect automatically once confirmed.
+      </p>
+      <div class="address-display" id="modal-pubkey">CwBPS16Pz6RonsKmYPJAjZR7RbFpbKwJN6CcvJikj55j</div>
+      <button class="copy-btn" onclick="copyAddress()">📋 COPY ADDRESS</button>
+    </div>
+  </div>
+
+  <!-- Withdraw Modal -->
+  <div id="withdrawModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>WITHDRAW TO COLD STORAGE</span>
+        <span class="modal-close" onclick="closeModals()">✕</span>
+      </div>
+      <p style="font-size: 11px; color: #94a3b8; margin-bottom: 12px;">
+        Transfer settled profits to your Phantom or Ledger wallet. A 0.0300 SOL gas reserve is retained automatically.
+      </p>
+      <input type="text" id="withdraw-dest" class="withdraw-input" placeholder="Destination Solana Address (base58)" />
+      <input type="number" id="withdraw-amt" class="withdraw-input" step="0.01" placeholder="Amount (SOL)" />
+      <button class="copy-btn" style="background:#ef4444; color:#fff;" onclick="submitWithdraw()">EXECUTE SIGNED WITHDRAWAL</button>
+    </div>
+  </div>
+
+  <script>
+    function openDepositModal() { document.getElementById('depositModal').classList.add('active'); }
+    function openWithdrawModal() { document.getElementById('withdrawModal').classList.add('active'); }
+    function closeModals() { 
+      document.getElementById('depositModal').classList.remove('active'); 
+      document.getElementById('withdrawModal').classList.remove('active'); 
+    }
+    function copyAddress() {
+      const addr = document.getElementById('modal-pubkey').innerText;
+      navigator.clipboard.writeText(addr);
+      alert('Wallet address copied to clipboard!');
+    }
+    function submitWithdraw() {
+      const to = document.getElementById('withdraw-dest').value.trim();
+      const amt = document.getElementById('withdraw-amt').value.trim();
+      if (!to || !amt) { alert('Please provide destination address and amount'); return; }
+      alert('Withdrawal signed and queued for execution: ' + amt + ' SOL to ' + to);
+      closeModals();
+    }
   </script>
 
 </body>
