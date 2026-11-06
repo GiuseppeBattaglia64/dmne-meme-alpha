@@ -109,7 +109,52 @@ pub async fn fetch_settled_trades(client: &Client, limit: i64) -> Vec<Value> {
     trades
 }
 
+/// Queries all active users from PostgreSQL
+pub async fn fetch_active_users(client: &Client) -> Vec<Value> {
+    let stmt = "
+        SELECT id, display_name, role, execution_mode, pubkey, paper_bankroll_sol
+        FROM users
+        WHERE is_active = true
+        ORDER BY created_at ASC;
+    ";
+    let mut users = Vec::new();
+    if let Ok(rows) = client.query(stmt, &[]).await {
+        for r in rows {
+            let id: String = r.get(0);
+            let name: String = r.get(1);
+            let role: String = r.get(2);
+            let mode: String = r.get(3);
+            let pubkey: String = r.get(4);
+            let paper_bankroll: f64 = r.get(5);
+            users.push(json!({
+                "id": id,
+                "name": name,
+                "role": role,
+                "mode": mode,
+                "pubkey": pubkey,
+                "paper_bankroll": paper_bankroll
+            }));
+        }
+    }
+    users
+}
 
+/// Toggles user execution mode between PAPER and LIVE
+pub async fn toggle_user_mode(client: &Client, user_id: &str) -> Option<String> {
+    let stmt = "
+        UPDATE users
+        SET execution_mode = CASE WHEN execution_mode = 'LIVE' THEN 'PAPER' ELSE 'LIVE' END
+        WHERE id = $1
+        RETURNING execution_mode;
+    ";
+    if let Ok(rows) = client.query(stmt, &[&user_id]).await {
+        if let Some(r) = rows.first() {
+            let mode: String = r.get(0);
+            return Some(mode);
+        }
+    }
+    None
+}
 
 /// Fetches the latest dynamic parameter override published by an AI Agent
 pub async fn fetch_latest_override(client: &Client, agent_id: &str) -> Option<(f64, f64, i32)> {

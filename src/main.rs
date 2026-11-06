@@ -624,6 +624,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 json_resp
                             );
                             let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /api/users") {
+                            let mut users = Vec::new();
+                            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                users = db::fetch_active_users(&pg_client).await;
+                            }
+                            let json_resp = serde_json::to_string(&users).unwrap_or_else(|_| "[]".to_string());
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /api/user/toggle-mode") || req.starts_with("POST /api/user/toggle-mode") {
+                            let user_id = req.split("user=").nth(1).unwrap_or("admin").split(&[' ', '&', '\r', '\n'][..]).next().unwrap_or("admin");
+                            let mut new_mode = "PAPER".to_string();
+                            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                if let Some(m) = db::toggle_user_mode(&pg_client, user_id).await {
+                                    new_mode = m;
+                                }
+                            }
+                            let json_resp = serde_json::json!({ "user": user_id, "mode": new_mode }).to_string();
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /api/admin/users/create") || req.starts_with("POST /api/admin/users/create") {
+                            let json_resp = serde_json::json!({ "status": "PROVISIONED" }).to_string();
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
                         } else if req.starts_with("GET /api/trades") {
                             let mut trades = Vec::new();
                             if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
