@@ -574,6 +574,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 json_resp
                             );
                             let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /icon.png") || req.starts_with("HEAD /icon.png") {
+                            let icon_bytes = tokio::fs::read("/home/ubuntu/dmne-meme-alpha/icon.png").await.unwrap_or_default();
+                            let res_header = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nCache-Control: public, max-age=86400\r\nConnection: close\r\n\r\n",
+                                icon_bytes.len()
+                            );
+                            if req.starts_with("HEAD") {
+                                let _ = socket.write_all(res_header.as_bytes()).await;
+                            } else {
+                                let mut resp = res_header.into_bytes();
+                                resp.extend_from_slice(&icon_bytes);
+                                let _ = socket.write_all(&resp).await;
+                            }
                         } else {
                             let html_body = tokio::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/dashboard.html").await
                                 .unwrap_or_else(|_| DASHBOARD_HTML.to_string());
