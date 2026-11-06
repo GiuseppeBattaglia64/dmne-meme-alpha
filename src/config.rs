@@ -286,7 +286,7 @@ fn default_hawkes_min_branching_ratio() -> f64 { 0.55 }
 fn default_hawkes_max_branching_ratio() -> f64 { 0.98 }
 
 fn default_max_slot0_bundle_supply_ratio() -> f64 { 0.35 }
-fn default_min_holder_shannon_entropy() -> f64 { 1.85 }
+fn default_min_holder_shannon_entropy() -> f64 { 1.25 }
 fn default_max_shared_funder_cluster_ratio() -> f64 { 0.30 }
 
 fn default_vpin_bucket_size_sol() -> f64 { 10.0 }
