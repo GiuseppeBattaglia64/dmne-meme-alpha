@@ -237,6 +237,18 @@ struct PriceChange {
 }
 
 #[derive(Deserialize)]
+struct TxnCount {
+    buys: Option<u32>,
+    sells: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct DexTxns {
+    m5: Option<TxnCount>,
+    h1: Option<TxnCount>,
+}
+
+#[derive(Deserialize)]
 struct DexPair {
     #[serde(rename = "pairAddress")]
     pair_address: Option<String>,
@@ -248,6 +260,7 @@ struct DexPair {
     fdv: Option<f64>,
     #[serde(rename = "priceChange")]
     price_change: Option<PriceChange>,
+    txns: Option<DexTxns>,
 }
 
 #[derive(Deserialize)]
@@ -315,7 +328,7 @@ async fn verify_token_security(client: &Client, rpc_url: &str, mint: &str) -> bo
     true
 }
 
-async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<(f64, String, String, f64, f64, f64)> {
+async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<(f64, String, String, f64, f64, f64, f64)> {
     let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", token_mint);
     if let Ok(res) = client.get(&url).timeout(Duration::from_millis(1500)).send().await {
         if let Ok(data) = res.json::<DexResponse>().await {
@@ -328,7 +341,11 @@ async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<(f64, Str
                         let liq = best_pair.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
                         let fdv = best_pair.fdv.unwrap_or(0.0);
                         let m5_change = best_pair.price_change.as_ref().and_then(|p| p.m5.or(p.h1)).unwrap_or(0.0);
-                        return Some((price_sol, sym, pair_addr, liq, fdv, m5_change));
+                        let txns = best_pair.txns.as_ref().and_then(|t| t.m5.as_ref().or(t.h1.as_ref()));
+                        let buys = txns.and_then(|t| t.buys).unwrap_or(0) as f64;
+                        let sells = txns.and_then(|t| t.sells).unwrap_or(0) as f64;
+                        let buy_sell_ratio = if sells > 0.0 { buys / sells } else if buys > 0.0 { 10.0 } else { 1.0 };
+                        return Some((price_sol, sym, pair_addr, liq, fdv, m5_change, buy_sell_ratio));
                     }
                 }
             }
@@ -968,7 +985,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             for (idx, mint) in active_mints {
-                if let Some((real_price, _, _, liq, fdv, _)) = fetch_live_price(&eval_client, &mint).await {
+                if let Some((real_price, _, _, liq, fdv, _, _)) = fetch_live_price(&eval_client, &mint).await {
                     let mut guard = eval_state.write().await;
                     if idx < guard.active_positions.len() {
                         let pos = &mut guard.active_positions[idx];
@@ -1005,7 +1022,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut effective_risk_cfg = eval_cfg.risk.clone();
             effective_risk_cfg.stagnation_ttl_secs = dynamic_ttl_secs;
-            effective_risk_cfg.runner_trailing_drop_pct *= dynamic_trail_mult / 2.20;
+            effective_risk_cfg.runner_trailing_drop_pct *= dynamic_trail_mult / effective_risk_cfg.cruise_baseline_trail_mult;
 
             // Evaluate dynamic exit rules
             let mut guard = eval_state.write().await;
@@ -1019,18 +1036,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // DCS CRUISE CONTROL EXECUTION SUPERVISOR
                 // ==========================================
 
-                // Rule 1: Flash Dump Circuit Breaker (Detect sudden tick collapse based on risk config)
+                // Rule 1: Flash Dump Circuit Breaker (Detect sudden tick collapse on sub-breakeven positions)
                 let tick_drop_pct = if pos.last_price_sol > 0.0 {
                     ((pos.current_price_sol - pos.last_price_sol) / pos.last_price_sol) * 100.0
                 } else {
                     0.0
                 };
-                if tick_drop_pct <= effective_risk_cfg.flash_dump_tick_pct {
+                if tick_drop_pct <= effective_risk_cfg.flash_dump_tick_pct && pos.pnl_pct <= effective_risk_cfg.flash_dump_max_pnl_pct {
                     let exit_pnl = pos.pnl_pct;
                     let realized = pos.size_sol * (exit_pnl / 100.0);
                     println!(
-                        "[CRUISE CONTROL] Flash Dump detected on {} ({:.1}% tick drop <= {:.1}% threshold). Emergency Exit.",
-                        pos.symbol, tick_drop_pct, effective_risk_cfg.flash_dump_tick_pct
+                        "[CRUISE CONTROL] Flash Dump detected on {} ({:.1}% tick drop <= {:.1}%, PnL {:.1}% <= {:.1}%). Emergency Exit.",
+                        pos.symbol, tick_drop_pct, effective_risk_cfg.flash_dump_tick_pct, pos.pnl_pct, effective_risk_cfg.flash_dump_max_pnl_pct
                     );
                     closed_indices.push((idx, format!("Flash Dump Breaker ({:.0}%)", effective_risk_cfg.flash_dump_tick_pct), realized, exit_pnl));
                 } else {
@@ -1179,7 +1196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // Slot-blocking guard removed: Discovery worker audits 100% continuously
                                 if !is_active && !is_quarantined {
                                     drop(guard);
-                                    if let Some((initial_price, sym, pair_addr, liq, fdv, m5_change)) = fetch_live_price(&scanner_client, &mint).await {
+                                    if let Some((initial_price, sym, pair_addr, liq, fdv, m5_change, buy_sell_ratio)) = fetch_live_price(&scanner_client, &mint).await {
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
                                         let min_liq = scanner_cfg.risk.min_entry_liquidity_usd;
                                         if liq < min_liq {
@@ -1199,7 +1216,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             continue;
                                         }
 
-                                        // Entry Momentum Gate
+                                        // Entry Momentum Gate: Lower bound
                                         if m5_change < scanner_cfg.risk.min_entry_price_change_pct {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
@@ -1213,6 +1230,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 lp_burned: false,
                                                 admitted: false,
                                                 rejection_reason: format!("ENTRY_MOMENTUM_BELOW_THRESHOLD ({:+.2}% < +{:.2}%)", m5_change, scanner_cfg.risk.min_entry_price_change_pct),
+                                            });
+                                            continue;
+                                        }
+
+                                        // Entry Momentum Gate: Upper bound (FOMO / Overextension ceiling)
+                                        if m5_change > scanner_cfg.risk.max_entry_price_change_pct {
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: format!("ENTRY_MOMENTUM_OVEREXTENDED (+{:.1}% > +{:.1}%)", m5_change, scanner_cfg.risk.max_entry_price_change_pct),
+                                            });
+                                            continue;
+                                        }
+
+                                        // Buy/Sell Orderflow Ratio Gate (Net buying pressure check)
+                                        if buy_sell_ratio < scanner_cfg.risk.min_entry_buy_sell_ratio {
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: format!("BUY_SELL_RATIO_BELOW_THRESHOLD ({:.2} < {:.2})", buy_sell_ratio, scanner_cfg.risk.min_entry_buy_sell_ratio),
                                             });
                                             continue;
                                         }

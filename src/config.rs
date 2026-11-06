@@ -53,17 +53,26 @@ pub struct EngineConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskConfig {
     pub stop_loss_pct: f64,
-    #[serde(default = "default_flash_dump_tick_pct")]
-    pub flash_dump_tick_pct: f64,
     #[serde(default = "default_max_slippage_loss_pct")]
     pub max_slippage_loss_pct: f64,
+    #[serde(default = "default_flash_dump_tick_pct")]
+    pub flash_dump_tick_pct: f64,
+    #[serde(default = "default_flash_dump_max_pnl_pct")]
+    pub flash_dump_max_pnl_pct: f64,
+
     pub breakeven_arm_pct: f64,
     pub breakeven_floor_pct: f64,
+
     pub tp1_trigger_pct: f64,
     pub tp1_sell_fraction: f64,
+
     pub tp2_trigger_pct: f64,
     pub tp2_sell_fraction: f64,
+
     pub runner_trailing_drop_pct: f64,
+    #[serde(default = "default_cruise_baseline_trail_mult")]
+    pub cruise_baseline_trail_mult: f64,
+
     pub stagnation_ttl_secs: i64,
     pub stagnation_max_peak_pct: f64,
     pub stagnation_band_min_pct: f64,
@@ -74,25 +83,34 @@ pub struct RiskConfig {
     pub reentry_cooldown_secs: u64,
     #[serde(default = "default_toxic_exit_permanent_ban")]
     pub toxic_exit_permanent_ban: bool,
-    #[serde(default = "default_min_entry_price_change_pct")]
-    pub min_entry_price_change_pct: f64,
     #[serde(default = "default_min_entry_liquidity_usd")]
     pub min_entry_liquidity_usd: f64,
+    #[serde(default = "default_min_entry_price_change_pct")]
+    pub min_entry_price_change_pct: f64,
+    #[serde(default = "default_max_entry_price_change_pct")]
+    pub max_entry_price_change_pct: f64,
+    #[serde(default = "default_min_entry_buy_sell_ratio")]
+    pub min_entry_buy_sell_ratio: f64,
 }
 
 fn default_flash_dump_tick_pct() -> f64 { -15.0 }
+fn default_flash_dump_max_pnl_pct() -> f64 { 0.0 }
 fn default_max_slippage_loss_pct() -> f64 { -25.0 }
+fn default_cruise_baseline_trail_mult() -> f64 { 2.20 }
 fn default_reentry_cooldown_secs() -> u64 { 3600 }
 fn default_toxic_exit_permanent_ban() -> bool { true }
-fn default_min_entry_price_change_pct() -> f64 { 1.5 }
 fn default_min_entry_liquidity_usd() -> f64 { 25000.0 }
+fn default_min_entry_price_change_pct() -> f64 { 1.5 }
+fn default_max_entry_price_change_pct() -> f64 { 85.0 }
+fn default_min_entry_buy_sell_ratio() -> f64 { 1.20 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
         Self {
             stop_loss_pct: -20.0,
-            flash_dump_tick_pct: -15.0,
             max_slippage_loss_pct: -25.0,
+            flash_dump_tick_pct: -15.0,
+            flash_dump_max_pnl_pct: 0.0,
             breakeven_arm_pct: 35.0,
             breakeven_floor_pct: 12.0,
             tp1_trigger_pct: 45.0,
@@ -100,14 +118,17 @@ impl Default for RiskConfig {
             tp2_trigger_pct: 90.0,
             tp2_sell_fraction: 0.35,
             runner_trailing_drop_pct: 18.0,
+            cruise_baseline_trail_mult: 2.20,
             stagnation_ttl_secs: 240,
             stagnation_max_peak_pct: 12.0,
             stagnation_band_min_pct: -8.0,
             stagnation_band_max_pct: 5.0,
             reentry_cooldown_secs: 3600,
             toxic_exit_permanent_ban: true,
-            min_entry_price_change_pct: 1.5,
             min_entry_liquidity_usd: 25000.0,
+            min_entry_price_change_pct: 1.5,
+            max_entry_price_change_pct: 85.0,
+            min_entry_buy_sell_ratio: 1.20,
         }
     }
 }

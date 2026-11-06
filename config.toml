@@ -1,7 +1,8 @@
 [risk]
 stop_loss_pct = -20.0
-flash_dump_tick_pct = -15.0
 max_slippage_loss_pct = -25.0
+flash_dump_tick_pct = -15.0
+flash_dump_max_pnl_pct = 0.0
 
 breakeven_arm_pct = 35.0
 breakeven_floor_pct = 12.0
@@ -13,14 +14,16 @@ tp2_trigger_pct = 90.0
 tp2_sell_fraction = 0.35
 
 runner_trailing_drop_pct = 18.0
+cruise_baseline_trail_mult = 2.20
 
 stagnation_ttl_secs = 240
 stagnation_max_peak_pct = 12.0
 stagnation_band_min_pct = -8.0
 stagnation_band_max_pct = 5.0
 
-# Anti-Churn Quarantine & Entry Momentum Gates
 reentry_cooldown_secs = 3600
 toxic_exit_permanent_ban = true
-min_entry_price_change_pct = 1.5
 min_entry_liquidity_usd = 25000.0
+min_entry_price_change_pct = 1.5
+max_entry_price_change_pct = 85.0
+min_entry_buy_sell_ratio = 1.20
