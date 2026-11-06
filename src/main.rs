@@ -1047,12 +1047,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
                 if let Some((_, trail, ttl)) = db::fetch_latest_override(&pg_client, "CRUISE_AGENT").await {
                     dynamic_trail_mult = trail;
-                    dynamic_ttl_secs = ttl as i64;
+                    dynamic_ttl_secs = ttl.max(0) as u64;
                 }
             }
 
             let mut effective_risk_cfg = eval_cfg.risk.clone();
-            effective_risk_cfg.stagnation_ttl_secs = dynamic_ttl_secs;
+            effective_risk_cfg.stagnation_ttl_secs = ((effective_risk_cfg.stagnation_ttl_secs as f64)
+                * (dynamic_ttl_secs as f64 / effective_risk_cfg.cruise_baseline_ttl_secs as f64))
+                .round() as u64;
             effective_risk_cfg.runner_trailing_drop_pct *= dynamic_trail_mult / effective_risk_cfg.cruise_baseline_trail_mult;
 
             // Evaluate dynamic exit rules

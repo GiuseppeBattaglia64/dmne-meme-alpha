@@ -137,7 +137,7 @@ pub fn evaluate_position_exit(
 
     // 8. Conditional Stagnation TTL
     if !pos.tp1_executed
-        && elapsed_secs >= cfg.stagnation_ttl_secs as u64
+        && elapsed_secs >= cfg.stagnation_ttl_secs
         && pos.peak_pnl_pct < cfg.stagnation_max_peak_pct
         && pnl_pct >= cfg.stagnation_band_min_pct
         && pnl_pct <= cfg.stagnation_band_max_pct
