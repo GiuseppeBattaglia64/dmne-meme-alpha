@@ -1,0 +1,24 @@
+[risk]
+# Hard downside protection
+stop_loss_pct = -20.0
+
+# Uncapped Breakeven Guard (only arms after a +35% move, protects +12% floor)
+breakeven_arm_pct = 35.0
+breakeven_floor_pct = 12.0
+
+# Multi-Tiered Convex Take-Profit
+tp1_trigger_pct = 45.0
+tp1_sell_fraction = 0.40
+
+tp2_trigger_pct = 90.0
+tp2_sell_fraction = 0.35
+
+# Moonbag trailing stop (applies to the remaining 25% runner or any position above +45% peak)
+runner_trailing_drop_pct = 18.0
+
+# Relaxed Stagnation TTL (only kills dead pools that never gained traction)
+stagnation_ttl_secs = 240
+stagnation_max_peak_pct = 12.0
+stagnation_band_min_pct = -8.0
+stagnation_band_max_pct = 5.0
+

@@ -45,6 +45,49 @@ pub struct EngineConfig {
     pub sim_initial_cu_limit: u32,
     pub min_sim_cu_threshold: u64,
     pub default_rpc_url: String,
+
+    // Institutional Risk Envelope
+    pub risk: RiskConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RiskConfig {
+    pub stop_loss_pct: f64,
+    pub breakeven_arm_pct: f64,
+    pub breakeven_floor_pct: f64,
+    pub tp1_trigger_pct: f64,
+    pub tp1_sell_fraction: f64,
+    pub tp2_trigger_pct: f64,
+    pub tp2_sell_fraction: f64,
+    pub runner_trailing_drop_pct: f64,
+    pub stagnation_ttl_secs: i64,
+    pub stagnation_max_peak_pct: f64,
+    pub stagnation_band_min_pct: f64,
+    pub stagnation_band_max_pct: f64,
+}
+
+impl Default for RiskConfig {
+    fn default() -> Self {
+        Self {
+            stop_loss_pct: -20.0,
+            breakeven_arm_pct: 35.0,
+            breakeven_floor_pct: 12.0,
+            tp1_trigger_pct: 45.0,
+            tp1_sell_fraction: 0.40,
+            tp2_trigger_pct: 90.0,
+            tp2_sell_fraction: 0.35,
+            runner_trailing_drop_pct: 18.0,
+            stagnation_ttl_secs: 240,
+            stagnation_max_peak_pct: 12.0,
+            stagnation_band_min_pct: -8.0,
+            stagnation_band_max_pct: 5.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TomlConfigFile {
+    pub risk: Option<RiskConfig>,
 }
 
 impl Default for EngineConfig {
@@ -59,7 +102,7 @@ impl Default for EngineConfig {
             min_liquidity_usd: 25000.0,
             max_dev_holding_pct: 1.0,         // Reject if deployer holds >= 1.0%
             max_top10_concentration_pct: 18.0,
-            min_symbol_entropy: 1.8,          // Reject repetitive ticker spam // Reject if top 10 hold > 18.0%            // Dynamic fallback liquidity threshold
+            min_symbol_entropy: 1.8,          // Reject repetitive ticker spam
             kelly_nav_fraction: 0.075,            // 7.5% NAV Half-Kelly risk allocation
             min_entry_sol: 0.012,                 // Minimum entry size (covers rent & priority fees)
             max_entry_sol: 0.045,                 // Maximum entry size cap
@@ -67,25 +110,48 @@ impl Default for EngineConfig {
             rolling_sample_window: 15,            // 15-tick rolling window for volatility calculation
             volatility_trail_multiplier: 2.20,    // Multiplier (k) applied to rolling standard deviation
             z_score_flash_threshold: -3.0,        // Emergency circuit breaker triggered at -3.0 sigma
-            breakeven_arm_peak_pct: 15.0,         // Minimum peak gain to arm breakeven floor guard
-            breakeven_floor_pct: 3.0,             // Minimum guaranteed profit floor
-            stagnation_ttl_seconds: 450,          // 15-minute capital recycling window
+            breakeven_arm_peak_pct: 35.0,         // Minimum peak gain to arm breakeven floor guard
+            breakeven_floor_pct: 12.0,            // Minimum guaranteed profit floor
+            stagnation_ttl_seconds: 240,          // Capital recycling window
             hard_stop_loss_pct: -20.0,            // Hard stop loss cutoff
-            tranche_1_scale_ratio: 0.50,          // 50% de-risking tranche
-            tranche_1_target_pct: 100.0,          // De-risk at +100% (2x)
-            tranche_2_scale_ratio: 0.25,          // 25% profit harvest tranche
-            tranche_2_target_pct: 250.0,          // Harvest at +250% (3.5x)
+            tranche_1_scale_ratio: 0.40,          // 40% TP1 harvest
+            tranche_1_target_pct: 45.0,           // TP1 trigger at +45%
+            tranche_2_scale_ratio: 0.35,          // 35% TP2 harvest
+            tranche_2_target_pct: 90.0,           // TP2 trigger at +90%
             jito_block_engine_url: "https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles".to_string(),
             jito_tip_floor_url: "https://bundles.jito.wtf/api/v1/bundles/tip_floor".to_string(),
             cu_headroom_multiplier: 1.15,        // 15% CU buffer over unitsConsumed
             sim_initial_cu_limit: 200_000,       // Initial simulation envelope
             min_sim_cu_threshold: 15_000,        // Rejection floor for no-op transactions
             default_rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
+            risk: RiskConfig::default(),
         }
     }
 }
 
 impl EngineConfig {
+    pub fn load() -> Self {
+        let mut cfg = Self::default();
+        let path = "/home/ubuntu/dmne-meme-alpha/config.toml";
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(toml_file) = toml::from_str::<TomlConfigFile>(&content) {
+                if let Some(r) = toml_file.risk {
+                    println!("[CONFIG] Loaded institutional [risk] envelope from config.toml");
+                    cfg.breakeven_arm_peak_pct = r.breakeven_arm_pct;
+                    cfg.breakeven_floor_pct = r.breakeven_floor_pct;
+                    cfg.hard_stop_loss_pct = r.stop_loss_pct;
+                    cfg.tranche_1_target_pct = r.tp1_trigger_pct;
+                    cfg.tranche_1_scale_ratio = r.tp1_sell_fraction;
+                    cfg.tranche_2_target_pct = r.tp2_trigger_pct;
+                    cfg.tranche_2_scale_ratio = r.tp2_sell_fraction;
+                    cfg.stagnation_ttl_seconds = r.stagnation_ttl_secs;
+                    cfg.risk = r;
+                }
+            }
+        }
+        cfg
+    }
+
     pub fn calculate_initial_bankroll_sol(&self) -> f64 {
         if self.sol_reference_price_usd > 0.0 {
             self.initial_capital_usd / self.sol_reference_price_usd
