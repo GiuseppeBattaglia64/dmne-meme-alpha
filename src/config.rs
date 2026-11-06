@@ -101,6 +101,8 @@ pub struct RiskConfig {
     pub max_entry_price_change_pct: f64,
     #[serde(default = "default_min_entry_buy_sell_ratio")]
     pub min_entry_buy_sell_ratio: f64,
+    #[serde(default = "default_min_entry_conviction_pct")]
+    pub min_entry_conviction_pct: f64,
     #[serde(default = "default_min_entry_m5_txns")]
     pub min_entry_m5_txns: u32,
     #[serde(default = "default_min_entry_m5_volume_usd")]
@@ -109,6 +111,12 @@ pub struct RiskConfig {
     pub min_entry_h1_price_change_pct: f64,
     #[serde(default = "default_max_entry_fdv_to_liquidity_ratio")]
     pub max_entry_fdv_to_liquidity_ratio: f64,
+    #[serde(default = "default_early_abort_window_secs")]
+    pub early_abort_window_secs: u64,
+    #[serde(default = "default_early_abort_max_peak_pct")]
+    pub early_abort_max_peak_pct: f64,
+    #[serde(default = "default_early_abort_loss_pct")]
+    pub early_abort_loss_pct: f64,
     #[serde(default = "default_kelly_fraction_nav_pct")]
     pub kelly_fraction_nav_pct: f64,
     #[serde(default = "default_max_active_slots")]
@@ -130,14 +138,18 @@ fn default_min_stagnation_ttl_secs() -> u64 { 120 }
 fn default_max_stagnation_ttl_secs() -> u64 { 360 }
 fn default_reentry_cooldown_secs() -> u64 { 3600 }
 fn default_toxic_exit_permanent_ban() -> bool { true }
-fn default_min_entry_liquidity_usd() -> f64 { 15000.0 }
+fn default_min_entry_liquidity_usd() -> f64 { 20000.0 }
 fn default_min_entry_price_change_pct() -> f64 { 1.5 }
 fn default_max_entry_price_change_pct() -> f64 { 85.0 }
-fn default_min_entry_buy_sell_ratio() -> f64 { 1.10 }
+fn default_min_entry_buy_sell_ratio() -> f64 { 1.25 }
+fn default_min_entry_conviction_pct() -> f64 { 55.0 }
 fn default_min_entry_m5_txns() -> u32 { 15 }
 fn default_min_entry_m5_volume_usd() -> f64 { 2500.0 }
 fn default_min_entry_h1_price_change_pct() -> f64 { -10.0 }
 fn default_max_entry_fdv_to_liquidity_ratio() -> f64 { 15.0 }
+fn default_early_abort_window_secs() -> u64 { 45 }
+fn default_early_abort_max_peak_pct() -> f64 { 1.0 }
+fn default_early_abort_loss_pct() -> f64 { -10.0 }
 fn default_kelly_fraction_nav_pct() -> f64 { 7.5 }
 fn default_max_active_slots() -> usize { 4 }
 fn default_dex_roundtrip_fee_pct() -> f64 { 0.60 }
@@ -169,14 +181,18 @@ impl Default for RiskConfig {
             stagnation_band_max_pct: 5.0,
             reentry_cooldown_secs: 3600,
             toxic_exit_permanent_ban: true,
-            min_entry_liquidity_usd: 15000.0,
+            min_entry_liquidity_usd: 20000.0,
             min_entry_price_change_pct: 1.5,
             max_entry_price_change_pct: 85.0,
-            min_entry_buy_sell_ratio: 1.10,
+            min_entry_buy_sell_ratio: 1.25,
+            min_entry_conviction_pct: 55.0,
             min_entry_m5_txns: 15,
             min_entry_m5_volume_usd: 2500.0,
             min_entry_h1_price_change_pct: -10.0,
             max_entry_fdv_to_liquidity_ratio: 15.0,
+            early_abort_window_secs: 45,
+            early_abort_max_peak_pct: 1.0,
+            early_abort_loss_pct: -10.0,
             kelly_fraction_nav_pct: 7.5,
             max_active_slots: 4,
             dex_roundtrip_fee_pct: 0.60,

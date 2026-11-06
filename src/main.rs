@@ -738,6 +738,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Reconcile current bankroll with true PostgreSQL realized net
                 let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
+                let floating_pnl_sol: f64 = guard.active_positions.iter().map(|p| p.size_sol * (p.pnl_pct / 100.0)).sum();
+                let live_nav_sol = live_reconciled_bankroll + floating_pnl_sol;
 
                                     serde_json::to_string(&serde_json::json!({
                                         "engine_version": env!("CARGO_PKG_VERSION"),
@@ -748,6 +750,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "wallet_pubkey": guard.wallet_pubkey.clone(),
                     "initial_bankroll_sol": guard.initial_bankroll_sol,
                                         "current_bankroll_sol": live_reconciled_bankroll,
+                                        "floating_pnl_sol": floating_pnl_sol,
+                                        "live_nav_sol": live_nav_sol,
                                         "total_realized_pnl_sol": guard.total_realized_pnl_sol,
                                         "total_trades": pg_total,
                                         "wins": pg_wins,
@@ -773,6 +777,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 (guard.total_trades as i64, guard.wins as i64, 0.0, guard.rejections_count as i64)
                             };
                             let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
+                            let floating_pnl_sol: f64 = guard.active_positions.iter().map(|p| p.size_sol * (p.pnl_pct / 100.0)).sum();
+                            let live_nav_sol = live_reconciled_bankroll + floating_pnl_sol;
                             let state_json = serde_json::to_string(&serde_json::json!({
                                 "engine_version": env!("CARGO_PKG_VERSION"),
                                 "system_version": APP_VERSION,
@@ -782,6 +788,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "wallet_pubkey": guard.wallet_pubkey.clone(),
                                 "initial_bankroll_sol": guard.initial_bankroll_sol,
                                 "current_bankroll_sol": live_reconciled_bankroll,
+                                "floating_pnl_sol": floating_pnl_sol,
+                                "live_nav_sol": live_nav_sol,
                                 "total_realized_pnl_sol": guard.total_realized_pnl_sol,
                                 "total_trades": pg_total,
                                 "wins": pg_wins,
@@ -1079,9 +1087,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     while !state.is_scanner_paused && state.active_positions.len() < eval_cfg.risk.max_active_slots && !state.candidate_queue.is_empty() {
                         let candidate = state.candidate_queue.remove(0);
                         let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint || p.symbol == candidate.symbol);
+                        if is_active {
+                            println!("[ANTI-DUPLICATE] Active position already exists for candidate: {} ({})", candidate.symbol, candidate.token_mint);
+                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                            continue;
+                        }
                         let is_banned = state.banned_tokens.contains(&candidate.token_mint) || state.banned_tokens.contains(&candidate.symbol);
                         if eval_cfg.risk.toxic_exit_permanent_ban && is_banned {
                             println!("[ANTI-CHURN] Permanent ban active for toxic token: {} ({})", candidate.symbol, candidate.token_mint);
+                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             continue;
                         }
                         let is_quarantined = state.closed_trades.iter().any(|t| {
@@ -1102,28 +1118,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             false
                         });
 
-                        if !is_active && !is_quarantined {
-                            candidate_to_eval = Some(candidate);
-                            break;
+                        if is_quarantined {
+                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                            continue;
                         }
+
+                        candidate_to_eval = Some(candidate);
+                        break;
                     }
                 }
 
                 if let Some(candidate) = candidate_to_eval {
                     if let Some(snap) = fetch_live_price(&eval_client, &candidate.token_mint).await {
+                        let conviction_pct = if candidate.dex_id == "raydium" {
+                            100.0
+                        } else {
+                            ((snap.liquidity_usd / 69_000.0) * 100.0).min(100.0)
+                        };
                         if let Err(reject_reason) = risk::validate_queue_pop_snapshot(
                             snap.liquidity_usd,
                             snap.fdv_usd,
                             snap.m5_price_change_pct,
                             snap.h1_price_change_pct,
+                            snap.buy_sell_ratio,
+                            conviction_pct,
                             &eval_cfg.risk,
                         ) {
                             println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated while in queue: {}", candidate.symbol, candidate.token_mint, reject_reason);
                             let mut state = eval_state.write().await;
                             state.rejections_count += 1;
+                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                         } else {
                             let mut state = eval_state.write().await;
-                            if state.active_positions.len() < eval_cfg.risk.max_active_slots {
+                            let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint || p.symbol == candidate.symbol);
+                            if is_active {
+                                println!("[ANTI-DUPLICATE] Active position already exists on pop: {} ({})", candidate.symbol, candidate.token_mint);
+                                state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                                state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                            } else if state.active_positions.len() < eval_cfg.risk.max_active_slots {
                                 state.total_trades += 1;
                                 let trade_id = state.total_trades;
                                 let current_nav = state.current_bankroll_sol;
@@ -1139,9 +1173,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 
                                 state.active_positions.push(Position {
                                     id: format!("pos_{}", trade_id),
-                                    token_mint: candidate.token_mint,
+                                    token_mint: candidate.token_mint.clone(),
                                     pair_address: snap.pair_address,
-                                    symbol: candidate.symbol,
+                                    symbol: candidate.symbol.clone(),
                                     entry_time_iso: now_iso,
                                     entry_timestamp_epoch: now_epoch,
                                     entry_price_sol: initial_spot,
@@ -1159,6 +1193,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     fdv_usd: snap.fdv_usd,
                                     price_buffer: vec![initial_spot],
                                 });
+                                state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                                state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             }
                         }
                     }
@@ -1445,6 +1481,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let sym = snap.symbol.clone();
                                         {
                                             let guard = scanner_state.read().await;
+                                            let is_active_sym = guard.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
+                                            if is_active_sym {
+                                                continue;
+                                            }
                                             let is_banned_sym = guard.banned_tokens.contains(&mint) || guard.banned_tokens.contains(&sym);
                                             if scanner_cfg.risk.toxic_exit_permanent_ban && is_banned_sym {
                                                 continue;
@@ -1465,6 +1505,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let liq = snap.liquidity_usd;
                                         let fdv = snap.fdv_usd;
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
+                                        let conviction_pct = if dex_id == "raydium" {
+                                            100.0
+                                        } else {
+                                            ((liq / 69_000.0) * 100.0).min(100.0)
+                                        };
                                         if let Err(reject_reason) = risk::validate_entry_gates(
                                             liq,
                                             fdv,
@@ -1473,6 +1518,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             snap.buy_sell_ratio,
                                             snap.m5_txns,
                                             snap.m5_volume_usd,
+                                            conviction_pct,
                                             &scanner_cfg.risk,
                                         ) {
                                             scanner_state.write().await.rejections_count += 1;
@@ -1623,10 +1669,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     token_mint: mint.clone(),
                                                     dex_id: dex_id.to_string(),
                                                     liquidity_usd: liq,
-                                                    bonding_curve_pct: {
-                                                let pct = ((liq / 69_000.0) * 100.0) as u32;
-                                                pct.max(15).min(100)
-                                            },
+                                                    bonding_curve_pct: conviction_pct.round().max(0.0).min(100.0) as u32,
                                                     dev_holding_pct: 0.0,
                                                     mint_authority_revoked: true,
                                                     freeze_authority_revoked: true,
@@ -1634,21 +1677,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 };
                                                 {
                                                     let mut g = scanner_state.write().await;
-                                                    if !g.radar_candidates.iter().any(|c| c.token_mint == mint) {
-                                                        g.radar_candidates.insert(0, radar_cand.clone());
-                                                        if g.radar_candidates.len() > 10 {
-                                                            g.radar_candidates.truncate(10);
+                                                    let is_active_pos = g.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
+                                                    if !is_active_pos {
+                                                        if !g.radar_candidates.iter().any(|c| c.token_mint == mint) {
+                                                            g.radar_candidates.insert(0, radar_cand.clone());
+                                                            if g.radar_candidates.len() > 10 {
+                                                                g.radar_candidates.truncate(10);
+                                                            }
                                                         }
-                                                    }
-                                                    if !g.candidate_queue.iter().any(|c| c.token_mint == mint) {
-                                                        // Priority routing: Graduated / Raydium pools pushed to front of queue
-                                                        if radar_cand.dex_id == "raydium" || radar_cand.bonding_curve_pct >= 95 {
-                                                            g.candidate_queue.insert(0, radar_cand);
-                                                        } else {
-                                                            g.candidate_queue.push(radar_cand);
-                                                        }
-                                                        if g.candidate_queue.len() > 20 {
-                                                            g.candidate_queue.remove(0);
+                                                        if !g.candidate_queue.iter().any(|c| c.token_mint == mint) {
+                                                            // Priority routing: Graduated / Raydium pools pushed to front of queue
+                                                            if radar_cand.dex_id == "raydium" || radar_cand.bonding_curve_pct >= 95 {
+                                                                g.candidate_queue.insert(0, radar_cand);
+                                                            } else {
+                                                                g.candidate_queue.push(radar_cand);
+                                                            }
+                                                            if g.candidate_queue.len() > 20 {
+                                                                g.candidate_queue.remove(0);
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -1685,7 +1731,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             }
                                         }
                                         let mut g = scanner_state.write().await;
-                                        if g.active_positions.len() < scanner_cfg.risk.max_active_slots {
+                                        let is_active_pos = g.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
+                                        if !is_active_pos && g.active_positions.len() < scanner_cfg.risk.max_active_slots {
                                             g.total_trades += 1;
                                             let trade_id = g.total_trades;
                                             let log_msg = format!("SNIPED NEW TOKEN: {} ({}) at {:.4e} SOL", sym, &mint[..8], initial_price);
@@ -1718,9 +1765,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                             g.active_positions.push(Position {
                                                 id: format!("pos_{}", trade_id),
-                                                token_mint: mint,
+                                                token_mint: mint.clone(),
                                                 pair_address: pair_addr,
-                                                symbol: sym,
+                                                symbol: sym.clone(),
                                                 entry_time_iso: now_iso,
                                                 entry_timestamp_epoch: now_epoch,
                                                 entry_price_sol: initial_price,
@@ -1738,6 +1785,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 fdv_usd: fdv,
                                                 price_buffer: vec![initial_price],
                                             });
+
+                                            g.radar_candidates.retain(|c| c.token_mint != mint);
+                                            g.candidate_queue.retain(|c| c.token_mint != mint);
                                         }
                                     }
                                 }

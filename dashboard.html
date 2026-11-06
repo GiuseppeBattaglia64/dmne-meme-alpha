@@ -1395,6 +1395,20 @@
             const el = document.getElementById("engine-version-badge");
             if (el) el.innerText = "v" + ver;
           }
+          const bankroll = data.current_bankroll_sol || 0.5556;
+          const initial = data.initial_bankroll_sol || 0.5556;
+          const positions = data.active_positions || [];
+          let floatingSol = 0.0;
+          positions.forEach(p => {
+            floatingSol += (p.size_sol || 0.0417) * ((p.pnl_pct || 0.0) / 100.0);
+          });
+          const liveNavSol = data.live_nav_sol !== undefined ? data.live_nav_sol : (bankroll + floatingSol);
+          const navEl = document.getElementById("nav-val");
+          if (navEl) navEl.innerText = `${liveNavSol.toFixed(4)} SOL`;
+          const navFiat = document.getElementById("nav-fiat");
+          if (navFiat) navFiat.innerText = `≈ €${(liveNavSol * 90.0).toFixed(2)} EUR`;
+          const baseSub = document.getElementById("baseline-subtext");
+          if (baseSub) baseSub.innerText = `Virtual Baseline: ${initial.toFixed(4)} SOL`;
         }
       } catch (e) {
         console.error("Initial state sync error", e);
@@ -1441,8 +1455,23 @@
             modeBadge.style.background = '#ef4444';
           }
         }
-        document.getElementById("nav-val").innerText = `${bankroll.toFixed(4)} SOL`;
-        document.getElementById("nav-fiat").innerText = `≈ €${(bankroll * 90.0).toFixed(2)} EUR`;
+
+        const positions = data.active_positions || [];
+        let floatingSol = 0.0;
+        positions.forEach(p => {
+          floatingSol += (p.size_sol || 0.0417) * ((p.pnl_pct || 0.0) / 100.0);
+        });
+        const floatElem = document.getElementById("floating-val");
+        floatElem.innerText = `${floatingSol >= 0 ? '+' : ''}${floatingSol.toFixed(5)} SOL`;
+        floatElem.style.color = floatingSol >= 0 ? "var(--green)" : "var(--red)";
+
+        const liveNavSol = data.live_nav_sol !== undefined ? data.live_nav_sol : (bankroll + floatingSol);
+        document.getElementById("nav-val").innerText = `${liveNavSol.toFixed(4)} SOL`;
+        document.getElementById("nav-fiat").innerText = `≈ €${(liveNavSol * 90.0).toFixed(2)} EUR`;
+        const baseSub = document.getElementById('baseline-subtext');
+        if (baseSub) {
+          baseSub.innerText = `Virtual Baseline: ${initial.toFixed(4)} SOL`;
+        }
 
         const realElem = document.getElementById("realized-val");
         realElem.innerText = `${netRealized >= 0 ? "+" : ""}${netRealized.toFixed(4)} SOL`;
@@ -1456,15 +1485,6 @@
         if (data.rejections_count !== undefined) {
           document.getElementById("rejected-count").innerText = data.rejections_count;
         }
-
-        const positions = data.active_positions || [];
-        let floatingSol = 0.0;
-        positions.forEach(p => {
-          floatingSol += (p.size_sol || 0.0417) * ((p.pnl_pct || 0.0) / 100.0);
-        });
-        const floatElem = document.getElementById("floating-val");
-        floatElem.innerText = `${floatingSol >= 0 ? '+' : ''}${floatingSol.toFixed(5)} SOL`;
-        floatElem.style.color = floatingSol >= 0 ? "var(--green)" : "var(--red)";
 
         renderActivePositions(positions);
 

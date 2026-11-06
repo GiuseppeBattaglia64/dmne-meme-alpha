@@ -78,6 +78,14 @@ pub fn evaluate_position_exit(
         };
     }
 
+    // 3b. Early Fail-Fast Abort for Dead-on-Arrival Entries
+    if !pos.tp1_executed && elapsed_secs >= cfg.early_abort_window_secs && pos.peak_pnl_pct < cfg.early_abort_max_peak_pct && pnl_pct <= cfg.early_abort_loss_pct {
+        return ExitAction::FullExit {
+            rule_label: format!("Early Abort ({:.0}%)", cfg.early_abort_loss_pct),
+            is_toxic: true,
+        };
+    }
+
     // 4. Tier 1 Take-Profit
     if !pos.tp1_executed && pnl_pct >= cfg.tp1_trigger_pct {
         pos.tp1_executed = true;
@@ -163,8 +171,12 @@ pub fn validate_entry_gates(
     buy_sell_ratio: f64,
     m5_txns: u32,
     m5_volume_usd: f64,
+    conviction_pct: f64,
     cfg: &RiskConfig,
 ) -> Result<(), &'static str> {
+    if conviction_pct < cfg.min_entry_conviction_pct {
+        return Err("CONVICTION_BELOW_FLOOR");
+    }
     if liquidity_usd < cfg.min_entry_liquidity_usd {
         return Err("LIQUIDITY_BELOW_FLOOR");
     }
@@ -197,19 +209,27 @@ pub fn validate_queue_pop_snapshot(
     fdv_usd: f64,
     m5_price_change_pct: f64,
     h1_price_change_pct: f64,
+    buy_sell_ratio: f64,
+    conviction_pct: f64,
     cfg: &RiskConfig,
 ) -> Result<(), &'static str> {
+    if conviction_pct < cfg.min_entry_conviction_pct {
+        return Err("CONVICTION_BELOW_FLOOR");
+    }
     if liquidity_usd < cfg.min_entry_liquidity_usd {
         return Err("LIQUIDITY_BELOW_FLOOR");
     }
     if liquidity_usd > 0.0 && (fdv_usd / liquidity_usd) > cfg.max_entry_fdv_to_liquidity_ratio {
         return Err("FDV_LIQ_RATIO_EXCEEDED");
     }
-    if m5_price_change_pct < 0.0 {
-        return Err("M5_PRICE_MOMENTUM_NEGATIVE");
+    if m5_price_change_pct < cfg.min_entry_price_change_pct {
+        return Err("ENTRY_MOMENTUM_BELOW_THRESHOLD");
     }
     if h1_price_change_pct < cfg.min_entry_h1_price_change_pct {
         return Err("H1_TREND_BEARISH");
+    }
+    if buy_sell_ratio < cfg.min_entry_buy_sell_ratio {
+        return Err("BUY_SELL_RATIO_BELOW_THRESHOLD");
     }
     Ok(())
 }
@@ -433,51 +453,75 @@ mod tests {
     #[test]
     fn test_validate_entry_gates() {
         let cfg = RiskConfig::default();
-        // Passing valid baseline
-        assert!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg).is_ok());
+        // Passing valid baseline (liq $30k >= $20k, ratio 1.5 >= 1.25, conviction 75% >= 55%)
+        assert!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg).is_ok());
 
-        // 1. Liquidity below floor ($10,000 < $15,000)
-        assert_eq!(validate_entry_gates(10_000.0, 100_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
+        // 0. Conviction below floor (45% < 55%)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 45.0, &cfg), Err("CONVICTION_BELOW_FLOOR"));
+
+        // 1. Liquidity below floor ($15,000 < $20,000)
+        assert_eq!(validate_entry_gates(15_000.0, 100_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
 
         // 2. FDV to Liquidity ratio exceeded (FDV $500,000 / Liq $30,000 = 16.6x > 15.0x)
-        assert_eq!(validate_entry_gates(30_000.0, 500_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+        assert_eq!(validate_entry_gates(30_000.0, 500_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
 
         // 3. Entry momentum below threshold (+0.5% < +1.5%)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 0.5, 2.0, 1.5, 25, 5_000.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 0.5, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
 
         // 4. Entry momentum overextended (+90.0% > +85.0%)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 90.0, 2.0, 1.5, 25, 5_000.0, &cfg), Err("ENTRY_MOMENTUM_OVEREXTENDED"));
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 90.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("ENTRY_MOMENTUM_OVEREXTENDED"));
 
         // 5. H1 trend bearish (-12.0% < -10.0%)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, -12.0, 1.5, 25, 5_000.0, &cfg), Err("H1_TREND_BEARISH"));
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, -12.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("H1_TREND_BEARISH"));
 
-        // 6. Buy/sell ratio below threshold (0.9 < 1.10)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 0.9, 25, 5_000.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
+        // 6. Buy/sell ratio below threshold (1.15 < 1.25)
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.15, 25, 5_000.0, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
 
         // 7. M5 txns below floor (10 < 15)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 10, 5_000.0, &cfg), Err("M5_TXNS_BELOW_FLOOR"));
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 10, 5_000.0, 75.0, &cfg), Err("M5_TXNS_BELOW_FLOOR"));
 
         // 8. M5 volume below floor ($1,000 < $2,500)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 1_000.0, &cfg), Err("M5_VOLUME_BELOW_FLOOR"));
+        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 1_000.0, 75.0, &cfg), Err("M5_VOLUME_BELOW_FLOOR"));
     }
 
     #[test]
     fn test_validate_queue_pop_snapshot() {
         let cfg = RiskConfig::default();
-        // Valid baseline: liq $20,000 >= $15,000, FDV/liq = 5x <= 15x, m5 = +2.5% >= 0%, h1 = +5% >= -10%
-        assert!(validate_queue_pop_snapshot(20_000.0, 100_000.0, 2.5, 5.0, &cfg).is_ok());
+        // Valid baseline: liq $25,000 >= $20,000, FDV/liq = 4x <= 15x, m5 = +2.5% >= 1.5%, h1 = +5% >= -10%, ratio = 1.5 >= 1.25, conviction = 75% >= 55%
+        assert!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 2.5, 5.0, 1.5, 75.0, &cfg).is_ok());
 
-        // 1. Liquidity below floor ($10,000 < $15,000)
-        assert_eq!(validate_queue_pop_snapshot(10_000.0, 100_000.0, 2.5, 5.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
+        // 0. Conviction below floor (45% < 55%)
+        assert_eq!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 2.5, 5.0, 1.5, 45.0, &cfg), Err("CONVICTION_BELOW_FLOOR"));
 
-        // 2. FDV to Liquidity ratio exceeded (FDV $400,000 / Liq $20,000 = 20x > 15x)
-        assert_eq!(validate_queue_pop_snapshot(20_000.0, 400_000.0, 2.5, 5.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+        // 1. Liquidity below floor ($15,000 < $20,000)
+        assert_eq!(validate_queue_pop_snapshot(15_000.0, 100_000.0, 2.5, 5.0, 1.5, 75.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
 
-        // 3. M5 turned negative (-1.5% < 0.0%)
-        assert_eq!(validate_queue_pop_snapshot(20_000.0, 100_000.0, -1.5, 5.0, &cfg), Err("M5_PRICE_MOMENTUM_NEGATIVE"));
+        // 2. FDV to Liquidity ratio exceeded (FDV $400,000 / Liq $25,000 = 16x > 15x)
+        assert_eq!(validate_queue_pop_snapshot(25_000.0, 400_000.0, 2.5, 5.0, 1.5, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+
+        // 3. M5 momentum below threshold (+0.5% < +1.5%)
+        assert_eq!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 0.5, 5.0, 1.5, 75.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
 
         // 4. H1 trend bearish (-12.0% < -10.0%)
-        assert_eq!(validate_queue_pop_snapshot(20_000.0, 100_000.0, 2.5, -12.0, &cfg), Err("H1_TREND_BEARISH"));
+        assert_eq!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 2.5, -12.0, 1.5, 75.0, &cfg), Err("H1_TREND_BEARISH"));
+
+        // 5. Buy/sell ratio below threshold (1.15 < 1.25)
+        assert_eq!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 2.5, 5.0, 1.15, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
+    }
+
+    #[test]
+    fn test_early_abort_exit() {
+        let mut pos = setup_test_position();
+        let cfg = RiskConfig::default();
+        pos.peak_pnl_pct = 0.5;
+        let action = evaluate_position_exit(&mut pos, 0.89, 1046, &cfg);
+        match action {
+            ExitAction::FullExit { rule_label, is_toxic } => {
+                assert!(rule_label.contains("Early Abort"));
+                assert!(is_toxic);
+            }
+            _ => panic!("Expected Early Abort exit"),
+        }
     }
 
     #[test]

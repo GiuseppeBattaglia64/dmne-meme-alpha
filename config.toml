@@ -28,14 +28,19 @@ stagnation_band_max_pct = 5.0
 
 reentry_cooldown_secs = 3600
 toxic_exit_permanent_ban = true
-min_entry_liquidity_usd = 15000.0
+min_entry_liquidity_usd = 20000.0
 min_entry_price_change_pct = 1.5
 max_entry_price_change_pct = 85.0
-min_entry_buy_sell_ratio = 1.10
+min_entry_buy_sell_ratio = 1.25
+min_entry_conviction_pct = 55.0
 min_entry_m5_txns = 15
 min_entry_m5_volume_usd = 2500.0
 min_entry_h1_price_change_pct = -10.0
 max_entry_fdv_to_liquidity_ratio = 15.0
+
+early_abort_window_secs = 45
+early_abort_max_peak_pct = 1.0
+early_abort_loss_pct = -10.0
 
 kelly_fraction_nav_pct = 7.5
 max_active_slots = 4
