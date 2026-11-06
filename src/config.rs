@@ -11,6 +11,8 @@ pub struct EngineConfig {
     pub hhi_concentration_ceiling: f64,
     pub min_dead_lp_ratio: f64,
     pub min_liquidity_usd: f64,
+    pub max_dev_holding_pct: f64,
+    pub max_top10_concentration_pct: f64,
 
     // Dynamic Sizing Engine
     pub kelly_nav_fraction: f64,
@@ -49,7 +51,9 @@ impl Default for EngineConfig {
             max_price_impact_ratio: 0.012,       // 1.2% maximum pool price impact
             hhi_concentration_ceiling: 0.280,     // Herfindahl-Hirschman Index limit for top holders
             min_dead_lp_ratio: 0.950,             // 95% burned or locked LP tokens for AMM pools
-            min_liquidity_usd: 18000.0,            // Dynamic fallback liquidity threshold
+            min_liquidity_usd: 25000.0,
+            max_dev_holding_pct: 1.0,         // Reject if deployer holds >= 1.0%
+            max_top10_concentration_pct: 18.0, // Reject if top 10 hold > 18.0%            // Dynamic fallback liquidity threshold
             kelly_nav_fraction: 0.075,            // 7.5% NAV Half-Kelly risk allocation
             min_entry_sol: 0.012,                 // Minimum entry size (covers rent & priority fees)
             max_entry_sol: 0.045,                 // Maximum entry size cap
