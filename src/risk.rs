@@ -50,6 +50,8 @@ pub fn evaluate_position_exit(
         pos.peak_pnl_pct = pnl_pct;
     }
 
+    pos.last_price = current_price;
+
     let elapsed_secs = now_epoch.saturating_sub(pos.opened_at_epoch);
 
     // 1. Max Adverse Slippage Cutoff
