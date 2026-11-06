@@ -724,6 +724,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
 
                                     serde_json::to_string(&serde_json::json!({
+                                        "engine_version": env!("CARGO_PKG_VERSION"),
                                         "system_version": APP_VERSION,
                     "live_onchain_sol": guard.live_onchain_sol,
                     "is_scanner_paused": guard.is_scanner_paused,
@@ -757,6 +758,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             };
                             let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
                             let state_json = serde_json::to_string(&serde_json::json!({
+                                "engine_version": env!("CARGO_PKG_VERSION"),
                                 "system_version": APP_VERSION,
                                 "live_onchain_sol": guard.live_onchain_sol,
                                 "is_scanner_paused": guard.is_scanner_paused,
@@ -1233,7 +1235,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match action {
                     risk::ExitAction::PartialSell { sol_basis_closed, rule_label, .. } => {
-                        let realized = sol_basis_closed * (pos.pnl_pct / 100.0);
+                        let realized = risk::compute_net_realized_sol(sol_basis_closed, pos.pnl_pct, &effective_risk_cfg);
                         let bankroll_before = state.current_bankroll_sol;
                         state.current_bankroll_sol += realized;
                         state.total_realized_pnl_sol += realized;
@@ -1300,7 +1302,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     risk::ExitAction::FullExit { rule_label, is_toxic } => {
                         let exit_pnl = pos.pnl_pct;
-                        let realized = pos.size_sol * (exit_pnl / 100.0);
+                        let realized = risk::compute_net_realized_sol(pos.size_sol, exit_pnl, &effective_risk_cfg);
                         println!(
                             "[CRUISE CONTROL] Exit triggered on {} by {} (PnL: {:+.1}%, toxic: {}).",
                             pos.symbol, rule_label, exit_pnl, is_toxic

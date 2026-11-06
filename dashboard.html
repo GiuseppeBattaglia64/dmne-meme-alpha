@@ -59,25 +59,78 @@
     }
     .mono { font-family: 'JetBrains Mono', monospace; }
 
-    /* HEADER HUD (40px) */
+    /* HEADER HUD (2-Row Layout) */
     header {
       background: var(--bg-panel);
       border-bottom: 1px solid var(--border-subtle);
-      padding: 6px 16px;
+      padding: 12px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .header-row-top {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      height: 40px;
-      flex-shrink: 0;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .header-brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
     .brand-title {
-      font-size: 13px;
+      white-space: nowrap;
+      font-size: 1.15rem;
       font-weight: 800;
       letter-spacing: 0.08em;
       color: var(--cyan);
       display: flex;
       align-items: center;
       gap: 8px;
+    }
+    .header-telemetry-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-row-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.07);
+    }
+    .header-workspace-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-actions-group .wallet-btn {
+      height: 36px;
+      padding: 0 16px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-weight: 600;
+      border-radius: 6px;
+    }
+    .header-divider {
+      width: 1px;
+      height: 16px;
+      background: rgba(255,255,255,0.15);
+      margin: 0 2px;
     }
     .badge {
       font-size: 9px;
@@ -614,43 +667,49 @@
 </head>
 <body>
 
-  <!-- HEADER HUD -->
+  <!-- HEADER HUD (2-Row Layout) -->
   <header>
-    <div class="brand-title">
-      <span>DMNE MEMESCOPE</span>
-      <span class="badge badge-purple">PUMP VISION</span>
-      <span class="badge badge-jito" style="font-weight:700;" id="version-tag">v0.7.0</span>
-      <span class="badge badge-jito">JITO: 11ms</span>
-    </div>
-    <div class="telemetry-row">
-      <div class="pulse-meter">
-        <div class="pulse-bar" id="pulse-indicator"></div>
-        <span>TICK: <b id="tick-clock">0.0s</b></span>
+    <!-- Row 1: Telemetry & Agents -->
+    <div class="header-row-top">
+      <div class="header-brand-group">
+        <span class="brand-title">DMNE MEMESCOPE</span>
+        <span class="badge badge-purple">PUMP VISION</span>
+        <span class="badge badge-jito" style="font-weight:700;" id="engine-version-badge">v0.7.1</span>
+        <span class="badge badge-jito">JITO: 11ms</span>
+        <div class="pulse-meter">
+          <div class="pulse-bar" id="pulse-indicator"></div>
+          <span>TICK: <b id="tick-clock">0.0s</b></span>
+        </div>
       </div>
-      <div class="tele-stat"><span class="badge badge-live">AI LAUNCH AGENT</span></div>
-      <div class="tele-stat"><span class="badge badge-jito">AI CRUISE AGENT</span></div>
-      <div class="tele-stat">KELLY: <b id="tele-kelly-tag" style="color:var(--cyan)">7.5% NAV</b></div>
-      <div class="tele-stat">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
+      <div class="header-telemetry-group">
+        <span class="badge badge-live">AI LAUNCH AGENT</span>
+        <span class="badge badge-jito">AI CRUISE AGENT</span>
+        <div class="header-divider"></div>
+        <div class="tele-stat" style="white-space: nowrap;">KELLY: <b id="tele-kelly-tag" style="color:var(--cyan)">7.5% NAV</b></div>
+        <div class="tele-stat" style="white-space: nowrap;">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
+      </div>
     </div>
-        <div class="header-right" style="display:flex; gap:6px; align-items:center;">
-      <!-- User Profile Switcher -->
-      <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:11px; color:#64748b; font-weight:700;">WORKSPACE:</span>
-        <select id="user-select" class="wallet-btn" style="background:#1e293b; color:#38bdf8; font-family:inherit; cursor:pointer;" onchange="switchUser(this.value)">
+
+    <!-- Row 2: Workspace & Action Controls -->
+    <div class="header-row-bottom">
+      <div class="header-workspace-group">
+        <span style="font-size:11px; color:#64748b; font-weight:700; white-space:nowrap;">WORKSPACE:</span>
+        <select id="user-select" class="wallet-btn" style="background:#1e293b; color:#38bdf8; font-family:inherit; cursor:pointer; min-width: 240px; height: 36px;" onchange="switchUser(this.value)">
           <option value="admin">Admin (Master)</option>
           <option value="giuseppe">Giuseppe Battaglia</option>
           <option value="giovanni">Giovanni Battaglia</option>
         </select>
-        <button id="admin-add-btn" class="wallet-btn" style="background:#6366f1;" onclick="openCreateUserModal()">➕ NEW TRADER</button>
+        <button id="admin-add-btn" class="wallet-btn" style="background:#6366f1; height: 36px; padding: 0 14px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;" onclick="openCreateUserModal()">➕ NEW TRADER</button>
+        <span class="badge badge-purple" id="mode-badge" style="background:#0284c7; color:#fff; font-weight:700; height: 36px; padding: 0 14px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">🧪 PAPER MODE</span>
       </div>
-        <span class="badge badge-purple" id="mode-badge" style="background:#0284c7; color:#fff; font-weight:700;">🧪 PAPER MODE</span>
+      <div class="header-actions-group">
         <button class="wallet-btn" id="pause-btn" style="background:#f59e0b;" onclick="toggleScannerPause()">⏸ PAUSE</button>
         <button class="wallet-btn" style="background:#dc2626;" onclick="triggerPanicDump()">🛑 PANIC DUMP</button>
         <button class="wallet-btn" onclick="openDepositModal()">📥 DEPOSIT</button>
         <button class="wallet-btn withdraw-btn" onclick="openWithdrawModal()">📤 WITHDRAW</button>
-        
         <button class="wallet-btn" style="background:#334155;" onclick="logout()">LOGOUT</button>
       </div>
+    </div>
   </header>
 
   <!-- METRIC TILES -->
@@ -1303,6 +1362,11 @@
           if (data.risk_config) {
             syncRiskConfigUI(data.risk_config);
           }
+          const ver = data.engine_version || data.system_version;
+          if (ver) {
+            const el = document.getElementById("engine-version-badge");
+            if (el) el.innerText = "v" + ver;
+          }
         }
       } catch (e) {
         console.error("Initial state sync error", e);
@@ -1324,8 +1388,10 @@
         const initial = data.initial_bankroll_sol || 0.5556;
         const netRealized = bankroll - initial;
 
-                if (data.system_version) {
-          document.getElementById("version-tag").innerText = `v${data.system_version}`;
+                const ver = data.engine_version || data.system_version;
+        if (ver) {
+          const el = document.getElementById("engine-version-badge");
+          if (el) el.innerText = "v" + ver;
         }
         
         if (data.wallet_pubkey) {

@@ -192,6 +192,15 @@ pub fn validate_entry_gates(
     Ok(())
 }
 
+pub const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
+
+pub fn compute_net_realized_sol(basis_sol: f64, gross_pnl_pct: f64, cfg: &RiskConfig) -> f64 {
+    let gross_sol = basis_sol * (gross_pnl_pct / 100.0);
+    let dex_fee_sol = basis_sol * (cfg.dex_roundtrip_fee_pct / 100.0);
+    let jito_tip_sol = (cfg.jito_tip_lamports as f64) / LAMPORTS_PER_SOL;
+    gross_sol - dex_fee_sol - jito_tip_sol
+}
+
 pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String {
     if pos.tp2_executed {
         let runner_pct = (1.0 - cfg.tp1_sell_fraction - cfg.tp2_sell_fraction) * 100.0;
@@ -418,5 +427,24 @@ mod tests {
 
         // 8. M5 volume below floor ($1,000 < $2,500)
         assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 1_000.0, &cfg), Err("M5_VOLUME_BELOW_FLOOR"));
+    }
+
+    #[test]
+    fn test_compute_net_realized_sol() {
+        let cfg = RiskConfig {
+            dex_roundtrip_fee_pct: 0.60,
+            jito_tip_lamports: 10_000,
+            ..RiskConfig::default()
+        };
+        let basis_sol = 0.10;
+        let gross_pnl_pct = 50.0;
+        let gross_sol = basis_sol * (gross_pnl_pct / 100.0); // 0.05 SOL
+        let dex_fee_sol = basis_sol * (cfg.dex_roundtrip_fee_pct / 100.0); // 0.0006 SOL
+        let jito_tip_sol = (cfg.jito_tip_lamports as f64) / LAMPORTS_PER_SOL; // 0.00001 SOL
+        let expected_net = gross_sol - dex_fee_sol - jito_tip_sol;
+
+        let net = compute_net_realized_sol(basis_sol, gross_pnl_pct, &cfg);
+        assert!((net - expected_net).abs() < 1e-12);
+        assert!(net < gross_sol);
     }
 }
