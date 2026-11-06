@@ -91,6 +91,10 @@ pub struct RiskConfig {
     pub max_entry_price_change_pct: f64,
     #[serde(default = "default_min_entry_buy_sell_ratio")]
     pub min_entry_buy_sell_ratio: f64,
+    #[serde(default = "default_min_entry_m5_txns")]
+    pub min_entry_m5_txns: u32,
+    #[serde(default = "default_min_entry_m5_volume_usd")]
+    pub min_entry_m5_volume_usd: f64,
 }
 
 fn default_flash_dump_tick_pct() -> f64 { -15.0 }
@@ -103,6 +107,8 @@ fn default_min_entry_liquidity_usd() -> f64 { 25000.0 }
 fn default_min_entry_price_change_pct() -> f64 { 1.5 }
 fn default_max_entry_price_change_pct() -> f64 { 85.0 }
 fn default_min_entry_buy_sell_ratio() -> f64 { 1.20 }
+fn default_min_entry_m5_txns() -> u32 { 15 }
+fn default_min_entry_m5_volume_usd() -> f64 { 2500.0 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -129,6 +135,8 @@ impl Default for RiskConfig {
             min_entry_price_change_pct: 1.5,
             max_entry_price_change_pct: 85.0,
             min_entry_buy_sell_ratio: 1.20,
+            min_entry_m5_txns: 15,
+            min_entry_m5_volume_usd: 2500.0,
         }
     }
 }

@@ -27,3 +27,5 @@ min_entry_liquidity_usd = 25000.0
 min_entry_price_change_pct = 1.5
 max_entry_price_change_pct = 85.0
 min_entry_buy_sell_ratio = 1.20
+min_entry_m5_txns = 15
+min_entry_m5_volume_usd = 2500.0

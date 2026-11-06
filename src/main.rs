@@ -249,6 +249,12 @@ struct DexTxns {
 }
 
 #[derive(Deserialize)]
+struct DexVolume {
+    m5: Option<f64>,
+    h1: Option<f64>,
+}
+
+#[derive(Deserialize)]
 struct DexPair {
     #[serde(rename = "pairAddress")]
     pair_address: Option<String>,
@@ -261,6 +267,20 @@ struct DexPair {
     #[serde(rename = "priceChange")]
     price_change: Option<PriceChange>,
     txns: Option<DexTxns>,
+    volume: Option<DexVolume>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LiveMarketSnapshot {
+    pub price_sol: f64,
+    pub symbol: String,
+    pub pair_address: String,
+    pub liquidity_usd: f64,
+    pub fdv_usd: f64,
+    pub m5_price_change_pct: f64,
+    pub buy_sell_ratio: f64,
+    pub m5_txns: u32,
+    pub m5_volume_usd: f64,
 }
 
 #[derive(Deserialize)]
@@ -328,7 +348,7 @@ async fn verify_token_security(client: &Client, rpc_url: &str, mint: &str) -> bo
     true
 }
 
-async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<(f64, String, String, f64, f64, f64, f64)> {
+async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<LiveMarketSnapshot> {
     let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", token_mint);
     if let Ok(res) = client.get(&url).timeout(Duration::from_millis(1500)).send().await {
         if let Ok(data) = res.json::<DexResponse>().await {
@@ -342,10 +362,23 @@ async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<(f64, Str
                         let fdv = best_pair.fdv.unwrap_or(0.0);
                         let m5_change = best_pair.price_change.as_ref().and_then(|p| p.m5.or(p.h1)).unwrap_or(0.0);
                         let txns = best_pair.txns.as_ref().and_then(|t| t.m5.as_ref().or(t.h1.as_ref()));
-                        let buys = txns.and_then(|t| t.buys).unwrap_or(0) as f64;
-                        let sells = txns.and_then(|t| t.sells).unwrap_or(0) as f64;
-                        let buy_sell_ratio = if sells > 0.0 { buys / sells } else if buys > 0.0 { 10.0 } else { 1.0 };
-                        return Some((price_sol, sym, pair_addr, liq, fdv, m5_change, buy_sell_ratio));
+                        let buys = txns.and_then(|t| t.buys).unwrap_or(0);
+                        let sells = txns.and_then(|t| t.sells).unwrap_or(0);
+                        let m5_txns = buys + sells;
+                        let buy_sell_ratio = if sells > 0 { buys as f64 / sells as f64 } else if buys > 0 { 10.0 } else { 1.0 };
+                        let m5_vol = best_pair.volume.as_ref().and_then(|v| v.m5.or(v.h1)).unwrap_or(0.0);
+
+                        return Some(LiveMarketSnapshot {
+                            price_sol,
+                            symbol: sym,
+                            pair_address: pair_addr,
+                            liquidity_usd: liq,
+                            fdv_usd: fdv,
+                            m5_price_change_pct: m5_change,
+                            buy_sell_ratio,
+                            m5_txns,
+                            m5_volume_usd: m5_vol,
+                        });
                     }
                 }
             }
@@ -985,12 +1018,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             for (idx, mint) in active_mints {
-                if let Some((real_price, _, _, liq, fdv, _, _)) = fetch_live_price(&eval_client, &mint).await {
+                if let Some(snap) = fetch_live_price(&eval_client, &mint).await {
                     let mut guard = eval_state.write().await;
                     if idx < guard.active_positions.len() {
                         let pos = &mut guard.active_positions[idx];
-                        pos.current_price_sol = real_price;
-                        pos.price_buffer.push(real_price);
+                        pos.current_price_sol = snap.price_sol;
+                        pos.price_buffer.push(snap.price_sol);
                         if pos.price_buffer.len() > 30 {
                             pos.price_buffer.remove(0);
                         }
@@ -1000,11 +1033,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if pos.current_price_sol < pos.trough_price_sol {
                             pos.trough_price_sol = pos.current_price_sol;
                         }
-                        if pos.current_price_sol < pos.trough_price_sol {
-                            pos.trough_price_sol = pos.current_price_sol;
-                        }
-                        pos.liquidity_usd = liq;
-                        pos.fdv_usd = fdv;
+                        pos.liquidity_usd = snap.liquidity_usd;
+                        pos.fdv_usd = snap.fdv_usd;
                         pos.pnl_pct = ((pos.current_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
                     }
                 }
@@ -1172,7 +1202,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // Slot-blocking guard removed: Discovery worker audits 100% continuously
                                 if !is_active && !is_quarantined {
                                     drop(guard);
-                                    if let Some((initial_price, sym, pair_addr, liq, fdv, m5_change, buy_sell_ratio)) = fetch_live_price(&scanner_client, &mint).await {
+                                    if let Some(snap) = fetch_live_price(&scanner_client, &mint).await {
+                                        let initial_price = snap.price_sol;
+                                        let sym = snap.symbol.clone();
+                                        let pair_addr = snap.pair_address.clone();
+                                        let liq = snap.liquidity_usd;
+                                        let fdv = snap.fdv_usd;
                                         let dex_id = if mint.ends_with("pump") { "pumpfun" } else { "raydium" };
                                         let min_liq = scanner_cfg.risk.min_entry_liquidity_usd;
                                         if liq < min_liq {
@@ -1193,7 +1228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
 
                                         // Entry Momentum Gate: Lower bound
-                                        if m5_change < scanner_cfg.risk.min_entry_price_change_pct {
+                                        if snap.m5_price_change_pct < scanner_cfg.risk.min_entry_price_change_pct {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
@@ -1205,13 +1240,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 freeze_revoked: false,
                                                 lp_burned: false,
                                                 admitted: false,
-                                                rejection_reason: format!("ENTRY_MOMENTUM_BELOW_THRESHOLD ({:+.2}% < +{:.2}%)", m5_change, scanner_cfg.risk.min_entry_price_change_pct),
+                                                rejection_reason: format!("ENTRY_MOMENTUM_BELOW_THRESHOLD ({:+.2}% < +{:.2}%)", snap.m5_price_change_pct, scanner_cfg.risk.min_entry_price_change_pct),
                                             });
                                             continue;
                                         }
 
                                         // Entry Momentum Gate: Upper bound (FOMO / Overextension ceiling)
-                                        if m5_change > scanner_cfg.risk.max_entry_price_change_pct {
+                                        if snap.m5_price_change_pct > scanner_cfg.risk.max_entry_price_change_pct {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
@@ -1223,13 +1258,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 freeze_revoked: false,
                                                 lp_burned: false,
                                                 admitted: false,
-                                                rejection_reason: format!("ENTRY_MOMENTUM_OVEREXTENDED (+{:.1}% > +{:.1}%)", m5_change, scanner_cfg.risk.max_entry_price_change_pct),
+                                                rejection_reason: format!("ENTRY_MOMENTUM_OVEREXTENDED (+{:.1}% > +{:.1}%)", snap.m5_price_change_pct, scanner_cfg.risk.max_entry_price_change_pct),
                                             });
                                             continue;
                                         }
 
                                         // Buy/Sell Orderflow Ratio Gate (Net buying pressure check)
-                                        if buy_sell_ratio < scanner_cfg.risk.min_entry_buy_sell_ratio {
+                                        if snap.buy_sell_ratio < scanner_cfg.risk.min_entry_buy_sell_ratio {
                                             scanner_state.write().await.rejections_count += 1;
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
@@ -1241,7 +1276,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 freeze_revoked: false,
                                                 lp_burned: false,
                                                 admitted: false,
-                                                rejection_reason: format!("BUY_SELL_RATIO_BELOW_THRESHOLD ({:.2} < {:.2})", buy_sell_ratio, scanner_cfg.risk.min_entry_buy_sell_ratio),
+                                                rejection_reason: format!("BUY_SELL_RATIO_BELOW_THRESHOLD ({:.2} < {:.2})", snap.buy_sell_ratio, scanner_cfg.risk.min_entry_buy_sell_ratio),
+                                            });
+                                            continue;
+                                        }
+
+                                        // 5-Minute Minimum Transaction Count Gate
+                                        if snap.m5_txns < scanner_cfg.risk.min_entry_m5_txns {
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: format!("M5_TXNS_BELOW_FLOOR ({} < {})", snap.m5_txns, scanner_cfg.risk.min_entry_m5_txns),
+                                            });
+                                            continue;
+                                        }
+
+                                        // 5-Minute Minimum Volume Gate
+                                        if snap.m5_volume_usd < scanner_cfg.risk.min_entry_m5_volume_usd {
+                                            scanner_state.write().await.rejections_count += 1;
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: format!("M5_VOLUME_BELOW_FLOOR (${:.0} < ${:.0})", snap.m5_volume_usd, scanner_cfg.risk.min_entry_m5_volume_usd),
                                             });
                                             continue;
                                         }
