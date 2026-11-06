@@ -59,20 +59,21 @@ pub async fn record_settled_trade(
     bankroll_after: f64,
     exit_rule: &str,
     dex_url: &str,
+    is_toxic: bool,
 ) {
     let stmt = "
         INSERT INTO settled_trades (
             token_mint, symbol, hold_duration_seconds, entry_size_sol, entry_price_sol,
             exit_price_sol, peak_price_sol, pnl_pct, realized_pnl_sol, bankroll_before_sol,
-            bankroll_after_sol, exit_rule, dex_url
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            bankroll_after_sol, exit_rule, dex_url, is_toxic
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     ";
     let _ = client.execute(
         stmt,
         &[
             &mint, &symbol, &hold_duration_sec, &entry_size_sol, &entry_price_sol,
             &exit_price_sol, &peak_price_sol, &pnl_pct, &realized_pnl_sol, &bankroll_before,
-            &bankroll_after, &exit_rule, &dex_url
+            &bankroll_after, &exit_rule, &dex_url, &is_toxic
         ]
     ).await;
 }
@@ -110,10 +111,11 @@ pub async fn fetch_settled_trades(client: &Client, limit: i64) -> Vec<Value> {
 }
 
 /// Fetches all historical closed trades for quarantine state reconciliation on startup
-pub async fn fetch_settled_trades_for_reconcile(client: &Client) -> Vec<(String, String, f64, f64, f64, String, u64)> {
+pub async fn fetch_settled_trades_for_reconcile(client: &Client) -> Vec<(String, String, f64, f64, f64, String, u64, bool)> {
     let stmt = "
         SELECT token_mint, symbol, entry_size_sol, realized_pnl_sol, pnl_pct, exit_rule,
-               EXTRACT(EPOCH FROM exit_timestamp)::bigint AS exit_epoch
+               EXTRACT(EPOCH FROM exit_timestamp)::bigint AS exit_epoch,
+               COALESCE(is_toxic, false) AS is_toxic
         FROM settled_trades
         ORDER BY exit_timestamp ASC
     ";
@@ -127,7 +129,8 @@ pub async fn fetch_settled_trades_for_reconcile(client: &Client) -> Vec<(String,
             let pnl_pct: f64 = row.get("pnl_pct");
             let rule: String = row.get("exit_rule");
             let epoch: i64 = row.get("exit_epoch");
-            out.push((mint, symbol, size, pnl_sol, pnl_pct, rule, epoch.max(0) as u64));
+            let is_toxic: bool = row.get("is_toxic");
+            out.push((mint, symbol, size, pnl_sol, pnl_pct, rule, epoch.max(0) as u64, is_toxic));
         }
     }
     out

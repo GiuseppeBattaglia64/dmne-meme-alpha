@@ -1013,9 +1013,12 @@
         const stopLossPct = rc.stop_loss_pct !== undefined ? rc.stop_loss_pct : -20.0;
         const beArmPct = rc.breakeven_arm_pct !== undefined ? rc.breakeven_arm_pct : 35.0;
         const tp1Pct = rc.tp1_trigger_pct !== undefined ? rc.tp1_trigger_pct : 45.0;
+        const tp2Pct = rc.tp2_trigger_pct !== undefined ? rc.tp2_trigger_pct : 100.0;
         const stagTtlSecs = rc.stagnation_ttl_secs !== undefined ? rc.stagnation_ttl_secs : 240;
 
-        let fillPct = ((pnl - stopLossPct) / (tp1Pct - stopLossPct)) * 100.0;
+        const minScale = stopLossPct;
+        const maxScale = tp2Pct;
+        let fillPct = ((pnl - minScale) / (maxScale - minScale)) * 100.0;
         fillPct = Math.max(2, Math.min(100, fillPct));
         const fillClass = pnl >= 0 ? "gauge-fill-green" : "gauge-fill-red";
 
@@ -1026,9 +1029,9 @@
 
         let regLabel = "EQUILIBRIUM";
         let regClass = "reg-eq";
-        if (pnl >= 40.0) { regLabel = "EXPANSION"; regClass = "reg-exp"; }
-        else if (pnl >= 15.0) { regLabel = "MOMENTUM"; regClass = "reg-mom"; }
-        else if (pnl <= -20.0) { regLabel = "BLEED"; regClass = "reg-bld"; }
+        if (pnl >= tp1Pct) { regLabel = "EXPANSION"; regClass = "reg-exp"; }
+        else if (pnl >= beArmPct) { regLabel = "MOMENTUM"; regClass = "reg-mom"; }
+        else if (pnl <= stopLossPct) { regLabel = "BLEED"; regClass = "reg-bld"; }
 
         const dexImgUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${p.token_mint}.png`;
         
@@ -1058,11 +1061,11 @@
             </div>
 
             <div class="gauge-wrap">
-              <div class="gauge-labels" style="color:#94a3b8; font-weight:600;">
-                <span>STOP: ${stopLossPct > 0 ? '+' : ''}${stopLossPct.toFixed(0)}%</span>
-                <span>ENTRY: 0%</span>
+              <div class="gauge-labels" style="color:#94a3b8; font-weight:600; display:flex; justify-content:space-between;">
+                <span>STOP: ${stopLossPct.toFixed(0)}%</span>
                 <span>BE: +${beArmPct.toFixed(0)}%</span>
-                <span>T1: +${tp1Pct.toFixed(0)}%</span>
+                <span>TP1: +${tp1Pct.toFixed(0)}%</span>
+                <span>TP2: +${tp2Pct.toFixed(0)}%</span>
               </div>
               <div class="gauge-track">
                 <div class="gauge-fill ${fillClass}" style="width: ${fillPct}%"></div>

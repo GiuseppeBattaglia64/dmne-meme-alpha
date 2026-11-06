@@ -187,6 +187,8 @@ pub struct BotState {
     pub total_realized_pnl_sol: f64,
     pub closed_trades: Vec<ClosedTrade>,
     pub recent_onchain_events: Vec<String>,
+    #[serde(default)]
+    pub effective_risk_cfg: config::RiskConfig,
 }
 
 impl BotState {
@@ -210,6 +212,7 @@ impl BotState {
             total_realized_pnl_sol: 0.0,
             closed_trades: Vec::new(),
             recent_onchain_events: Vec::new(),
+            effective_risk_cfg: config::RiskConfig::default(),
         }
     }
 }
@@ -577,11 +580,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         g.losses = (total - wins) as usize;
         g.rejections_count = rejections as u64;
         g.total_realized_pnl_sol = net;
+        g.effective_risk_cfg = config.risk.clone();
 
         // Restore historical closed trades & quarantine state from PostgreSQL
         let historical_trades = db::fetch_settled_trades_for_reconcile(&pg).await;
-        for (mint, symbol, size, pnl_sol, pnl_pct, rule, epoch) in historical_trades {
-            let is_toxic = risk::is_historical_exit_toxic(pnl_pct, &config.risk);
+        for (mint, symbol, size, pnl_sol, pnl_pct, rule, epoch, db_toxic) in historical_trades {
+            let is_toxic = db_toxic || risk::is_historical_exit_toxic(pnl_pct, &config.risk);
             g.closed_trades.push(ClosedTrade {
                 token_mint: mint,
                 symbol,
@@ -681,7 +685,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let server_state = Arc::clone(&state);
-    let server_cfg = Arc::clone(&config);
     tokio::spawn(async move {
         let listener = TcpListener::bind(format!("0.0.0.0:{}", DASHBOARD_PORT))
             .await
@@ -691,7 +694,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             if let Ok((mut socket, _)) = listener.accept().await {
                 let st = Arc::clone(&server_state);
-                let scfg = Arc::clone(&server_cfg);
                 tokio::spawn(async move {
                     let mut buf = [0u8; 2048];
                     if let Ok(n) = socket.read(&mut buf).await {
@@ -729,7 +731,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "radar_candidates": guard.radar_candidates,
                                         "closed_trades": guard.closed_trades,
                                         "recent_onchain_events": guard.recent_onchain_events,
-                                        "risk_config": &scfg.risk,
+                                        "risk_config": &guard.effective_risk_cfg,
                                     })).unwrap_or_default()
                                 };
                                 let payload = format!("data: {}\n\n", snapshot);
@@ -762,7 +764,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "radar_candidates": guard.radar_candidates,
                                 "closed_trades": guard.closed_trades,
                                 "recent_onchain_events": guard.recent_onchain_events,
-                                "risk_config": &scfg.risk,
+                                "risk_config": &guard.effective_risk_cfg,
                             })).unwrap_or_default();
                             let res = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1047,9 +1049,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let now_epoch = chrono::Utc::now().timestamp() as u64;
                 while !state.is_scanner_paused && state.active_positions.len() < 4 && !state.candidate_queue.is_empty() {
                     let candidate = state.candidate_queue.remove(0);
-                    let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint);
+                    let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint || p.symbol == candidate.symbol);
                     let is_quarantined = state.closed_trades.iter().any(|t| {
-                        if t.token_mint != candidate.token_mint {
+                        let is_match = (!t.token_mint.is_empty() && t.token_mint == candidate.token_mint) || (!t.symbol.is_empty() && t.symbol == candidate.symbol);
+                        if !is_match {
                             return false;
                         }
                         let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &eval_cfg.risk);
@@ -1153,6 +1156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Evaluate dynamic exit rules
             let mut guard = eval_state.write().await;
+            guard.effective_risk_cfg = effective_risk_cfg.clone();
             let mut closed_indices = Vec::new();
             let state = &mut *guard;
             let now_epoch = chrono::Utc::now().timestamp() as u64;
@@ -1188,7 +1192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     risk::ExitAction::PartialSell { sol_basis_closed, rule_label, .. } => {
                         let realized = sol_basis_closed * (pos.pnl_pct / 100.0);
                         let bankroll_before = state.current_bankroll_sol;
-                        state.current_bankroll_sol += sol_basis_closed + realized;
+                        state.current_bankroll_sol += realized;
                         state.total_realized_pnl_sol += realized;
                         let bankroll_after = state.current_bankroll_sol;
                         pos.size_sol = active_pos.remaining_size_sol;
@@ -1233,7 +1237,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 db::record_settled_trade(
                                     &pg_client, &db_mint, &db_sym, db_hold_sec, db_size,
                                     db_entry_px, db_exit_px, db_peak_px, pnl_pct, realized,
-                                    db_before, db_after, &db_rule, &db_url
+                                    db_before, db_after, &db_rule, &db_url, false
                                 ).await;
                             }
                         });
@@ -1301,12 +1305,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let db_after = bankroll_after;
                 let db_rule = reason.clone();
                 let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
+                let is_toxic_exit = is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk);
                 tokio::spawn(async move {
                     if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
                         db::record_settled_trade(
                             &pg_client, &db_mint, &db_sym, db_hold_sec, db_size,
                             db_entry_px, db_exit_px, db_peak_px, pnl_pct, pnl_sol,
-                            db_before, db_after, &db_rule, &db_url
+                            db_before, db_after, &db_rule, &db_url, is_toxic_exit
                         ).await;
                     }
                 });
@@ -1318,7 +1323,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     pnl_pct,
                     reason,
                     closed_at_epoch: now_epoch,
-                    is_toxic: is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk),
+                    is_toxic: is_toxic_exit,
                 });
             }
         }
@@ -1345,7 +1350,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let is_active = guard.active_positions.iter().any(|p| p.token_mint == mint);
                                 let now_sec = chrono::Utc::now().timestamp() as u64;
                                 let is_quarantined = guard.closed_trades.iter().any(|t| {
-                                    if t.token_mint != mint { return false; }
+                                    let is_match = !t.token_mint.is_empty() && t.token_mint == mint;
+                                    if !is_match { return false; }
                                     let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &scanner_cfg.risk);
                                     if scanner_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade { return true; }
                                     if now_sec < t.closed_at_epoch.saturating_add(scanner_cfg.risk.reentry_cooldown_secs) { return true; }
@@ -1358,6 +1364,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     if let Some(snap) = fetch_live_price(&scanner_client, &mint).await {
                                         let initial_price = snap.price_sol;
                                         let sym = snap.symbol.clone();
+                                        {
+                                            let guard = scanner_state.read().await;
+                                            let is_quarantined_sym = guard.closed_trades.iter().any(|t| {
+                                                let is_match = (!t.token_mint.is_empty() && t.token_mint == mint) || (!t.symbol.is_empty() && t.symbol == sym);
+                                                if !is_match { return false; }
+                                                let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &scanner_cfg.risk);
+                                                if scanner_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade { return true; }
+                                                if now_sec < t.closed_at_epoch.saturating_add(scanner_cfg.risk.reentry_cooldown_secs) { return true; }
+                                                false
+                                            });
+                                            if is_quarantined_sym {
+                                                continue;
+                                            }
+                                        }
                                         let pair_addr = snap.pair_address.clone();
                                         let liq = snap.liquidity_usd;
                                         let fdv = snap.fdv_usd;

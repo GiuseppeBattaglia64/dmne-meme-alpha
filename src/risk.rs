@@ -152,7 +152,7 @@ pub fn evaluate_position_exit(
 }
 
 pub fn is_historical_exit_toxic(exit_pnl_pct: f64, cfg: &RiskConfig) -> bool {
-    exit_pnl_pct <= cfg.stop_loss_pct || exit_pnl_pct <= cfg.flash_dump_tick_pct
+    exit_pnl_pct < cfg.stagnation_band_min_pct || exit_pnl_pct <= cfg.stop_loss_pct
 }
 
 pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String {
@@ -324,13 +324,14 @@ mod tests {
     #[test]
     fn test_is_historical_exit_toxic() {
         let cfg = RiskConfig::default();
-        // stop_loss_pct = -20.0, flash_dump_tick_pct = -15.0
+        // stagnation_band_min_pct = -8.0, stop_loss_pct = -20.0
         assert!(is_historical_exit_toxic(-20.0, &cfg));
         assert!(is_historical_exit_toxic(-22.0, &cfg));
-        assert!(is_historical_exit_toxic(-15.0, &cfg));
-        assert!(is_historical_exit_toxic(-17.5, &cfg));
-        assert!(!is_historical_exit_toxic(-10.0, &cfg));
+        assert!(is_historical_exit_toxic(-12.5, &cfg)); // underwater flash dump
+        assert!(is_historical_exit_toxic(-8.1, &cfg));
+        assert!(!is_historical_exit_toxic(-5.0, &cfg)); // stagnation band
         assert!(!is_historical_exit_toxic(0.0, &cfg));
+        assert!(!is_historical_exit_toxic(12.0, &cfg));
         assert!(!is_historical_exit_toxic(45.0, &cfg));
     }
 
