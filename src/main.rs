@@ -704,6 +704,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 resp.extend_from_slice(&icon_bytes);
                                 let _ = socket.write_all(&resp).await;
                             }
+                        } else if req.starts_with("GET /login") || req.starts_with("HEAD /login") {
+                            let html_body = tokio::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/login.html").await
+                                .unwrap_or_else(|_| "<h1>Login page not found</h1>".to_string());
+                            let res_header = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                html_body.len()
+                            );
+                            if req.starts_with("HEAD") {
+                                let _ = socket.write_all(res_header.as_bytes()).await;
+                            } else {
+                                let mut resp = res_header.into_bytes();
+                                resp.extend_from_slice(html_body.as_bytes());
+                                let _ = socket.write_all(&resp).await;
+                            }
+                        } else if req.starts_with("POST /api/auth/login") {
+                            let body = if let Some(idx) = req.find("\r\n\r\n") {
+                                &req[idx + 4..]
+                            } else if let Some(idx) = req.find("\n\n") {
+                                &req[idx + 2..]
+                            } else {
+                                ""
+                            };
+                            let mut auth_ok = false;
+                            let mut user_role = String::new();
+                            let mut user_token = String::new();
+                            let mut matched_uid = String::new();
+
+                            if let Ok(json_body) = serde_json::from_str::<serde_json::Value>(body.trim()) {
+                                let user_id = json_body.get("user_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_lowercase();
+                                let password = json_body.get("password").and_then(|v| v.as_str()).unwrap_or("").trim();
+                                if !user_id.is_empty() && !password.is_empty() {
+                                    let hash_bytes = solana_sdk::hash::hash(password.as_bytes()).to_bytes();
+                                    let password_hash: String = hash_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+                                    if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                        if let Some((role, token)) = db::verify_login(&pg_client, &user_id, &password_hash).await {
+                                            auth_ok = true;
+                                            user_role = role;
+                                            user_token = token;
+                                            matched_uid = user_id;
+                                        }
+                                    }
+                                }
+                            }
+
+                            let json_resp = if auth_ok {
+                                serde_json::json!({
+                                    "success": true,
+                                    "token": user_token,
+                                    "user_id": matched_uid,
+                                    "role": user_role
+                                }).to_string()
+                            } else {
+                                serde_json::json!({
+                                    "success": false,
+                                    "error": "Invalid User ID or Password"
+                                }).to_string()
+                            };
+
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /api/user/start") || req.starts_with("POST /api/user/start") {
+                            let user_id = req.split("user=").nth(1).unwrap_or("giovanni").split(&[' ', '&', '\r', '\n'][..]).next().unwrap_or("giovanni");
+                            let mut started = false;
+                            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                started = db::set_user_started(&pg_client, user_id).await;
+                            }
+                            let json_resp = serde_json::json!({
+                                "user": user_id,
+                                "has_started": started,
+                                "status": if started { "ACTIVATED" } else { "FAILED" }
+                            }).to_string();
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
                         } else {
                             let html_body = tokio::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/dashboard.html").await
                                 .unwrap_or_else(|_| DASHBOARD_HTML.to_string());

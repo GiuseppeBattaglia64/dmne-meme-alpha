@@ -637,6 +637,7 @@
         <button class="wallet-btn" style="background:#dc2626;" onclick="triggerPanicDump()">🛑 PANIC DUMP</button>
         <button class="wallet-btn" onclick="openDepositModal()">📥 DEPOSIT</button>
         <button class="wallet-btn withdraw-btn" onclick="openWithdrawModal()">📤 WITHDRAW</button>
+        <button class="wallet-btn" style="background:#334155;" onclick="window.location.href='/login'" title="Lock Workspace / Re-authenticate">🔒 LOCK</button>
       </div>
   </header>
 
@@ -1351,7 +1352,7 @@
 
   <script>
     
-    let currentUser = 'admin';
+    let currentUser = localStorage.getItem('dmne_user') || 'admin';
     let usersMap = {};
 
     async function loadUsers() {
@@ -1365,7 +1366,8 @@
             usersMap[u.id] = u;
             const opt = document.createElement('option');
             opt.value = u.id;
-            opt.innerText = `${u.name} [${u.mode}]`;
+            const statusTxt = u.has_started ? `[${u.mode}]` : `[PENDING START]`;
+            opt.innerText = `${u.name} ${statusTxt}`;
             if (u.id === currentUser) opt.selected = true;
             sel.appendChild(opt);
           });
@@ -1378,6 +1380,7 @@
 
     function switchUser(uid) {
       currentUser = uid;
+      localStorage.setItem('dmne_user', uid);
       updateUserUI();
     }
 
@@ -1392,12 +1395,18 @@
       // Update Mode Badge
       const modeBadge = document.getElementById('mode-badge');
       if (modeBadge) {
-        if (u.mode === 'LIVE') {
+        if (!u.has_started) {
+          modeBadge.innerText = '🚀 START DESK';
+          modeBadge.style.background = '#f59e0b';
+          modeBadge.title = 'Click to activate and launch this trading desk';
+        } else if (u.mode === 'LIVE') {
           modeBadge.innerText = '🔴 LIVE MAINNET';
           modeBadge.style.background = '#ef4444';
+          modeBadge.title = 'Click to switch between Paper and Live';
         } else {
           modeBadge.innerText = '🧪 PAPER MODE';
           modeBadge.style.background = '#0284c7';
+          modeBadge.title = 'Click to switch between Paper and Live';
         }
       }
 
@@ -1407,6 +1416,20 @@
     }
 
     async function toggleCurrentMode() {
+      const u = usersMap[currentUser];
+      if (u && !u.has_started) {
+        try {
+          const res = await fetch(`/api/user/start?user=${currentUser}`, { method: 'POST' });
+          const data = await res.json();
+          if (data.has_started) {
+            alert(`Trading desk activated for ${u.name}! Automated pipelines running.`);
+            loadUsers();
+          }
+        } catch (e) {
+          console.error('Failed to start desk:', e);
+        }
+        return;
+      }
       try {
         const res = await fetch(`/api/user/toggle-mode?user=${currentUser}`, { method: 'POST' });
         const data = await res.json();

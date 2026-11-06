@@ -112,7 +112,7 @@ pub async fn fetch_settled_trades(client: &Client, limit: i64) -> Vec<Value> {
 /// Queries all active users from PostgreSQL
 pub async fn fetch_active_users(client: &Client) -> Vec<Value> {
     let stmt = "
-        SELECT id, display_name, role, execution_mode, pubkey, paper_bankroll_sol
+        SELECT id, display_name, role, execution_mode, pubkey, paper_bankroll_sol, has_started
         FROM users
         WHERE is_active = true
         ORDER BY created_at ASC;
@@ -126,17 +126,50 @@ pub async fn fetch_active_users(client: &Client) -> Vec<Value> {
             let mode: String = r.get(3);
             let pubkey: String = r.get(4);
             let paper_bankroll: f64 = r.get(5);
+            let has_started: bool = r.get::<_, Option<bool>>(6).unwrap_or(false);
             users.push(json!({
                 "id": id,
                 "name": name,
                 "role": role,
                 "mode": mode,
                 "pubkey": pubkey,
-                "paper_bankroll": paper_bankroll
+                "paper_bankroll": paper_bankroll,
+                "has_started": has_started
             }));
         }
     }
     users
+}
+
+/// Verifies user credentials against PostgreSQL and returns (role, session_token) on success
+pub async fn verify_login(client: &Client, user_id: &str, password_hash: &str) -> Option<(String, String)> {
+    let stmt = "
+        SELECT role, is_active
+        FROM users
+        WHERE id = $1 AND password_hash = $2
+    ";
+    if let Ok(rows) = client.query(stmt, &[&user_id, &password_hash]).await {
+        if let Some(row) = rows.first() {
+            let role: String = row.get(0);
+            let is_active: bool = row.get(1);
+            if is_active {
+                let token = format!("tok_{}_{}", user_id, chrono::Utc::now().timestamp());
+                let update_stmt = "UPDATE users SET session_token = $1 WHERE id = $2";
+                let _ = client.execute(update_stmt, &[&token, &user_id]).await;
+                return Some((role, token));
+            }
+        }
+    }
+    None
+}
+
+/// Marks a user's desk as started/activated
+pub async fn set_user_started(client: &Client, user_id: &str) -> bool {
+    let stmt = "UPDATE users SET has_started = true WHERE id = $1";
+    if let Ok(rows_affected) = client.execute(stmt, &[&user_id]).await {
+        return rows_affected > 0;
+    }
+    false
 }
 
 /// Toggles user execution mode between PAPER and LIVE
