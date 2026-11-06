@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0f1d">
+  <title>DMNE QUANT // Cockpit Authentication</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; }
+    body {
+      background: radial-gradient(circle at 50% 20%, #0d1629 0%, #060913 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .login-card {
+      background: rgba(13, 19, 34, 0.85);
+      border: 1px solid #1e293b;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 380px;
+      padding: 32px 28px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 20px rgba(0, 242, 254, 0.08);
+    }
+    .brand-title {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: #00f2fe;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-sub { font-size: 11px; color: #64748b; letter-spacing: 0.05em; margin-bottom: 24px; }
+    .input-label { font-size: 11px; font-weight: 700; color: #94a3b8; margin-bottom: 6px; display: block; text-transform: uppercase; }
+    .login-input {
+      width: 100%;
+      background: #060913;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 12px;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      margin-bottom: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .login-input:focus { border-color: #00f2fe; }
+    .btn-submit {
+      width: 100%;
+      background: #00f2fe;
+      color: #040814;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      border: none;
+      padding: 13px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-top: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn-submit:hover { opacity: 0.9; }
+    .err-msg { color: #ef4444; font-size: 11px; margin-top: 12px; text-align: center; display: none; }
+    .quick-creds {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #1e293b;
+      font-size: 10px;
+      color: #475569;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="brand-title">⚡ DMNE MEMESCOPE</div>
+    <div class="brand-sub">INSTITUTIONAL DESK AUTHENTICATION</div>
+
+    <form onsubmit="handleLogin(event)">
+      <label class="input-label">Workspace User ID</label>
+      <input type="text" id="uid" class="login-input" placeholder="admin / giuseppe / giovanni" autocapitalize="none" required />
+
+      <label class="input-label">Password / Access Key</label>
+      <input type="password" id="pw" class="login-input" placeholder="••••••••" required />
+
+      <button type="submit" class="btn-submit">UNLOCK WORKSPACE</button>
+      <div id="errMsg" class="err-msg">Invalid User ID or Password</div>
+    </form>
+
+    <div class="quick-creds">
+      <strong>Temporary Accounts:</strong><br>
+      • Admin: <code>admin</code> / <code>admin8090</code><br>
+      • Giuseppe: <code>giuseppe</code> / <code>giuseppe8090</code><br>
+      • Giovanni: <code>giovanni</code> / <code>giovanni8090</code>
+    </div>
+  </div>
+
+  <script>
+    async function handleLogin(e) {
+      e.preventDefault();
+      const uid = document.getElementById('uid').value.trim().toLowerCase();
+      const pw = document.getElementById('pw').value.trim();
+      const err = document.getElementById('errMsg');
+      err.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: uid, password: pw })
+        });
+        const data = await res.json();
+        if (data.success) {
+          localStorage.setItem('dmne_token', data.token);
+          localStorage.setItem('dmne_user', data.user_id);
+          localStorage.setItem('dmne_role', data.role);
+          document.cookie = `dmne_session=${data.token}; path=/; max-age=604800; SameSite=Lax`;
+          window.location.href = '/';
+        } else {
+          err.innerText = data.error || 'Authentication failed';
+          err.style.display = 'block';
+        }
+      } catch (errExp) {
+        err.innerText = 'Connection error';
+        err.style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>
