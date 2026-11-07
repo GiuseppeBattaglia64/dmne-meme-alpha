@@ -1255,7 +1255,14 @@
     function renderSettledTable(trades) {
       const tbody = document.getElementById("settled-tbody");
       if (!trades || trades.length === 0) return;
-      tbody.innerHTML = trades.slice(0, 6).map(t => {
+      const sorted = trades.slice().sort((a, b) => {
+        const epochA = a.closed_at_epoch || a.exit_epoch || 0;
+        const epochB = b.closed_at_epoch || b.exit_epoch || 0;
+        if (epochA !== epochB) return epochB - epochA;
+        return 0;
+      });
+      const listToRender = (sorted.length > 0 && (sorted[0].closed_at_epoch || sorted[0].exit_epoch)) ? sorted : trades.slice().reverse();
+      tbody.innerHTML = listToRender.slice(0, 8).map(t => {
         const pnl = parseFloat(t.pnl_pct || t.realized_pnl_pct || 0.0);
         const pnlColor = pnl >= 0 ? "var(--green)" : "var(--red)";
         const sizeSol = parseFloat(t.size_sol || t.entry_size_sol || 0.0417);

@@ -626,10 +626,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Rejections: {} | Restored Closed Trades: {}", 
             g.current_bankroll_sol, g.total_realized_pnl_sol, total, rejections, g.closed_trades.len());
 
-        // Restore permanent toxic ban set from archived trades without polluting v0.7.1 PnL
-        let toxic_tokens = db::fetch_archived_toxic_tokens(&pg, config.risk.stagnation_band_min_pct).await;
-        let toxic_count = toxic_tokens.len();
-        for (mint, sym) in toxic_tokens {
+        // Lifetime One-Shot Policy: populate banned_tokens with all distinct settled tokens from both tables
+        let all_settled_tokens = db::fetch_all_settled_tokens(&pg).await;
+        let settled_count = all_settled_tokens.len();
+        for (mint, sym) in all_settled_tokens {
             if !mint.is_empty() {
                 g.banned_tokens.insert(mint);
             }
@@ -637,7 +637,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 g.banned_tokens.insert(sym);
             }
         }
-        println!("[STARTUP RECONCILE] Restored {} permanent toxic banned tokens from settled_trades archive", toxic_count);
+        println!("[STARTUP RECONCILE] Restored {} lifetime one-shot banned tokens from settled_trades archive", settled_count);
     }
 
     // Fallback: If DB had no closed trades or was unreachable, load from trades_forensic.csv
@@ -663,6 +663,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else {
                             risk::is_historical_exit_toxic(pnl_pct, &config.risk)
                         };
+                        if !token_mint.is_empty() {
+                            g.banned_tokens.insert(token_mint.clone());
+                        }
+                        if !symbol.is_empty() {
+                            g.banned_tokens.insert(symbol.clone());
+                        }
                         g.closed_trades.push(ClosedTrade {
                             token_mint,
                             symbol,
@@ -1119,31 +1125,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             continue;
                         }
                         let is_banned = state.banned_tokens.contains(&candidate.token_mint) || state.banned_tokens.contains(&candidate.symbol);
-                        if eval_cfg.risk.toxic_exit_permanent_ban && is_banned {
-                            println!("[ANTI-CHURN] Permanent ban active for toxic token: {} ({})", candidate.symbol, candidate.token_mint);
+                        if is_banned {
+                            println!("[LIFETIME ONE-SHOT BAN] Re-entry blocked for previously traded token: {} ({})", candidate.symbol, candidate.token_mint);
                             state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                             state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             continue;
                         }
-                        let is_quarantined = state.closed_trades.iter().any(|t| {
-                            let is_match = (!t.token_mint.is_empty() && t.token_mint == candidate.token_mint) || (!t.symbol.is_empty() && t.symbol == candidate.symbol);
-                            if !is_match {
-                                return false;
-                            }
-                            let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &eval_cfg.risk);
-                            if eval_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade {
-                                println!("[ANTI-CHURN] Permanent ban active for toxic token: {} ({})", candidate.symbol, candidate.token_mint);
-                                return true;
-                            }
-                            if now_epoch < t.closed_at_epoch.saturating_add(eval_cfg.risk.reentry_cooldown_secs) {
-                                let rem = t.closed_at_epoch.saturating_add(eval_cfg.risk.reentry_cooldown_secs).saturating_sub(now_epoch);
-                                println!("[ANTI-CHURN] Token {} ({}) in quarantine ({}s remaining)", candidate.symbol, candidate.token_mint, rem);
-                                return true;
-                            }
-                            false
+                        let is_already_traded = state.closed_trades.iter().any(|t| {
+                            (!t.token_mint.is_empty() && t.token_mint == candidate.token_mint) || (!t.symbol.is_empty() && t.symbol == candidate.symbol)
                         });
-
-                        if is_quarantined {
+                        if is_already_traded {
+                            println!("[LIFETIME ONE-SHOT BAN] Closed trade history exists for token: {} ({})", candidate.symbol, candidate.token_mint);
                             state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                             state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             continue;
@@ -1560,13 +1552,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     state.consecutive_losses += 1;
                 }
                 let is_toxic_exit = is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk);
-                if is_toxic_exit {
-                    if !pos.token_mint.is_empty() {
-                        state.banned_tokens.insert(pos.token_mint.clone());
-                    }
-                    if !pos.symbol.is_empty() {
-                        state.banned_tokens.insert(pos.symbol.clone());
-                    }
+                // Lifetime One-Shot Policy: permanently ban ANY settled mint/symbol from ever re-entering
+                if !pos.token_mint.is_empty() {
+                    state.banned_tokens.insert(pos.token_mint.clone());
+                }
+                if !pos.symbol.is_empty() {
+                    state.banned_tokens.insert(pos.symbol.clone());
                 }
                 append_comprehensive_trade_log(
                     &pos,
@@ -1632,7 +1623,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let guard = scanner_state.read().await;
                                 let is_active = guard.active_positions.iter().any(|p| p.token_mint == mint);
                                 let is_banned = guard.banned_tokens.contains(&mint);
-                                if scanner_cfg.risk.toxic_exit_permanent_ban && is_banned {
+                                if is_banned {
+                                    continue;
+                                }
+                                let is_already_traded = guard.closed_trades.iter().any(|t| {
+                                    !t.token_mint.is_empty() && t.token_mint == mint
+                                });
+                                if is_already_traded {
                                     continue;
                                 }
                                 let now_sec = chrono::Utc::now().timestamp() as u64;
@@ -1642,17 +1639,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 if is_rejected_mint {
                                     continue;
                                 }
-                                let is_quarantined = guard.closed_trades.iter().any(|t| {
-                                    let is_match = !t.token_mint.is_empty() && t.token_mint == mint;
-                                    if !is_match { return false; }
-                                    let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &scanner_cfg.risk);
-                                    if scanner_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade { return true; }
-                                    if now_sec < t.closed_at_epoch.saturating_add(scanner_cfg.risk.reentry_cooldown_secs) { return true; }
-                                    false
-                                });
 
                                 // Slot-blocking guard removed: Discovery worker audits 100% continuously
-                                if !is_active && !is_quarantined {
+                                if !is_active {
                                     drop(guard);
                                     if let Some(snap) = fetch_live_price(&scanner_client, &mint).await {
                                         let sym = snap.symbol.clone();
@@ -1663,7 +1652,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                  continue;
                                              }
                                              let is_banned_sym = guard.banned_tokens.contains(&mint) || guard.banned_tokens.contains(&sym);
-                                             if scanner_cfg.risk.toxic_exit_permanent_ban && is_banned_sym {
+                                             if is_banned_sym {
+                                                 continue;
+                                             }
+                                             let is_already_traded_sym = guard.closed_trades.iter().any(|t| {
+                                                 (!t.token_mint.is_empty() && t.token_mint == mint) || (!t.symbol.is_empty() && t.symbol == sym)
+                                             });
+                                             if is_already_traded_sym {
                                                  continue;
                                              }
                                              let is_rejected_sym = guard.rejected_candidates.iter().any(|(k, rejected_at)| {
@@ -1671,17 +1666,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                      && now_sec < rejected_at.saturating_add(scanner_cfg.risk.rejected_candidate_cooldown_secs)
                                              });
                                              if is_rejected_sym {
-                                                 continue;
-                                             }
-                                             let is_quarantined_sym = guard.closed_trades.iter().any(|t| {
-                                                 let is_match = (!t.token_mint.is_empty() && t.token_mint == mint) || (!t.symbol.is_empty() && t.symbol == sym);
-                                                 if !is_match { return false; }
-                                                 let is_toxic_trade = t.is_toxic || risk::is_historical_exit_toxic(t.pnl_pct, &scanner_cfg.risk);
-                                                 if scanner_cfg.risk.toxic_exit_permanent_ban && is_toxic_trade { return true; }
-                                                 if now_sec < t.closed_at_epoch.saturating_add(scanner_cfg.risk.reentry_cooldown_secs) { return true; }
-                                                 false
-                                             });
-                                             if is_quarantined_sym {
                                                  continue;
                                              }
                                          }

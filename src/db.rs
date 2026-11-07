@@ -331,6 +331,40 @@ pub async fn fetch_archived_toxic_tokens(client: &Client, min_non_toxic_pnl_pct:
     tokens
 }
 
+/// Queries both settled_trades and settled_trades_v070_archive for all distinct (token_mint, symbol)
+/// enforcing a strict lifetime one-shot mint policy across sessions
+pub async fn fetch_all_settled_tokens(client: &Client) -> Vec<(String, String)> {
+    let mut tokens = Vec::new();
+    let query = "
+        SELECT DISTINCT token_mint, symbol FROM (
+            SELECT token_mint, symbol FROM settled_trades
+            UNION ALL
+            SELECT token_mint, symbol FROM settled_trades_v070_archive
+        ) sub
+        WHERE (token_mint != '' OR symbol != '')
+    ";
+    if let Ok(rows) = client.query(query, &[]).await {
+        for row in rows {
+            let mint: String = row.get(0);
+            let sym: String = row.get(1);
+            tokens.push((mint, sym));
+        }
+    } else {
+        let fallback = "
+            SELECT DISTINCT token_mint, symbol FROM settled_trades
+            WHERE (token_mint != '' OR symbol != '')
+        ";
+        if let Ok(rows) = client.query(fallback, &[]).await {
+            for row in rows {
+                let mint: String = row.get(0);
+                let sym: String = row.get(1);
+                tokens.push((mint, sym));
+            }
+        }
+    }
+    tokens
+}
+
 /// Fetches recent pre-trade audits to populate candidate radar on boot
 pub async fn fetch_recent_radar_audits(client: &Client, limit: i64) -> Vec<serde_json::Value> {
     let stmt = "
