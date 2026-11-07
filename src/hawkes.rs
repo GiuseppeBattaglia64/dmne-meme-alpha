@@ -38,6 +38,38 @@ pub struct HawkesConfig {
     /// Upper boundary on mean interval (seconds) to qualify sub-minute robotic periodic churning
     #[serde(default = "default_max_robotic_interval_secs")]
     pub max_robotic_interval_secs: f64,
+
+    /// Floor cutoff on Index of Dispersion (Var(N) / E[N]); < 0.35 indicates underdispersed robotic clocking
+    #[serde(default = "default_min_dispersion_threshold")]
+    pub min_dispersion_threshold: f64,
+
+    /// Minimum mean count E[N] required to trigger underdispersed robotic loop flag
+    #[serde(default = "default_min_robotic_mean_count")]
+    pub min_robotic_mean_count: f64,
+
+    /// Count acceleration explosive threshold (latest bin / max(1, prev_bin))
+    #[serde(default = "default_max_count_acceleration_ratio")]
+    pub max_count_acceleration_ratio: f64,
+
+    /// Minimum count required in latest bin to qualify as explosive cascade
+    #[serde(default = "default_min_cascade_count")]
+    pub min_cascade_count: u32,
+
+    /// Minimum epoch bins required for discrete dispersion calculation
+    #[serde(default = "default_min_epoch_bins")]
+    pub min_epoch_bins: usize,
+
+    /// Minimum 5-minute volume in USD to trigger organic breakout override
+    #[serde(default = "default_override_min_volume_usd")]
+    pub override_min_volume_usd: f64,
+
+    /// Minimum buy/sell ratio to trigger organic breakout override
+    #[serde(default = "default_override_min_buy_sell_ratio")]
+    pub override_min_buy_sell_ratio: f64,
+
+    /// Minimum liquidity in USD for organic breakout protection
+    #[serde(default = "default_override_min_liquidity_usd")]
+    pub override_min_liquidity_usd: f64,
 }
 
 fn default_mu_baseline() -> f64 { 0.10 }
@@ -48,6 +80,14 @@ fn default_min_cv_periodicity_threshold() -> f64 { 0.12 }
 fn default_min_observations() -> usize { 2 }
 fn default_max_inter_arrival_gap_secs() -> f64 { 120.0 }
 fn default_max_robotic_interval_secs() -> f64 { 8.0 }
+fn default_min_dispersion_threshold() -> f64 { 0.35 }
+fn default_min_robotic_mean_count() -> f64 { 3.0 }
+fn default_max_count_acceleration_ratio() -> f64 { 2.5 }
+fn default_min_cascade_count() -> u32 { 5 }
+fn default_min_epoch_bins() -> usize { 2 }
+fn default_override_min_volume_usd() -> f64 { 25_000.0 }
+fn default_override_min_buy_sell_ratio() -> f64 { 1.75 }
+fn default_override_min_liquidity_usd() -> f64 { 25_000.0 }
 
 impl Default for HawkesConfig {
     fn default() -> Self {
@@ -60,6 +100,14 @@ impl Default for HawkesConfig {
             min_observations: default_min_observations(),
             max_inter_arrival_gap_secs: default_max_inter_arrival_gap_secs(),
             max_robotic_interval_secs: default_max_robotic_interval_secs(),
+            min_dispersion_threshold: default_min_dispersion_threshold(),
+            min_robotic_mean_count: default_min_robotic_mean_count(),
+            max_count_acceleration_ratio: default_max_count_acceleration_ratio(),
+            min_cascade_count: default_min_cascade_count(),
+            min_epoch_bins: default_min_epoch_bins(),
+            override_min_volume_usd: default_override_min_volume_usd(),
+            override_min_buy_sell_ratio: default_override_min_buy_sell_ratio(),
+            override_min_liquidity_usd: default_override_min_liquidity_usd(),
         }
     }
 }
@@ -207,20 +255,26 @@ pub fn evaluate_hawkes_filter(
     let mut reason = None;
 
     if deltas.len() >= cfg.min_observations {
-        // 1. Robotic clocking check: high-frequency arrivals with deterministic regularity
-        if mean_dt <= cfg.max_robotic_interval_secs && cv < cfg.min_cv_periodicity_threshold {
+        let counts = discretize_arrival_timestamps_to_counts(&sorted_ts, eval_time, 10.0);
+        let discrete_disp = evaluate_discrete_orderflow_dispersion_with_config(&counts, cfg);
+
+        // 1. Robotic clocking check: continuous deterministic periodicity or discrete underdispersion
+        if discrete_disp.is_underdispersed_robotic {
+            is_wash = true;
+            reason = discrete_disp.rejection_reason;
+        } else if mean_dt <= cfg.max_robotic_interval_secs && cv < cfg.min_cv_periodicity_threshold {
             is_wash = true;
             reason = Some(format!(
                 "ROBOTIC_PERIODICITY: CV {:.3} < floor {:.2} at mean dt {:.2}s",
                 cv, cfg.min_cv_periodicity_threshold, mean_dt
             ));
         }
-        // 2. Supercritical circular churn check: branching ratio exceeds ceiling
-        else if branching >= cfg.max_branching_ratio {
+        // 2. Supercritical circular churn check: continuous Hawkes branching or explosive discrete cascade
+        else if branching >= cfg.max_branching_ratio || discrete_disp.is_supercritical_cascade {
             is_wash = true;
             reason = Some(format!(
                 "SUPERCRITICAL_BRANCHING: eta {:.3} >= ceiling {:.2}",
-                branching, cfg.max_branching_ratio
+                branching.max(discrete_disp.inar_alpha_estimate), cfg.max_branching_ratio
             ));
         }
     }
@@ -235,6 +289,198 @@ pub fn evaluate_hawkes_filter(
         is_wash_trading: is_wash,
         rejection_reason: reason,
     }
+}
+
+/// Evaluated metrics from discrete orderflow count dispersion and INAR estimation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscreteDispersionMetrics {
+    pub bins_count: usize,
+    pub mean_count: f64,
+    pub variance_count: f64,
+    pub dispersion_index: f64,
+    pub count_acceleration: f64,
+    pub inar_alpha_estimate: f64,
+    pub is_underdispersed_robotic: bool,
+    pub is_supercritical_cascade: bool,
+    pub is_wash_trading: bool,
+    pub rejection_reason: Option<String>,
+}
+
+/// Evaluates discrete orderflow count dispersion and INAR autoregressive parameters across epoch bins
+pub fn evaluate_discrete_orderflow_dispersion(
+    counts: &[u32],
+) -> DiscreteDispersionMetrics {
+    evaluate_discrete_orderflow_dispersion_with_config(counts, &HawkesConfig::default())
+}
+
+/// Evaluates discrete orderflow count dispersion using a custom HawkesConfig
+pub fn evaluate_discrete_orderflow_dispersion_with_config(
+    counts: &[u32],
+    cfg: &HawkesConfig,
+) -> DiscreteDispersionMetrics {
+    let bins_count = counts.len();
+    if bins_count < cfg.min_epoch_bins {
+        return DiscreteDispersionMetrics {
+            bins_count,
+            mean_count: 0.0,
+            variance_count: 0.0,
+            dispersion_index: 1.0,
+            count_acceleration: 1.0,
+            inar_alpha_estimate: 0.0,
+            is_underdispersed_robotic: false,
+            is_supercritical_cascade: false,
+            is_wash_trading: false,
+            rejection_reason: None,
+        };
+    }
+
+    let mean_count: f64 = counts.iter().map(|&c| c as f64).sum::<f64>() / (bins_count as f64);
+    let variance_count: f64 = if bins_count >= 2 {
+        counts
+            .iter()
+            .map(|&c| {
+                let diff = (c as f64) - mean_count;
+                diff * diff
+            })
+            .sum::<f64>()
+            / ((bins_count - 1) as f64)
+    } else {
+        0.0
+    };
+
+    let dispersion_index = if mean_count > 0.0 {
+        variance_count / mean_count
+    } else {
+        1.0
+    };
+
+    // Calculate count acceleration from the latest two bins
+    let last_count = counts[bins_count - 1] as f64;
+    let prev_count = counts[bins_count - 2] as f64;
+    let count_acceleration = last_count / prev_count.max(1.0);
+
+    // INAR(1) conditional least squares estimation of alpha (clamped to [0.0, 10.0])
+    let mut num = 0.0;
+    let mut den = 0.0;
+    for i in 1..bins_count {
+        let diff_curr = (counts[i] as f64) - mean_count;
+        let diff_prev = (counts[i - 1] as f64) - mean_count;
+        num += diff_curr * diff_prev;
+        den += diff_prev * diff_prev;
+    }
+    let inar_alpha = if den > 1e-9 {
+        (num / den).clamp(0.0, 10.0)
+    } else {
+        0.0
+    };
+
+    let mut is_underdispersed = false;
+    let mut is_supercritical = false;
+    let mut reason = None;
+
+    // 1. Underdispersed robotic loop: D < threshold with mean count >= robotic floor
+    if dispersion_index < cfg.min_dispersion_threshold && mean_count >= cfg.min_robotic_mean_count {
+        is_underdispersed = true;
+        reason = Some(format!(
+            "UNDERDISPERSED_ROBOTIC_LOOP: D {:.3} < floor {:.2} (mean count {:.1} >= {:.1})",
+            dispersion_index, cfg.min_dispersion_threshold, mean_count, cfg.min_robotic_mean_count
+        ));
+    }
+    // 2. Supercritical cascade: explosive acceleration or supercritical INAR branching
+    else if (count_acceleration >= cfg.max_count_acceleration_ratio && counts[bins_count - 1] >= cfg.min_cascade_count)
+        || inar_alpha >= cfg.max_branching_ratio
+    {
+        is_supercritical = true;
+        reason = Some(format!(
+            "SUPERCRITICAL_CASCADE: accel {:.2} >= {:.2} (last count {}) or INAR alpha {:.2} >= {:.2}",
+            count_acceleration, cfg.max_count_acceleration_ratio, counts[bins_count - 1], inar_alpha, cfg.max_branching_ratio
+        ));
+    }
+
+    let is_wash = is_underdispersed || is_supercritical;
+
+    DiscreteDispersionMetrics {
+        bins_count,
+        mean_count,
+        variance_count,
+        dispersion_index,
+        count_acceleration,
+        inar_alpha_estimate: inar_alpha,
+        is_underdispersed_robotic: is_underdispersed,
+        is_supercritical_cascade: is_supercritical,
+        is_wash_trading: is_wash,
+        rejection_reason: reason,
+    }
+}
+
+/// Checks if a candidate qualifies for the Liquidity / Volume organic breakout override.
+/// If 5-minute volume >= 25,000 USD and buy/sell ratio >= 1.75, periodicity flags are bypassed.
+pub fn is_organic_breakout_override(
+    volume_5m_usd: f64,
+    buy_sell_ratio: f64,
+    liquidity_usd: f64,
+    cfg: &HawkesConfig,
+) -> bool {
+    let volume_qualified = volume_5m_usd >= cfg.override_min_volume_usd
+        || liquidity_usd >= cfg.override_min_liquidity_usd;
+    let ratio_qualified = buy_sell_ratio >= cfg.override_min_buy_sell_ratio;
+    volume_qualified && ratio_qualified
+}
+
+/// Discretizes continuous arrival timestamps into consecutive count bins
+pub fn discretize_arrival_timestamps_to_counts(
+    timestamps: &[f64],
+    eval_time: f64,
+    bin_width_secs: f64,
+) -> Vec<u32> {
+    if timestamps.is_empty() || bin_width_secs <= 0.0 {
+        return Vec::new();
+    }
+    let mut sorted = timestamps.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.retain(|&t| t <= eval_time + 0.5);
+
+    if sorted.is_empty() {
+        return Vec::new();
+    }
+
+    let t_start = sorted[0];
+    let total_duration = (eval_time + 0.5 - t_start).max(bin_width_secs);
+    let num_bins = ((total_duration / bin_width_secs).ceil() as usize).max(1);
+    let mut bins = vec![0u32; num_bins];
+
+    for &t in &sorted {
+        let b = ((t - t_start) / bin_width_secs).floor() as usize;
+        if b < num_bins {
+            bins[b] += 1;
+        }
+    }
+    bins
+}
+
+/// Evaluates a candidate stream against Hawkes wash-trading detector with organic breakout override
+pub fn evaluate_hawkes_filter_with_override(
+    timestamps: &[f64],
+    eval_time: f64,
+    volume_5m_usd: f64,
+    buy_sell_ratio: f64,
+    liquidity_usd: f64,
+    cfg: &HawkesConfig,
+) -> HawkesMetrics {
+    let mut metrics = evaluate_hawkes_filter(timestamps, eval_time, cfg);
+    if metrics.is_wash_trading {
+        let is_periodicity = metrics
+            .rejection_reason
+            .as_deref()
+            .map(|r| r.contains("ROBOTIC_PERIODICITY") || r.contains("UNDERDISPERSED_ROBOTIC_LOOP"))
+            .unwrap_or(false);
+
+        if is_periodicity && is_organic_breakout_override(volume_5m_usd, buy_sell_ratio, liquidity_usd, cfg) {
+            metrics.is_wash_trading = false;
+            metrics.rejection_reason = None;
+        }
+    }
+    metrics
 }
 
 #[cfg(test)]
@@ -264,14 +510,18 @@ mod tests {
     #[test]
     fn test_robotic_clocking_detection() {
         let cfg = HawkesConfig::default();
-        // Perfectly clocked bot: arrives every 2.00s with negligible jitter (+- 0.02s)
-        let timestamps = vec![1000.0, 1002.02, 1004.01, 1006.03, 1008.02, 1010.01];
-        let eval_time = 1010.05;
+        // Perfectly clocked bot: arrives exactly 5 times per 10s epoch bin
+        let timestamps = vec![
+            1000.0, 1002.0, 1004.0, 1006.0, 1008.0,
+            1010.0, 1012.0, 1014.0, 1016.0, 1018.0,
+            1020.0, 1022.0, 1024.0, 1026.0, 1028.0,
+        ];
+        let eval_time = 1029.0;
 
         let metrics = evaluate_hawkes_filter(&timestamps, eval_time, &cfg);
         assert!(metrics.is_wash_trading);
         assert!(metrics.cv_regularity < 0.05);
-        assert!(metrics.rejection_reason.unwrap().contains("ROBOTIC_PERIODICITY"));
+        assert!(metrics.rejection_reason.unwrap().contains("UNDERDISPERSED_ROBOTIC_LOOP"));
     }
 
     #[test]
@@ -302,5 +552,61 @@ mod tests {
         let calculated = calculate_conditional_intensity(&timestamps, eval_time, mu, alpha, beta);
 
         assert!((calculated - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_discrete_orderflow_dispersion_equidispersed() {
+        // Natural Poisson variation: counts centered near 5 with D ~ 1.0 (mean ~ 5.1, var ~ 6.4, D ~ 1.25)
+        let counts = vec![3, 8, 4, 2, 7, 5, 9, 3];
+        let metrics = evaluate_discrete_orderflow_dispersion(&counts);
+        assert!(!metrics.is_wash_trading);
+        assert!(metrics.dispersion_index >= 0.35);
+        assert!(metrics.rejection_reason.is_none());
+    }
+
+    #[test]
+    fn test_discrete_orderflow_dispersion_underdispersed_robotic() {
+        // Deterministic robotic loop: exactly 5 events every bin (zero variance, D = 0.0 < 0.35)
+        let counts = vec![5, 5, 5, 5, 5, 5];
+        let metrics = evaluate_discrete_orderflow_dispersion(&counts);
+        assert!(metrics.is_wash_trading);
+        assert!(metrics.is_underdispersed_robotic);
+        assert!(metrics.dispersion_index < 0.35);
+        assert!(metrics.rejection_reason.unwrap().contains("UNDERDISPERSED_ROBOTIC_LOOP"));
+    }
+
+    #[test]
+    fn test_discrete_orderflow_dispersion_supercritical_cascade() {
+        // Sudden explosive cascade: count jumps from 2 to 15 (accel = 7.5 >= 2.5, last count >= 5)
+        let counts = vec![2, 2, 2, 2, 15];
+        let metrics = evaluate_discrete_orderflow_dispersion(&counts);
+        assert!(metrics.is_wash_trading);
+        assert!(metrics.is_supercritical_cascade);
+        assert!(metrics.rejection_reason.unwrap().contains("SUPERCRITICAL_CASCADE"));
+    }
+
+    #[test]
+    fn test_organic_breakout_override() {
+        let cfg = HawkesConfig::default();
+        // High volume ($35k >= $25k) and high buy/sell ratio (2.50 >= 1.75)
+        assert!(is_organic_breakout_override(35_000.0, 2.50, 40_000.0, &cfg));
+
+        // Low volume ($15k < $25k) and low ratio (1.20 < 1.75)
+        assert!(!is_organic_breakout_override(15_000.0, 1.20, 18_000.0, &cfg));
+
+        // High volume but low buy ratio (e.g. panic sell dump)
+        assert!(!is_organic_breakout_override(50_000.0, 0.80, 50_000.0, &cfg));
+    }
+
+    #[test]
+    fn test_discretize_arrival_timestamps_to_counts() {
+        let timestamps = vec![100.0, 102.0, 104.5, 111.0, 115.0];
+        let eval_time = 120.0;
+        let bin_width = 5.0; // [100..105), [105..110), [110..115), [115..120), [120..125)
+        let bins = discretize_arrival_timestamps_to_counts(&timestamps, eval_time, bin_width);
+        assert_eq!(bins[0], 3); // 100.0, 102.0, 104.5
+        assert_eq!(bins[1], 0);
+        assert_eq!(bins[2], 1); // 111.0
+        assert_eq!(bins[3], 1); // 115.0
     }
 }
