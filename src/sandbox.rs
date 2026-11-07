@@ -731,10 +731,10 @@ mod tests {
         assert_eq!(reason, "TP1_TRAILING_EXIT");
         assert!(net_pnl > 30.0);
 
-        // Case C: peak +40% (>= 35%, < 45%), exit at 0.95 (-5%) -> Breakeven Guard (+12% floor)
+        // Case C: peak +40% (>= 24%, < 45%), exit at 0.95 (-5%) -> Breakeven Guard (+8% floor)
         let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.4, 0.95, 150, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);
         assert_eq!(reason, "BREAKEVEN_GUARD_EXIT");
-        assert!(net_pnl > 10.0);
+        assert!(net_pnl > 5.0 && net_pnl <= risk_cfg.breakeven_floor_pct);
 
         // Case D: peak +0.5% (< 1%), hold 50s (>= 45s), exit at 0.85 (-15% <= -10%) -> Early Abort (-10%)
         let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.005, 0.85, 50, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);

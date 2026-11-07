@@ -20,7 +20,7 @@ enum AppConfig {
     // Execution Defaults (Used only before first live state decode)
     static let defaultSlotCount: Int = 4
     static let defaultStopLossPct: Double = -20.0
-    static let defaultBreakevenArmPct: Double = 35.0
+    static let defaultBreakevenArmPct: Double = 24.0
     static let defaultTp1TriggerPct: Double = 45.0
     static let defaultSolPriceUsd: Double = 188.0
     static let defaultSolPriceEur: Double = 174.0

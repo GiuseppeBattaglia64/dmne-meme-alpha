@@ -420,8 +420,8 @@ mod tests {
         assert!(!pos.tp1_executed);
         assert!((pos.peak_pnl_pct - 36.0).abs() < 1e-6);
 
-        // Retrace to +11% (below +12% floor)
-        let action = evaluate_position_exit(&mut pos, 1.11, 1060, &cfg);
+        // Retrace to +7% (below +8% floor)
+        let action = evaluate_position_exit(&mut pos, 1.07, 1060, &cfg);
         match action {
             ExitAction::FullExit { rule_label, is_toxic } => {
                 assert!(rule_label.contains("Breakeven Guard"));
@@ -485,7 +485,7 @@ mod tests {
         assert_eq!(format_position_status(&pos, &cfg), "Monitoring Momentum");
 
         pos.peak_pnl_pct = 36.0;
-        assert_eq!(format_position_status(&pos, &cfg), "Breakeven Armed (+12% Floor)");
+        assert_eq!(format_position_status(&pos, &cfg), format!("Breakeven Armed (+{:.0}% Floor)", cfg.breakeven_floor_pct));
 
         pos.tp1_executed = true;
         assert_eq!(format_position_status(&pos, &cfg), "TP1 Harvested (+45%)");

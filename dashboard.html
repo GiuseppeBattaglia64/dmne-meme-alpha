@@ -1099,12 +1099,12 @@
 
         const rc = window.activeRiskConfig || {};
         const stopLossPct = rc.stop_loss_pct !== undefined ? rc.stop_loss_pct : -20.0;
-        const beArmPct = rc.breakeven_arm_pct !== undefined ? rc.breakeven_arm_pct : 35.0;
-        const beFloorPct = rc.breakeven_floor_pct !== undefined ? rc.breakeven_floor_pct : 12.0;
+        const beArmPct = rc.breakeven_arm_pct !== undefined ? rc.breakeven_arm_pct : 24.0;
+        const beFloorPct = rc.breakeven_floor_pct !== undefined ? rc.breakeven_floor_pct : 8.0;
         const tp1Pct = rc.tp1_trigger_pct !== undefined ? rc.tp1_trigger_pct : 45.0;
         const tp2Pct = rc.tp2_trigger_pct !== undefined ? rc.tp2_trigger_pct : 100.0;
         const runnerDropPct = rc.runner_trailing_drop_pct !== undefined ? rc.runner_trailing_drop_pct : 18.0;
-        const stagTtlSecs = rc.stagnation_ttl_secs !== undefined ? rc.stagnation_ttl_secs : 240;
+        const stagTtlSecs = rc.stagnation_ttl_secs !== undefined ? rc.stagnation_ttl_secs : 160;
 
         const peakPct = (p.peak_price_sol && p.entry_price_sol)
           ? ((p.peak_price_sol - p.entry_price_sol) / p.entry_price_sol) * 100.0

@@ -162,7 +162,7 @@ fn default_min_entry_m5_txns() -> u32 { 15 }
 fn default_min_entry_m5_volume_usd() -> f64 { 2500.0 }
 fn default_min_entry_h1_price_change_pct() -> f64 { -10.0 }
 fn default_max_entry_fdv_to_liquidity_ratio() -> f64 { 15.0 }
-fn default_early_abort_window_secs() -> u64 { 45 }
+fn default_early_abort_window_secs() -> u64 { 30 }
 fn default_early_abort_max_peak_pct() -> f64 { 1.0 }
 fn default_early_abort_loss_pct() -> f64 { -10.0 }
 fn default_entry_confirm_ticks() -> u32 { 2 }
@@ -183,8 +183,8 @@ impl Default for RiskConfig {
             max_slippage_loss_pct: -25.0,
             flash_dump_tick_pct: -15.0,
             flash_dump_max_pnl_pct: 0.0,
-            breakeven_arm_pct: 35.0,
-            breakeven_floor_pct: 12.0,
+            breakeven_arm_pct: 24.0,
+            breakeven_floor_pct: 8.0,
             tp1_trigger_pct: 45.0,
             tp1_sell_fraction: 0.40,
             tp2_trigger_pct: 90.0,
@@ -193,7 +193,7 @@ impl Default for RiskConfig {
             cruise_baseline_trail_mult: 2.20,
             min_runner_trailing_drop_pct: 12.0,
             max_runner_trailing_drop_pct: 25.0,
-            stagnation_ttl_secs: 240,
+            stagnation_ttl_secs: 160,
             cruise_baseline_ttl_secs: 240,
             min_stagnation_ttl_secs: 120,
             max_stagnation_ttl_secs: 360,
@@ -211,7 +211,7 @@ impl Default for RiskConfig {
             min_entry_m5_volume_usd: 2500.0,
             min_entry_h1_price_change_pct: -10.0,
             max_entry_fdv_to_liquidity_ratio: 15.0,
-            early_abort_window_secs: 45,
+            early_abort_window_secs: 30,
             early_abort_max_peak_pct: 1.0,
             early_abort_loss_pct: -10.0,
             entry_confirm_ticks: 2,
@@ -375,9 +375,9 @@ impl Default for EngineConfig {
             rolling_sample_window: 15,            // 15-tick rolling window for volatility calculation
             volatility_trail_multiplier: 2.20,    // Multiplier (k) applied to rolling standard deviation
             z_score_flash_threshold: -3.0,        // Emergency circuit breaker triggered at -3.0 sigma
-            breakeven_arm_peak_pct: 35.0,         // Minimum peak gain to arm breakeven floor guard
-            breakeven_floor_pct: 12.0,            // Minimum guaranteed profit floor
-            stagnation_ttl_seconds: 240,          // Capital recycling window
+            breakeven_arm_peak_pct: 24.0,         // Minimum peak gain to arm breakeven floor guard
+            breakeven_floor_pct: 8.0,            // Minimum guaranteed profit floor
+            stagnation_ttl_seconds: 160,          // Capital recycling window
             hard_stop_loss_pct: -20.0,            // Hard stop loss cutoff
             tranche_1_scale_ratio: 0.40,          // 40% TP1 harvest
             tranche_1_target_pct: 45.0,           // TP1 trigger at +45%
