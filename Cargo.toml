@@ -31,6 +31,10 @@ path = "src/bin/adaptive_exits_sandbox.rs"
 name = "congestion_sandbox"
 path = "src/bin/congestion_sandbox.rs"
 
+[[bin]]
+name = "v071_full_replay"
+path = "src/bin/v071_full_replay.rs"
+
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
 tokio-tungstenite = { version = "0.23", features = ["native-tls"] }
