@@ -1,18 +1,20 @@
 //! DMNE QUANT // MODULE 4: VOLATILITY-SCALED DYNAMIC EXIT BANDS SANDBOX
 //!
-//! Offline deterministic replay comparing:
-//!   - Baseline Actual Realized PnL (Static TP1 +45% / TP2 +90%)
-//!   - Module 4 Adaptive Exits (Volatility-Scaled Bands: TP1 = entry * (1 + k1*sigma), TP2 = entry * (1 + k2*sigma))
+//! Strict Quantitative Realism:
+//!   1. Zero Lookahead Bias: sigma_pre computed strictly from pre-entry ticks (t <= t_entry) or typed fallback.
+//!   2. Zero Phantom Liquidity: liquidity-drain exits retain actual historical realized slippage.
+//!   3. Intra-Trade Path Dependence: chronological tick progression evaluated when recorded.
 //!
 //! Enforces zero magic numbers, typed configuration, and zero mocked data.
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::collections::HashMap;
+use chrono::DateTime;
 
 use dmne_meme_alpha::adaptive_exits::{
     AdaptiveExitConfig, AdaptiveExitTargets, compute_realized_micro_volatility,
-    compute_adaptive_exit_targets, simulate_adaptive_trade_replay,
+    compute_adaptive_exit_targets, simulate_honest_adaptive_trade,
 };
 
 #[derive(Debug, Clone)]
@@ -20,20 +22,18 @@ struct ForensicTradeRecord {
     pub idx: usize,
     pub symbol: String,
     pub mint: String,
+    pub entry_epoch: f64,
+    pub exit_epoch: f64,
     pub hold_secs: u64,
     pub size_sol: f64,
     pub entry_price_sol: f64,
     pub peak_price_sol: f64,
-    pub trough_price_sol: f64,
     pub exit_price_sol: f64,
     pub mfe_pnl_pct: f64,
     pub mae_pnl_pct: f64,
     pub realized_pnl_pct: f64,
     pub realized_pnl_sol: f64,
-    pub simulated_fee_sol: f64,
     pub exit_rule: String,
-    pub outcome: String,
-    pub is_toxic: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -86,48 +86,52 @@ fn load_forensic_ledger(path: &str) -> Vec<ForensicTradeRecord> {
         let parts: Vec<&str> = l.split(',').collect();
         if parts.len() < 25 { continue; }
 
+        let exit_time_str = parts[0].trim();
+        let entry_time_str = parts[1].trim();
+
+        let entry_epoch = DateTime::parse_from_rfc3339(entry_time_str)
+            .map(|dt| dt.timestamp() as f64)
+            .unwrap_or(0.0);
+        let exit_epoch = DateTime::parse_from_rfc3339(exit_time_str)
+            .map(|dt| dt.timestamp() as f64)
+            .unwrap_or(0.0);
+
         let hold_secs: u64 = parts[2].trim().parse().unwrap_or(0);
         let symbol = parts[3].trim().to_string();
         let mint = parts[4].trim().to_string();
         let size_sol: f64 = parts[7].trim().parse().unwrap_or(0.04);
         let entry_price_sol: f64 = parts[8].trim().parse().unwrap_or(0.0);
         let peak_price_sol: f64 = parts[9].trim().parse().unwrap_or(0.0);
-        let trough_price_sol: f64 = parts[10].trim().parse().unwrap_or(0.0);
         let exit_price_sol: f64 = parts[11].trim().parse().unwrap_or(0.0);
         let mfe_pnl_pct: f64 = parts[12].trim().parse().unwrap_or(0.0);
         let mae_pnl_pct: f64 = parts[13].trim().parse().unwrap_or(0.0);
         let realized_pnl_pct: f64 = parts[14].trim().parse().unwrap_or(0.0);
         let realized_pnl_sol: f64 = parts[15].trim().parse().unwrap_or(0.0);
         let exit_rule = parts[19].trim().trim_matches('"').to_string();
-        let outcome = parts[20].trim().to_string();
-        let simulated_fee_sol: f64 = parts[21].trim().parse().unwrap_or(0.00105);
-        let is_toxic: bool = parts[24].trim().parse().unwrap_or(false);
 
         records.push(ForensicTradeRecord {
             idx,
             symbol,
             mint,
+            entry_epoch,
+            exit_epoch,
             hold_secs,
             size_sol,
             entry_price_sol,
             peak_price_sol,
-            trough_price_sol,
             exit_price_sol,
             mfe_pnl_pct,
             mae_pnl_pct,
             realized_pnl_pct,
             realized_pnl_sol,
-            simulated_fee_sol,
             exit_rule,
-            outcome,
-            is_toxic,
         });
     }
 
     records
 }
 
-fn load_shadow_microstructure_ticks(path: &str) -> HashMap<String, Vec<f64>> {
+fn load_shadow_microstructure_ticks(path: &str) -> HashMap<String, Vec<(f64, f64)>> {
     let file = match File::open(path) {
         Ok(f) => f,
         Err(_) => return HashMap::new(),
@@ -143,7 +147,7 @@ fn load_shadow_microstructure_ticks(path: &str) -> HashMap<String, Vec<f64>> {
                     val.get("spot_price_sol").and_then(|v| v.as_f64()),
                     val.get("timestamp_epoch").and_then(|v| v.as_f64()),
                 ) {
-                    if p > 0.0 {
+                    if p > 0.0 && t > 0.0 {
                         ticks_map.entry(m.to_string()).or_default().push((t, p));
                     }
                 }
@@ -151,60 +155,56 @@ fn load_shadow_microstructure_ticks(path: &str) -> HashMap<String, Vec<f64>> {
         }
     }
 
-    let mut result = HashMap::new();
-    for (m, mut pairs) in ticks_map {
+    for pairs in ticks_map.values_mut() {
         pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        let prices: Vec<f64> = pairs.into_iter().map(|(_, p)| p).collect();
-        result.insert(m, prices);
     }
-    result
+
+    ticks_map
 }
 
 fn main() {
     println!("================================================================================");
-    println!(" DMNE QUANT // MODULE 4: VOLATILITY-SCALED DYNAMIC EXIT BANDS BACKTEST");
-    println!(" Deterministic Offline Simulation using 100% Genuine Historical Solana Trade Data");
-    println!(" Dynamic Targets: TP1 = entry * (1 + k1*sigma), TP2 = entry * (1 + k2*sigma)");
+    println!(" DMNE QUANT // MODULE 4: HONEST & REALISTIC ADAPTIVE EXIT BANDS BACKTEST");
+    println!(" Zero Lookahead Bias (sigma_pre strictly t <= t_entry) | Zero Phantom Liquidity");
+    println!(" Chronological Path Progression | Real Historical Solana Mainnet Executions");
     println!("================================================================================\n");
 
     let cfg = AdaptiveExitConfig::default();
-    println!("[CONFIG] Active Adaptive Exit Parameters (Zero Magic Numbers):");
+    println!("[CONFIG] Active Realism Parameters (Zero Magic Numbers):");
     println!("  * k_tp1 multiplier              : {:.2}x", cfg.k_tp1);
     println!("  * k_tp2 multiplier              : {:.2}x", cfg.k_tp2);
+    println!("  * Empirical sigma fallback      : {:.2} (used when pre-entry ticks < {})", cfg.sigma_fallback, cfg.min_pre_entry_ticks);
     println!("  * Micro-volatility floor        : {:.2}", cfg.min_vol_floor);
     println!("  * Micro-volatility ceiling      : {:.2}", cfg.max_vol_cap);
     println!("  * Dynamic TP1 boundary bounds   : [{:.1}%, {:.1}%]", cfg.min_tp1_pct, cfg.max_tp1_pct);
     println!("  * Dynamic TP2 boundary bounds   : [{:.1}%, {:.1}%]", cfg.min_tp2_pct, cfg.max_tp2_pct);
-    println!("  * Minimum tranche spread        : +{:.1}%", cfg.min_tp_spread_pct);
     println!("  * TP1 scale-out fraction        : {:.0}%", cfg.tp1_sell_fraction * 100.0);
-    println!("  * TP2 scale-out fraction        : {:.0}%", cfg.tp2_sell_fraction * 100.0);
-    println!("  * Runner trailing drop          : -{:.1}% from peak", cfg.runner_trailing_drop_pct);
-    println!("  * Breakeven arm threshold       : +{:.1}% (floor: +{:.1}%)", cfg.breakeven_arm_pct, cfg.breakeven_floor_pct);
+    println!("  * Zero Phantom Liquidity Rule   : Exact historical realized exit slippage applied");
 
     let ledger_path = "logs/trades_forensic.csv";
     println!("\n[DATA] Ingesting forensic ledger: {}", ledger_path);
-    let trades = load_forensic_ledger(ledger_path);
-    println!("[DATA] Ingested {} settled trades.", trades.len());
+    let all_trades = load_forensic_ledger(ledger_path);
+    // Benchmark across the first 80 settled trades as requested
+    let trades = if all_trades.len() >= 80 { &all_trades[..80] } else { &all_trades[..] };
+    println!("[DATA] Ingested {} settled trades for benchmark evaluation.", trades.len());
 
     let shadow_path = "logs/shadow_microstructure.jsonl";
     println!("[DATA] Ingesting shadow microstructure ticks: {}", shadow_path);
-    let shadow_ticks = load_shadow_microstructure_ticks(shadow_path);
-    println!("[DATA] Loaded microstructure price ticks for {} unique token mints.\n", shadow_ticks.len());
+    let shadow_ticks_map = load_shadow_microstructure_ticks(shadow_path);
+    println!("[DATA] Loaded microstructure price ticks for {} unique token mints.\n", shadow_ticks_map.len());
 
     let mut baseline = QuantMetrics::default();
     let mut adaptive = QuantMetrics::default();
 
-    let mut tp1_hit_count: usize = 0;
-    let mut tp2_hit_count: usize = 0;
-    let mut early_profit_locked_count: usize = 0;
-    let mut runners_stretched_count: usize = 0;
+    let mut tp1_genuinely_locked_count = 0;
+    let mut loss_to_win_converted_count = 0;
 
-    struct TradeDiff {
+    struct HonestTradeDiff {
         idx: usize,
         symbol: String,
-        sigma: f64,
+        pre_ticks_count: usize,
+        sigma_pre: f64,
         tp1_pct: f64,
-        tp2_pct: f64,
         mfe_pct: f64,
         base_pnl_pct: f64,
         adapt_pnl_pct: f64,
@@ -214,10 +214,10 @@ fn main() {
         adapt_rule: String,
     }
 
-    let mut notable_diffs: Vec<TradeDiff> = Vec::new();
+    let mut notable_diffs: Vec<HonestTradeDiff> = Vec::new();
 
-    for t in &trades {
-        // 1. Baseline Actual Record
+    for t in trades {
+        // 1. Baseline Actual Realized Metrics
         baseline.count += 1;
         baseline.net_pnl_sol += t.realized_pnl_sol;
         if t.realized_pnl_sol > 0.0 {
@@ -230,36 +230,46 @@ fn main() {
             baseline.loss_pnl_pcts.push(t.realized_pnl_pct);
         }
 
-        // 2. Compute Realized Micro-Volatility
+        // 2. PURGE LOOKAHEAD BIAS: Partition pre-entry ticks strictly (t <= t_entry)
         let empty_ticks = Vec::new();
-        let pre_ticks = shadow_ticks.get(&t.mint).unwrap_or(&empty_ticks);
-        let sigma = compute_realized_micro_volatility(
-            pre_ticks,
-            t.peak_price_sol,
-            t.trough_price_sol,
-            t.entry_price_sol,
-            &cfg,
-        );
+        let token_ticks = shadow_ticks_map.get(&t.mint).unwrap_or(&empty_ticks);
+
+        let pre_entry_prices: Vec<f64> = token_ticks
+            .iter()
+            .filter(|(time, _)| *time <= t.entry_epoch)
+            .map(|(_, price)| *price)
+            .collect();
+
+        // Intra-trade ticks for chronological progression (t_entry < t <= t_exit)
+        let intra_trade_ticks: Vec<(f64, f64)> = token_ticks
+            .iter()
+            .filter(|(time, _)| *time > t.entry_epoch && *time <= t.exit_epoch)
+            .cloned()
+            .collect();
+
+        let sigma_pre = compute_realized_micro_volatility(&pre_entry_prices, &cfg);
 
         // 3. Dynamic Adaptive Targets
-        let targets: AdaptiveExitTargets = compute_adaptive_exit_targets(t.entry_price_sol, sigma, &cfg);
+        let targets = compute_adaptive_exit_targets(t.entry_price_sol, sigma_pre, &cfg);
 
-        // 4. Replay Exit Curve
-        let sim = simulate_adaptive_trade_replay(
+        // 4. Honest Simulation with Zero Phantom Liquidity
+        let sim = simulate_honest_adaptive_trade(
             t.entry_price_sol,
-            t.peak_price_sol,
-            t.exit_price_sol,
+            t.mfe_pnl_pct,
             t.realized_pnl_pct,
             &t.exit_rule,
-            t.hold_secs,
             t.size_sol,
-            t.simulated_fee_sol,
+            &intra_trade_ticks,
             &targets,
             &cfg,
         );
 
-        if sim.tp1_hit { tp1_hit_count += 1; }
-        if sim.tp2_hit { tp2_hit_count += 1; }
+        if sim.tp1_hit && !t.exit_rule.contains("Scale-Out") && !t.exit_rule.contains("Runner") {
+            tp1_genuinely_locked_count += 1;
+            if t.realized_pnl_sol <= 0.0 && sim.net_pnl_sol > 0.0 {
+                loss_to_win_converted_count += 1;
+            }
+        }
 
         adaptive.count += 1;
         adaptive.net_pnl_sol += sim.net_pnl_sol;
@@ -274,20 +284,13 @@ fn main() {
         }
 
         let pnl_diff_sol = sim.net_pnl_sol - t.realized_pnl_sol;
-        if pnl_diff_sol.abs() > 0.0015 {
-            if sim.net_pnl_sol > t.realized_pnl_sol {
-                if t.realized_pnl_sol <= 0.0 {
-                    early_profit_locked_count += 1;
-                } else {
-                    runners_stretched_count += 1;
-                }
-            }
-            notable_diffs.push(TradeDiff {
+        if pnl_diff_sol.abs() > 0.0010 {
+            notable_diffs.push(HonestTradeDiff {
                 idx: t.idx,
                 symbol: t.symbol.clone(),
-                sigma,
+                pre_ticks_count: pre_entry_prices.len(),
+                sigma_pre,
                 tp1_pct: targets.tp1_pct,
-                tp2_pct: targets.tp2_pct,
                 mfe_pct: t.mfe_pnl_pct,
                 base_pnl_pct: t.realized_pnl_pct,
                 adapt_pnl_pct: sim.gross_pnl_pct,
@@ -300,99 +303,89 @@ fn main() {
     }
 
     println!("--------------------------------------------------------------------------------");
-    println!(" COUNTERFACTUAL QUANT SUMMARY: BASELINE ACTUAL vs MODULE 4 (ADAPTIVE EXITS)");
+    println!(" COUNTERFACTUAL QUANT SUMMARY: BASELINE ACTUAL vs HONEST REALISTIC ADAPTIVE");
     println!("--------------------------------------------------------------------------------");
-    println!("| {:<30} | {:<20} | {:<20} | {:<20} |", "Metric", "Actual Baseline", "Module 4 Adaptive", "Delta (Improvement)");
-    println!("| :----------------------------- | :------------------- | :------------------- | :------------------- |");
+    println!("| {:<32} | {:<20} | {:<20} | {:<20} |", "Metric", "Actual Baseline", "Honest Adaptive", "Delta (Improvement)");
+    println!("| :------------------------------- | :------------------- | :------------------- | :------------------- |");
     println!(
-        "| {:<30} | {:<20} | {:<20} | {:<20} |",
-        "Total Closed Trades",
+        "| {:<32} | {:<20} | {:<20} | {:<20} |",
+        "Total Settled Trades",
         trades.len(),
         adaptive.count,
         "Identical (80)"
     );
     println!(
-        "| {:<30} | {:<20} | {:<20} | {:<20} |",
+        "| {:<32} | {:<20} | {:<20} | {:<20} |",
         "Win / Loss Count",
         format!("{}W / {}L", baseline.wins, baseline.losses),
         format!("{}W / {}L", adaptive.wins, adaptive.losses),
         format!("{:+} Wins", (adaptive.wins as i64) - (baseline.wins as i64))
     );
     println!(
-        "| {:<30} | {:<18.1} % | {:<18.1} % | {:<+18.1} % |",
+        "| {:<32} | {:<18.1} % | {:<18.1} % | {:<+18.1} % |",
         "Win Rate",
         baseline.win_rate_pct(),
         adaptive.win_rate_pct(),
         adaptive.win_rate_pct() - baseline.win_rate_pct()
     );
     println!(
-        "| {:<30} | {:<+18.5} SOL | {:<+18.5} SOL | {:<+18.5} SOL |",
+        "| {:<32} | {:<+18.5} SOL | {:<+18.5} SOL | {:<+18.5} SOL |",
         "Net Realized PnL (SOL)",
         baseline.net_pnl_sol,
         adaptive.net_pnl_sol,
         adaptive.net_pnl_sol - baseline.net_pnl_sol
     );
     println!(
-        "| {:<30} | {:<20.2} | {:<20.2} | {:<+20.2} |",
+        "| {:<32} | {:<20.2} | {:<20.2} | {:<+20.2} |",
         "Profit Factor",
         baseline.profit_factor(),
         adaptive.profit_factor(),
         adaptive.profit_factor() - baseline.profit_factor()
     );
     println!(
-        "| {:<30} | {:<+18.2} % | {:<+18.2} % | {:<+18.2} % |",
+        "| {:<32} | {:<+18.2} % | {:<+18.2} % | {:<+18.2} % |",
         "Average Win %",
         baseline.avg_win_pct(),
         adaptive.avg_win_pct(),
         adaptive.avg_win_pct() - baseline.avg_win_pct()
     );
     println!(
-        "| {:<30} | {:<+18.2} % | {:<+18.2} % | {:<+18.2} % |",
+        "| {:<32} | {:<+18.2} % | {:<+18.2} % | {:<+18.2} % |",
         "Average Loss %",
         baseline.avg_loss_pct(),
         adaptive.avg_loss_pct(),
         adaptive.avg_loss_pct() - baseline.avg_loss_pct()
     );
     println!(
-        "| {:<30} | {:<20} | {:<20} | {:<20} |",
-        "Adaptive TP1 Scale-Outs",
-        "Static (18)",
-        format!("{} triggered", tp1_hit_count),
-        format!("+{} earlier locks", tp1_hit_count.saturating_sub(18))
-    );
-    println!(
-        "| {:<30} | {:<20} | {:<20} | {:<20} |",
-        "Adaptive TP2 Scale-Outs",
-        "Static (10)",
-        format!("{} triggered", tp2_hit_count),
-        format!("{:+} vs static", (tp2_hit_count as i64) - 10)
-    );
-    println!(
-        "| {:<30} | {:<20} | {:<20} | {:<20} |",
-        "Trades Securing Early Profit",
+        "| {:<32} | {:<20} | {:<20} | {:<20} |",
+        "Genuinely Locked TP1 Early",
         "0 (collapsed)",
-        format!("{} positions", early_profit_locked_count),
-        format!("+{} saved from dump", early_profit_locked_count)
+        format!("{} trades", tp1_genuinely_locked_count),
+        format!("+{} profit locks", tp1_genuinely_locked_count)
     );
     println!(
-        "| {:<30} | {:<20} | {:<20} | {:<20} |",
-        "Runners Stretched Higher",
-        "Static (0)",
-        format!("{} positions", runners_stretched_count),
-        format!("+{} higher exits", runners_stretched_count)
+        "| {:<32} | {:<20} | {:<20} | {:<20} |",
+        "Losses Converted to Net Wins",
+        "0",
+        format!("{} trades", loss_to_win_converted_count),
+        format!("+{} converted", loss_to_win_converted_count)
     );
     println!("--------------------------------------------------------------------------------\n");
 
     println!("--------------------------------------------------------------------------------");
-    println!(" FORENSIC INSPECTION: NOTABLE TRADE DIFFERENCES UNDER ADAPTIVE EXIT BANDS");
+    println!(" FORENSIC INSPECTION: HONEST TRADES BENEFITING FROM ADAPTIVE TP1 LOCKS");
     println!("--------------------------------------------------------------------------------");
-    println!("(Early profits locked before flash dumps OR parabolic runners expanded)");
-    for d in notable_diffs.iter().take(15) {
+    for d in notable_diffs.iter() {
         let pnl_diff = d.adapt_pnl_sol - d.base_pnl_sol;
-        let direction = if pnl_diff > 0.0 { "PROFIT_LOCKED" } else { "SLIGHT_TRIM" };
+        let pre_type = if d.pre_ticks_count >= cfg.min_pre_entry_ticks {
+            format!("{} ticks", d.pre_ticks_count)
+        } else {
+            "fallback".to_string()
+        };
+
         println!(
-            "  [{}] Trade #{:<2} {:<10} | MFE: {:>5.1}% | sigma: {:.3} -> TP1: +{:.1}% TP2: +{:.1}%",
-            direction, d.idx, d.symbol, d.mfe_pct, d.sigma, d.tp1_pct, d.tp2_pct
+            "  Trade #{:<2} {:<10} | MFE: {:>5.1}% | sigma_pre: {:.3} ({}) -> Adaptive TP1: +{:.1}%",
+            d.idx, d.symbol, d.mfe_pct, d.sigma_pre, pre_type, d.tp1_pct
         );
         println!(
             "    Baseline: {:>6.2}% ({:>+9.5} SOL) via {}",

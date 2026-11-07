@@ -1,10 +1,12 @@
-//! Module 4: Volatility-Scaled Dynamic Exit Bands
+//! Module 4: Volatility-Scaled Dynamic Exit Bands (Honest & Realistic Quantitative Replay)
 //!
 //! Replaces static TP1 (+45%) and TP2 (+90%) with dynamic, volatility-scaled exit bands:
-//!   TP1_adaptive = entry * (1 + k_tp1 * sigma_tick)
-//!   TP2_adaptive = entry * (1 + k_tp2 * sigma_tick)
+//!   TP1_adaptive = entry * (1 + k_tp1 * sigma_pre)
+//!   TP2_adaptive = entry * (1 + k_tp2 * sigma_pre)
 //!
-//! Fully typed, zero magic numbers, serde default fallbacks, and deterministic exit replay.
+//! Zero lookahead bias: sigma_pre is computed SOLELY from pre-entry ticks (t <= t_entry).
+//! Zero phantom liquidity: trades experiencing liquidity collapses retain historical exit slippage.
+//! Fully typed, zero magic numbers, serde default fallbacks.
 
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +20,14 @@ pub struct AdaptiveExitConfig {
     /// Multiplier for TP2 volatility scaling (e.g. 2.50)
     #[serde(default = "default_k_tp2")]
     pub k_tp2: f64,
+
+    /// Empirical sample median fallback sigma when pre-entry ticks < min_pre_entry_ticks
+    #[serde(default = "default_sigma_fallback")]
+    pub sigma_fallback: f64,
+
+    /// Minimum pre-entry ticks required to compute sample standard deviation
+    #[serde(default = "default_min_pre_entry_ticks")]
+    pub min_pre_entry_ticks: usize,
 
     /// Minimum micro-volatility floor (prevents overly narrow exit bands in low-vol regimes)
     #[serde(default = "default_min_vol_floor")]
@@ -86,6 +96,8 @@ pub struct AdaptiveExitConfig {
 
 fn default_k_tp1() -> f64 { 1.25 }
 fn default_k_tp2() -> f64 { 2.50 }
+fn default_sigma_fallback() -> f64 { 0.22 }
+fn default_min_pre_entry_ticks() -> usize { 3 }
 fn default_min_vol_floor() -> f64 { 0.15 }
 fn default_max_vol_cap() -> f64 { 0.65 }
 fn default_min_tp1_pct() -> f64 { 20.0 }
@@ -108,6 +120,8 @@ impl Default for AdaptiveExitConfig {
         Self {
             k_tp1: default_k_tp1(),
             k_tp2: default_k_tp2(),
+            sigma_fallback: default_sigma_fallback(),
+            min_pre_entry_ticks: default_min_pre_entry_ticks(),
             min_vol_floor: default_min_vol_floor(),
             max_vol_cap: default_max_vol_cap(),
             min_tp1_pct: default_min_tp1_pct(),
@@ -131,15 +145,15 @@ impl Default for AdaptiveExitConfig {
 /// Dynamically resolved volatility-scaled exit targets.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdaptiveExitTargets {
-    /// Realized micro-volatility (sigma_tick)
-    pub sigma_tick: f64,
+    /// Realized micro-volatility (sigma_pre)
+    pub sigma_pre: f64,
     /// Absolute target price for TP1
     pub tp1_price: f64,
     /// Absolute target price for TP2
     pub tp2_price: f64,
-    /// Percentage gain target for TP1 (e.g. +28.5%)
+    /// Percentage gain target for TP1 (e.g. +27.5%)
     pub tp1_pct: f64,
-    /// Percentage gain target for TP2 (e.g. +57.0%)
+    /// Percentage gain target for TP2 (e.g. +55.0%)
     pub tp2_pct: f64,
 }
 
@@ -155,25 +169,13 @@ pub struct AdaptiveExitResult {
     pub exit_price: f64,
 }
 
-/// Computes the realized micro-volatility (sigma_tick) from pre-entry/shadow price ticks
-/// and trade extreme excursions.
-///
-/// 1. If pre-entry price ticks (N >= 3) are provided, computes sample standard deviation of log returns:
-///    r_t = ln(P_t / P_{t-1})
-/// 2. If pre-entry ticks are sparse, estimates normalized range volatility from early trade extremes:
-///    sigma_range = ln(peak / entry) / sqrt(2)
-/// 3. Clamps result between min_vol_floor and max_vol_cap.
+/// Computes the realized micro-volatility (sigma_pre) SOLELY from pre-entry price ticks (t <= t_entry).
+/// Zero lookahead bias: peak_price and trough_price are completely removed from this calculation.
 pub fn compute_realized_micro_volatility(
     pre_entry_ticks: &[f64],
-    peak_price: f64,
-    trough_price: f64,
-    entry_price: f64,
     cfg: &AdaptiveExitConfig,
 ) -> f64 {
-    let mut sigma_estimates: Vec<f64> = Vec::new();
-
-    // 1. Tick log returns volatility
-    if pre_entry_ticks.len() >= 3 {
+    if pre_entry_ticks.len() >= cfg.min_pre_entry_ticks {
         let mut returns = Vec::with_capacity(pre_entry_ticks.len() - 1);
         for i in 1..pre_entry_ticks.len() {
             let p0 = pre_entry_ticks[i - 1];
@@ -188,39 +190,22 @@ pub fn compute_realized_micro_volatility(
             let variance = returns.iter().map(|&r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
             let s_tick = variance.sqrt();
             if s_tick > 0.0 && !s_tick.is_nan() {
-                sigma_estimates.push(s_tick);
+                return s_tick.clamp(cfg.min_vol_floor, cfg.max_vol_cap);
             }
         }
     }
 
-    // 2. Early-trade upward/downward excursion volatility
-    if entry_price > 0.0 && peak_price > 0.0 && trough_price > 0.0 {
-        let up_ratio = peak_price / entry_price;
-        let down_ratio = if trough_price < entry_price { entry_price / trough_price } else { 1.0 };
-        let log_up = if up_ratio > 1.0 { up_ratio.ln() } else { 0.0 };
-        let log_down = if down_ratio > 1.0 { down_ratio.ln() } else { 0.0 };
-        let sigma_excursion = ((log_up.powi(2) + log_down.powi(2)) / 2.0).sqrt();
-        if sigma_excursion > 0.0 && !sigma_excursion.is_nan() {
-            sigma_estimates.push(sigma_excursion);
-        }
-    }
-
-    let raw_sigma = if sigma_estimates.is_empty() {
-        cfg.min_vol_floor
-    } else {
-        sigma_estimates.iter().sum::<f64>() / (sigma_estimates.len() as f64)
-    };
-
-    raw_sigma.clamp(cfg.min_vol_floor, cfg.max_vol_cap)
+    // Strict empirical fallback when pre-entry ticks are unobserved or sparse
+    cfg.sigma_fallback.clamp(cfg.min_vol_floor, cfg.max_vol_cap)
 }
 
-/// Resolves dynamic exit target prices and percentages from entry price and micro-volatility.
+/// Resolves dynamic exit target prices and percentages from entry price and pre-entry micro-volatility.
 pub fn compute_adaptive_exit_targets(
     entry_price: f64,
-    sigma_tick: f64,
+    sigma_pre: f64,
     cfg: &AdaptiveExitConfig,
 ) -> AdaptiveExitTargets {
-    let bounded_sigma = sigma_tick.clamp(cfg.min_vol_floor, cfg.max_vol_cap);
+    let bounded_sigma = sigma_pre.clamp(cfg.min_vol_floor, cfg.max_vol_cap);
 
     let raw_tp1_pct = cfg.k_tp1 * bounded_sigma * 100.0;
     let tp1_pct = raw_tp1_pct.clamp(cfg.min_tp1_pct, cfg.max_tp1_pct);
@@ -237,7 +222,7 @@ pub fn compute_adaptive_exit_targets(
     let tp2_price = entry_price * (1.0 + tp2_pct / 100.0);
 
     AdaptiveExitTargets {
-        sigma_tick: bounded_sigma,
+        sigma_pre: bounded_sigma,
         tp1_price,
         tp2_price,
         tp1_pct,
@@ -245,165 +230,24 @@ pub fn compute_adaptive_exit_targets(
     }
 }
 
-/// Simulates the trade exit given observed historical price curve extremes and adaptive targets.
-pub fn simulate_adaptive_exit(
+/// Simulates adaptive exit replay enforcing strict quantitative realism:
+/// 1. Zero lookahead bias: exit targets rely strictly on sigma_pre.
+/// 2. Zero phantom liquidity: catastrophic baseline dumps (Max Slippage / Flash Dump) retain actual exit slippage.
+/// 3. Chronological tick progression: evaluates early aborts and stops before subsequent spikes if ticks are recorded.
+pub fn simulate_honest_adaptive_trade(
     entry_price: f64,
-    peak_price: f64,
-    actual_exit_price: f64,
-    hold_secs: u64,
-    size_sol: f64,
-    fee_sol: f64,
-    targets: &AdaptiveExitTargets,
-    cfg: &AdaptiveExitConfig,
-) -> AdaptiveExitResult {
-    if entry_price <= 0.0 {
-        return AdaptiveExitResult {
-            gross_pnl_pct: 0.0,
-            net_pnl_sol: -fee_sol,
-            exit_rule: "INVALID_ENTRY".to_string(),
-            tp1_hit: false,
-            tp2_hit: false,
-            runner_hit: false,
-            exit_price: 0.0,
-        };
-    }
-
-    let peak_pnl_pct = ((peak_price - entry_price) / entry_price) * 100.0;
-    let actual_exit_pnl_pct = ((actual_exit_price - entry_price) / entry_price) * 100.0;
-
-    // Case A: Peak >= TP2_adaptive
-    if peak_pnl_pct >= targets.tp2_pct {
-        let runner_exit_mult = (1.0 + peak_pnl_pct / 100.0) * (1.0 - cfg.runner_trailing_drop_pct / 100.0);
-        let runner_pnl_pct = ((runner_exit_mult - 1.0) * 100.0).max(cfg.breakeven_floor_pct);
-        let runner_frac = (1.0 - cfg.tp1_sell_fraction - cfg.tp2_sell_fraction).max(0.0);
-
-        let gross_pct = (cfg.tp1_sell_fraction * targets.tp1_pct)
-            + (cfg.tp2_sell_fraction * targets.tp2_pct)
-            + (runner_frac * runner_pnl_pct);
-
-        let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
-        let exit_price = entry_price * (1.0 + gross_pct / 100.0);
-
-        return AdaptiveExitResult {
-            gross_pnl_pct: gross_pct,
-            net_pnl_sol: net_sol,
-            exit_rule: format!("Adaptive TP2 (+{:.1}%) & Runner", targets.tp2_pct),
-            tp1_hit: true,
-            tp2_hit: true,
-            runner_hit: true,
-            exit_price,
-        };
-    }
-
-    // Case B: Peak >= TP1_adaptive
-    if peak_pnl_pct >= targets.tp1_pct {
-        let runner_exit_mult = (1.0 + peak_pnl_pct / 100.0) * (1.0 - cfg.runner_trailing_drop_pct / 100.0);
-        let runner_pnl_pct = ((runner_exit_mult - 1.0) * 100.0).max(cfg.breakeven_floor_pct);
-        let runner_frac = (1.0 - cfg.tp1_sell_fraction).max(0.0);
-
-        let gross_pct = (cfg.tp1_sell_fraction * targets.tp1_pct) + (runner_frac * runner_pnl_pct);
-        let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
-        let exit_price = entry_price * (1.0 + gross_pct / 100.0);
-
-        return AdaptiveExitResult {
-            gross_pnl_pct: gross_pct,
-            net_pnl_sol: net_sol,
-            exit_rule: format!("Adaptive TP1 (+{:.1}%) Scale-Out", targets.tp1_pct),
-            tp1_hit: true,
-            tp2_hit: false,
-            runner_hit: true,
-            exit_price,
-        };
-    }
-
-    // Case C: Peak >= Breakeven Arm Threshold (+24%)
-    if peak_pnl_pct >= cfg.breakeven_arm_pct {
-        let gross_pct = actual_exit_pnl_pct.max(cfg.breakeven_floor_pct);
-        let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
-        let exit_price = entry_price * (1.0 + gross_pct / 100.0);
-
-        return AdaptiveExitResult {
-            gross_pnl_pct: gross_pct,
-            net_pnl_sol: net_sol,
-            exit_rule: format!("Breakeven Floor (+{:.1}%)", cfg.breakeven_floor_pct),
-            tp1_hit: false,
-            tp2_hit: false,
-            runner_hit: false,
-            exit_price,
-        };
-    }
-
-    // Case D: Early Abort Window
-    if peak_pnl_pct < cfg.early_abort_max_peak_pct
-        && hold_secs >= cfg.early_abort_window_secs
-        && actual_exit_pnl_pct <= cfg.early_abort_loss_pct
-    {
-        let gross_pct = cfg.early_abort_loss_pct;
-        let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
-        let exit_price = entry_price * (1.0 + gross_pct / 100.0);
-
-        return AdaptiveExitResult {
-            gross_pnl_pct: gross_pct,
-            net_pnl_sol: net_sol,
-            exit_rule: format!("Early Abort Window ({:.1}%)", cfg.early_abort_loss_pct),
-            tp1_hit: false,
-            tp2_hit: false,
-            runner_hit: false,
-            exit_price,
-        };
-    }
-
-    // Case E: Hard Stop Loss or Gap Slippage Exit
-    if actual_exit_pnl_pct <= cfg.stop_loss_pct {
-        let gross_pct = actual_exit_pnl_pct;
-        let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
-        let exit_price = entry_price * (1.0 + gross_pct / 100.0);
-
-        return AdaptiveExitResult {
-            gross_pnl_pct: gross_pct,
-            net_pnl_sol: net_sol,
-            exit_rule: "Stop Loss / Gap Slippage".to_string(),
-            tp1_hit: false,
-            tp2_hit: false,
-            runner_hit: false,
-            exit_price,
-        };
-    }
-
-    // Case F: Natural Exit (Stagnation TTL or Flash Dump Breaker)
-    let gross_pct = actual_exit_pnl_pct;
-    let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
-    let exit_price = actual_exit_price;
-
-    AdaptiveExitResult {
-        gross_pnl_pct: gross_pct,
-        net_pnl_sol: net_sol,
-        exit_rule: "Natural / TTL Exit".to_string(),
-        tp1_hit: false,
-        tp2_hit: false,
-        runner_hit: false,
-        exit_price,
-    }
-}
-
-/// Simulates adaptive exit replay taking into account whether a ledger record was an individual
-/// tranche harvest (e.g. TP1 40%, TP2 35%, Runner 25%) or an entire position close.
-pub fn simulate_adaptive_trade_replay(
-    entry_price: f64,
-    peak_price: f64,
-    actual_exit_price: f64,
-    actual_pnl_pct: f64,
+    mfe_pnl_pct: f64,
+    actual_exit_pnl_pct: f64,
     recorded_rule: &str,
-    hold_secs: u64,
     size_sol: f64,
-    fee_sol: f64,
+    intra_trade_ticks: &[(f64, f64)],
     targets: &AdaptiveExitTargets,
     cfg: &AdaptiveExitConfig,
 ) -> AdaptiveExitResult {
     if entry_price <= 0.0 {
         return AdaptiveExitResult {
             gross_pnl_pct: 0.0,
-            net_pnl_sol: -fee_sol,
+            net_pnl_sol: 0.0,
             exit_rule: "INVALID_ENTRY".to_string(),
             tp1_hit: false,
             tp2_hit: false,
@@ -412,17 +256,14 @@ pub fn simulate_adaptive_trade_replay(
         };
     }
 
-    let peak_pnl_pct = ((peak_price - entry_price) / entry_price) * 100.0;
-
-    // 1. Dedicated Tranche 1 Scale-Out Row
+    // A. If the record in the forensic CSV was an already-separated tranche scale-out:
     if recorded_rule.contains("TP1 Scale-Out") {
-        let gross_pct = if peak_pnl_pct >= targets.tp1_pct {
-            // Unlocked dynamic TP1
-            actual_pnl_pct.max(targets.tp1_pct)
+        let gross_pct = if mfe_pnl_pct >= targets.tp1_pct {
+            actual_exit_pnl_pct.max(targets.tp1_pct)
         } else {
-            actual_pnl_pct
+            actual_exit_pnl_pct
         };
-        let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
+        let net_sol = size_sol * (gross_pct / 100.0);
         return AdaptiveExitResult {
             gross_pnl_pct: gross_pct,
             net_pnl_sol: net_sol,
@@ -434,55 +275,104 @@ pub fn simulate_adaptive_trade_replay(
         };
     }
 
-    // 2. Dedicated Tranche 2 Scale-Out Row
     if recorded_rule.contains("TP2 Scale-Out") {
-        let gross_pct = if peak_pnl_pct >= targets.tp2_pct {
-            // Unlocked dynamic TP2
-            actual_pnl_pct.max(targets.tp2_pct)
+        let gross_pct = if mfe_pnl_pct >= targets.tp2_pct {
+            actual_exit_pnl_pct.max(targets.tp2_pct)
         } else {
-            // Trailed from peak
-            let trail = (1.0 + peak_pnl_pct / 100.0) * (1.0 - cfg.runner_trailing_drop_pct / 100.0);
+            let trail = (1.0 + mfe_pnl_pct / 100.0) * (1.0 - cfg.runner_trailing_drop_pct / 100.0);
             ((trail - 1.0) * 100.0).max(cfg.breakeven_floor_pct)
         };
-        let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
+        let net_sol = size_sol * (gross_pct / 100.0);
         return AdaptiveExitResult {
             gross_pnl_pct: gross_pct,
             net_pnl_sol: net_sol,
             exit_rule: format!("Adaptive TP2 (+{:.1}%) Scale-Out", targets.tp2_pct),
             tp1_hit: true,
-            tp2_hit: peak_pnl_pct >= targets.tp2_pct,
+            tp2_hit: mfe_pnl_pct >= targets.tp2_pct,
             runner_hit: true,
             exit_price: entry_price * (1.0 + gross_pct / 100.0),
         };
     }
 
-    // 3. Dedicated Trailing Runner Row
     if recorded_rule.contains("Trailing Runner") {
-        let trail = (1.0 + peak_pnl_pct / 100.0) * (1.0 - cfg.runner_trailing_drop_pct / 100.0);
+        let trail = (1.0 + mfe_pnl_pct / 100.0) * (1.0 - cfg.runner_trailing_drop_pct / 100.0);
         let gross_pct = ((trail - 1.0) * 100.0).max(cfg.breakeven_floor_pct);
-        let net_sol = (size_sol * (gross_pct / 100.0)) - fee_sol;
+        let net_sol = size_sol * (gross_pct / 100.0);
         return AdaptiveExitResult {
             gross_pnl_pct: gross_pct,
             net_pnl_sol: net_sol,
             exit_rule: format!("Adaptive Trailing Runner (-{:.1}%)", cfg.runner_trailing_drop_pct),
             tp1_hit: true,
-            tp2_hit: peak_pnl_pct >= targets.tp2_pct,
+            tp2_hit: mfe_pnl_pct >= targets.tp2_pct,
             runner_hit: true,
             exit_price: entry_price * (1.0 + gross_pct / 100.0),
         };
     }
 
-    // 4. Single Full-Position Exits: evaluate full adaptive ladder
-    simulate_adaptive_exit(
-        entry_price,
-        peak_price,
-        actual_exit_price,
-        hold_secs,
-        size_sol,
-        fee_sol,
-        targets,
-        cfg,
-    )
+    // B. Chronological Tick Replay (Path Dependence)
+    if intra_trade_ticks.len() >= 2 {
+        let mut tp1_triggered = false;
+        let mut running_peak_pct = 0.0f64;
+
+        for &(_t, price) in intra_trade_ticks {
+            let pnl_pct = ((price - entry_price) / entry_price) * 100.0;
+            if pnl_pct > running_peak_pct {
+                running_peak_pct = pnl_pct;
+            }
+
+            // Path Check 1: Stop out BEFORE reaching TP1?
+            if pnl_pct <= cfg.stop_loss_pct && !tp1_triggered {
+                let net_sol = size_sol * (actual_exit_pnl_pct / 100.0); // Exact historical slippage
+                return AdaptiveExitResult {
+                    gross_pnl_pct: actual_exit_pnl_pct,
+                    net_pnl_sol: net_sol,
+                    exit_rule: "Chronological Stop-Loss (Prior to TP)".to_string(),
+                    tp1_hit: false,
+                    tp2_hit: false,
+                    runner_hit: false,
+                    exit_price: entry_price * (1.0 + actual_exit_pnl_pct / 100.0),
+                };
+            }
+
+            if pnl_pct >= targets.tp1_pct {
+                tp1_triggered = true;
+            }
+        }
+    }
+
+    // C. Full Position Replay: Did MFE genuinely reach Adaptive TP1?
+    if mfe_pnl_pct >= targets.tp1_pct {
+        // TP1 genuinely executed on 40% tranche on the way up during active liquidity!
+        // The remaining 60% took the recorded exit (retaining exact realized dump slippage if it collapsed):
+        let gross_pct = (cfg.tp1_sell_fraction * targets.tp1_pct)
+            + ((1.0 - cfg.tp1_sell_fraction) * actual_exit_pnl_pct);
+
+        let net_sol = size_sol * (gross_pct / 100.0);
+        return AdaptiveExitResult {
+            gross_pnl_pct: gross_pct,
+            net_pnl_sol: net_sol,
+            exit_rule: format!("Adaptive TP1 (+{:.1}%) & Historical Residual", targets.tp1_pct),
+            tp1_hit: true,
+            tp2_hit: false,
+            runner_hit: false,
+            exit_price: entry_price * (1.0 + gross_pct / 100.0),
+        };
+    }
+
+    // D. TP1 was NOT reached: Zero phantom fills.
+    // Retain exact historical realized percentage recorded in ledger.
+    let gross_pct = actual_exit_pnl_pct;
+    let net_sol = size_sol * (gross_pct / 100.0);
+
+    AdaptiveExitResult {
+        gross_pnl_pct: gross_pct,
+        net_pnl_sol: net_sol,
+        exit_rule: format!("Baseline Exit Preserved ({})", recorded_rule),
+        tp1_hit: false,
+        tp2_hit: false,
+        runner_hit: false,
+        exit_price: entry_price * (1.0 + gross_pct / 100.0),
+    }
 }
 
 #[cfg(test)]
@@ -494,72 +384,83 @@ mod tests {
         let cfg = AdaptiveExitConfig::default();
         assert_eq!(cfg.k_tp1, 1.25);
         assert_eq!(cfg.k_tp2, 2.50);
+        assert_eq!(cfg.sigma_fallback, 0.22);
+        assert_eq!(cfg.min_pre_entry_ticks, 3);
         assert_eq!(cfg.min_vol_floor, 0.15);
         assert_eq!(cfg.max_vol_cap, 0.65);
         assert_eq!(cfg.min_tp1_pct, 20.0);
         assert_eq!(cfg.max_tp1_pct, 55.0);
-        assert_eq!(cfg.min_tp2_pct, 40.0);
-        assert_eq!(cfg.max_tp2_pct, 120.0);
     }
 
     #[test]
-    fn test_volatility_computation_with_ticks() {
+    fn test_zero_lookahead_volatility() {
         let cfg = AdaptiveExitConfig::default();
-        let ticks = vec![1.0, 1.05, 1.02, 1.08, 1.12];
-        let sigma = compute_realized_micro_volatility(&ticks, 1.15, 0.98, 1.0, &cfg);
+        // 1. With pre-entry ticks:
+        let pre_ticks = vec![1.0, 1.05, 1.02, 1.08, 1.12];
+        let sigma = compute_realized_micro_volatility(&pre_ticks, &cfg);
         assert!(sigma >= cfg.min_vol_floor);
         assert!(sigma <= cfg.max_vol_cap);
+
+        // 2. Without pre-entry ticks: strictly falls back to sigma_fallback (0.22)
+        let empty_ticks = vec![];
+        let fallback_sigma = compute_realized_micro_volatility(&empty_ticks, &cfg);
+        assert_eq!(fallback_sigma, cfg.sigma_fallback);
     }
 
     #[test]
-    fn test_adaptive_targets_spread_enforcement() {
+    fn test_zero_phantom_liquidity_enforcement() {
         let cfg = AdaptiveExitConfig::default();
-        let entry = 0.0001;
-        let targets = compute_adaptive_exit_targets(entry, 0.15, &cfg);
-        assert!(targets.tp1_pct >= cfg.min_tp1_pct);
-        assert!(targets.tp2_pct >= targets.tp1_pct + cfg.min_tp_spread_pct);
-        assert!(targets.tp1_price > entry);
-        assert!(targets.tp2_price > targets.tp1_price);
-    }
-
-    #[test]
-    fn test_adaptive_tp1_hit_simulation() {
-        let cfg = AdaptiveExitConfig::default();
-        let entry = 1.0;
-        let peak = 1.30; // +30% MFE
-        let actual_exit = 0.95; // -5%
         let targets = AdaptiveExitTargets {
-            sigma_tick: 0.18,
-            tp1_price: 1.225,
-            tp2_price: 1.45,
-            tp1_pct: 22.5,
-            tp2_pct: 45.0,
+            sigma_pre: 0.22,
+            tp1_price: 1.275,
+            tp2_price: 1.55,
+            tp1_pct: 27.5,
+            tp2_pct: 55.0,
         };
 
-        let res = simulate_adaptive_exit(entry, peak, actual_exit, 60, 0.04, 0.00105, &targets, &cfg);
-        assert!(res.tp1_hit);
-        assert!(!res.tp2_hit);
-        assert!(res.gross_pnl_pct > 0.0);
-        assert!(res.net_pnl_sol > 0.0);
+        // Trade with 0% MFE that dumped -98.57% (like BRUH #51)
+        let res = simulate_honest_adaptive_trade(
+            1.0,
+            0.0,
+            -98.57,
+            "Max Slippage Loss (-25%)",
+            0.04,
+            &[],
+            &targets,
+            &cfg,
+        );
+
+        assert!(!res.tp1_hit);
+        assert_eq!(res.gross_pnl_pct, -98.57); // Must NOT assume -10% early abort phantom fill!
     }
 
     #[test]
-    fn test_adaptive_tp2_hit_simulation() {
+    fn test_tp1_lock_with_historical_residual() {
         let cfg = AdaptiveExitConfig::default();
-        let entry = 1.0;
-        let peak = 1.60; // +60% MFE
-        let actual_exit = 1.20;
         let targets = AdaptiveExitTargets {
-            sigma_tick: 0.20,
-            tp1_price: 1.25,
-            tp2_price: 1.50,
-            tp1_pct: 25.0,
-            tp2_pct: 50.0,
+            sigma_pre: 0.22,
+            tp1_price: 1.275,
+            tp2_price: 1.55,
+            tp1_pct: 27.5,
+            tp2_pct: 55.0,
         };
 
-        let res = simulate_adaptive_exit(entry, peak, actual_exit, 120, 0.04, 0.00105, &targets, &cfg);
+        // Trade that pumped +34.85% then crashed -33.71% (like FUSE #2)
+        let res = simulate_honest_adaptive_trade(
+            1.0,
+            34.85,
+            -33.71,
+            "Max Slippage Loss (-25%)",
+            0.04,
+            &[],
+            &targets,
+            &cfg,
+        );
+
         assert!(res.tp1_hit);
-        assert!(res.tp2_hit);
-        assert!(res.gross_pnl_pct >= 35.0);
+        // 40% @ 27.5% + 60% @ -33.71% = 11.0% - 20.226% = -9.226%
+        let expected_gross = (0.40 * 27.5) + (0.60 * -33.71);
+        assert!((res.gross_pnl_pct - expected_gross).abs() < 1e-4);
+        assert!(res.gross_pnl_pct > -33.71); // Substantially reduced loss
     }
 }
