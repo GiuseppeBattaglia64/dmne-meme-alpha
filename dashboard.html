@@ -475,6 +475,8 @@
     .tag-cruise { color: var(--amber); font-weight: 600; }
     .tag-fill { color: var(--green); font-weight: 600; }
     .tag-preflight { color: var(--purple); font-weight: 600; }
+    .tag-emergency { color: #f43f5e; font-weight: 700; text-shadow: 0 0 8px rgba(244, 63, 94, 0.4); }
+    .tag-jito-routine { color: var(--cyan); font-weight: 600; text-shadow: 0 0 6px rgba(6, 182, 212, 0.3); }
 
     /* MODAL */
     .modal-backdrop {
@@ -914,7 +916,7 @@
         <span class="badge badge-live">AI LAUNCH AGENT</span>
         <span class="badge badge-jito">AI CRUISE AGENT</span>
         <div class="header-divider"></div>
-        <div class="tele-stat" style="white-space: nowrap;">KELLY: <b id="tele-kelly-tag" style="color:var(--cyan)">7.5% NAV</b></div>
+        <div class="tele-stat" style="white-space: nowrap;">KELLY: <b id="tele-kelly-tag" style="color:var(--cyan)">4.5% - 8.5% DYNAMIC</b></div>
         <div class="tele-stat" style="white-space: nowrap;">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
       </div>
     </div>
@@ -1168,6 +1170,10 @@
           <div class="tdm-stat-label">EXIT RULE</div>
           <div class="tdm-stat-val" id="tdm-rule-val" style="color:var(--text-main);">Trailing Runner</div>
         </div>
+        <div class="tdm-stat-box" id="tdm-tip-box">
+          <div class="tdm-stat-label">EXECUTION PRIORITY</div>
+          <div class="tdm-stat-val" id="tdm-tip-val" style="color:var(--cyan); font-size:11px;">10k ROUTINE</div>
+        </div>
         <div class="tdm-stat-box">
           <div class="tdm-stat-label">TIMESTAMP</div>
           <div class="tdm-stat-val" id="tdm-time-val" style="color:var(--text-muted); font-size:10px;">--:--:--</div>
@@ -1390,6 +1396,31 @@
         const runnerDropPct = rc.runner_trailing_drop_pct !== undefined ? rc.runner_trailing_drop_pct : 18.0;
         const stagTtlSecs = rc.stagnation_ttl_secs !== undefined ? rc.stagnation_ttl_secs : 160;
 
+        const minKelly = rc.min_kelly_fraction_nav_pct !== undefined ? rc.min_kelly_fraction_nav_pct : 4.5;
+        const baseKelly = rc.base_kelly_fraction_nav_pct !== undefined ? rc.base_kelly_fraction_nav_pct : 6.5;
+        const maxKelly = rc.max_kelly_fraction_nav_pct !== undefined ? rc.max_kelly_fraction_nav_pct : 8.5;
+        const stdTip = rc.jito_tip_lamports !== undefined ? rc.jito_tip_lamports : 10000;
+        const emerTip = rc.emergency_jito_tip_lamports !== undefined ? rc.emergency_jito_tip_lamports : 75000;
+
+        const currentBankroll = (window.lastState && window.lastState.current_bankroll_sol) || (window.lastCurrentBankroll || 0.5556);
+        const posSize = parseFloat(p.initial_size_sol || p.size_sol || 0.0417);
+        const fractionPct = currentBankroll > 0 ? (posSize / currentBankroll) * 100 : baseKelly;
+
+        let tierBadgeHtml = '';
+        if (fractionPct >= (maxKelly - 0.5)) {
+          tierBadgeHtml = `<span class="badge" style="background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; color: #fbbf24; font-size: 8px; font-weight: 700; padding: 2px 6px;">★ ${maxKelly.toFixed(1)}% HIGH CONVICTION</span>`;
+        } else if (fractionPct <= (minKelly + 0.5)) {
+          tierBadgeHtml = `<span class="badge" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); color: #7dd3fc; font-size: 8px; font-weight: 600; padding: 2px 6px;">${minKelly.toFixed(1)}% LOW VELOCITY</span>`;
+        } else {
+          tierBadgeHtml = `<span class="badge" style="background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.4); color: #22d3ee; font-size: 8px; font-weight: 600; padding: 2px 6px;">${baseKelly.toFixed(1)}% BASE KELLY</span>`;
+        }
+
+        const posTip = p.jito_tip_lamports || stdTip;
+        const isEmergencyTip = posTip >= emerTip;
+        const tipBadgeHtml = isEmergencyTip
+          ? `<span class="badge" style="background: rgba(236, 72, 153, 0.2); border: 1px solid #ec4899; color: #f472b6; font-size: 8px; font-weight: 700; padding: 1px 5px;">⚡ ${(posTip / 1000).toFixed(0)}k EMERGENCY TIP</span>`
+          : `<span class="badge badge-jito" style="font-size: 8px; padding: 1px 5px;">${(posTip / 1000).toFixed(0)}k TIP</span>`;
+
         const peakPct = (p.peak_price_sol && p.entry_price_sol)
           ? ((p.peak_price_sol - p.entry_price_sol) / p.entry_price_sol) * 100.0
           : Math.max(pnl, 0.0);
@@ -1428,8 +1459,14 @@
               <div class="token-id-group">
                 <img class="token-avatar" src="${dexImgUrl}" onerror="handleImgError(this, '${p.symbol}')" alt="${p.symbol}">
                 <div>
-                  <div class="token-sym">${p.symbol}</div>
-                  <span class="regime-pill ${regClass}">${regLabel}</span>
+                  <div class="token-sym" style="display:flex; align-items:center; gap:6px;">
+                    <span>${p.symbol}</span>
+                    ${tierBadgeHtml}
+                  </div>
+                  <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
+                    <span class="regime-pill ${regClass}">${regLabel}</span>
+                    ${tipBadgeHtml}
+                  </div>
                 </div>
               </div>
               <div class="pnl-pill ${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</div>
@@ -1470,14 +1507,16 @@
 
       // Fill remaining slots up to max_active_slots with high-density vacant slot cards
       const vacantSlots = Math.max(0, maxSlots - posList.length);
-      const kellyPct = (window.activeRiskConfig && window.activeRiskConfig.kelly_fraction_nav_pct) || 7.5;
+      const rcGlobal = window.activeRiskConfig || {};
+      const minKellyStr = (rcGlobal.min_kelly_fraction_nav_pct !== undefined ? rcGlobal.min_kelly_fraction_nav_pct : 4.5);
+      const maxKellyStr = (rcGlobal.max_kelly_fraction_nav_pct !== undefined ? rcGlobal.max_kelly_fraction_nav_pct : 8.5);
       for (let i = 0; i < vacantSlots; i++) {
         const slotNum = posList.length + i + 1;
         cardsHtml += `
           <div class="pos-card" style="border: 1px dashed var(--border-subtle); background: rgba(16, 24, 40, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 8px;">
             <div class="mono" style="font-size: 10px; color: var(--cyan); letter-spacing: 0.08em; font-weight: 700;">SLOT ${slotNum} // READY</div>
             <div style="font-size: 9px; color: var(--text-dim);" class="mono">Awaiting High-Conviction Queue Pop</div>
-            <span class="badge badge-jito" style="font-size: 8px;">KELLY ${kellyPct}% NAV</span>
+            <span class="badge badge-jito" style="font-size: 8px;">KELLY ${minKellyStr}% - ${maxKellyStr}% DYNAMIC</span>
           </div>
         `;
       }
@@ -1642,9 +1681,20 @@
         }
         const mint = t.token_mint || "";
         const epoch = t.closed_at_epoch || t.exit_epoch || 0;
+        const tipLamports = parseInt(t.jito_tip_lamports || 0);
+        const priorityTag = t.execution_priority || "";
+        const rc = window.activeRiskConfig || {};
+        const emerTip = rc.emergency_jito_tip_lamports || 75000;
+        const stdTip = rc.jito_tip_lamports || 10000;
+        const ruleLower = rawRule.toLowerCase();
+        const isEmerExit = (tipLamports >= emerTip) || (ruleLower.includes("stop-loss") || ruleLower.includes("stop loss") || ruleLower.includes("flash dump") || ruleLower.includes("slippage") || ruleLower.includes("early abort"));
+        const tipDisplay = isEmerExit ? `${(emerTip/1000).toFixed(0)}k EMERG` : `${(stdTip/1000).toFixed(0)}k TIP`;
+        const tipBadge = isEmerExit
+          ? `<span class="badge" style="font-size:7px; background:rgba(236,72,153,0.18); border:1px solid #ec4899; color:#f472b6; padding:1px 4px; margin-left:4px;">${tipDisplay}</span>`
+          : `<span class="badge badge-jito" style="font-size:7px; padding:1px 4px; margin-left:4px;">${tipDisplay}</span>`;
 
         return `
-          <tr onclick="openTokenDetailModal('${mint}', '${escapeAttr(sym)}', ${pnl}, ${realized}, ${sizeSol}, '${escapeAttr(rawRule)}', ${epoch})"
+          <tr onclick="openTokenDetailModal('${mint}', '${escapeAttr(sym)}', ${pnl}, ${realized}, ${sizeSol}, '${escapeAttr(rawRule)}', ${epoch}, ${tipLamports}, '${escapeAttr(priorityTag)}')"
               style="cursor: pointer; transition: background 0.15s ease;"
               title="Click to inspect DexScreener chart & Solscan"
               onmouseover="this.style.background='rgba(6, 182, 212, 0.08)'"
@@ -1656,7 +1706,10 @@
             <td>${sizeSol.toFixed(4)} SOL</td>
             <td style="color:${pnlColor}; font-weight:600;">${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%</td>
             <td style="color:${pnlColor}; font-weight:600;">${realized >= 0 ? "+" : ""}${realized.toFixed(5)} SOL</td>
-            <td style="color:var(--text-dim);">${rawRule}</td>
+            <td style="color:var(--text-dim); display:flex; align-items:center; justify-content:space-between; gap:4px;">
+              <span>${rawRule}</span>
+              ${tipBadge}
+            </td>
           </tr>
         `;
       }).join("");
@@ -1708,7 +1761,7 @@
 
     // --- TOKEN DETAIL GLASS MODAL CONTROLLER ---
     let activeModalMint = "";
-    function openTokenDetailModal(mint, symbol, pnlPct, realizedSol, sizeSol, exitRule, closedEpoch) {
+    function openTokenDetailModal(mint, symbol, pnlPct, realizedSol, sizeSol, exitRule, closedEpoch, jitoTip, execPriority) {
       if (!mint) return;
       activeModalMint = mint;
       const modal = document.getElementById("token-detail-modal");
@@ -1764,6 +1817,23 @@
       document.getElementById("tdm-size-val").innerText = `${size.toFixed(4)} SOL`;
       
       document.getElementById("tdm-rule-val").innerText = exitRule || "Closed";
+
+      const rc = window.activeRiskConfig || {};
+      const emerTip = rc.emergency_jito_tip_lamports || 75000;
+      const stdTip = rc.jito_tip_lamports || 10000;
+      const tipValBox = document.getElementById("tdm-tip-val");
+      if (tipValBox) {
+        let tip = parseInt(jitoTip || 0);
+        const ruleLower = (exitRule || "").toLowerCase();
+        const isEmer = (tip >= emerTip) || ruleLower.includes("stop-loss") || ruleLower.includes("stop loss") || ruleLower.includes("flash dump") || ruleLower.includes("slippage") || ruleLower.includes("early abort");
+        if (!tip) {
+          tip = isEmer ? emerTip : stdTip;
+        }
+        const tipStr = `${(tip / 1000).toFixed(0)}k TIP`;
+        const prioText = isEmer ? "EMERGENCY ESCALATION" : "ROUTINE PRIORITY";
+        tipValBox.innerText = `${tipStr} // ${prioText}`;
+        tipValBox.style.color = isEmer ? "var(--red)" : "var(--cyan)";
+      }
       
       if (closedEpoch && closedEpoch > 0) {
         const d = new Date(closedEpoch * 1000);
@@ -1929,13 +1999,17 @@
     function syncRiskConfigUI(rc) {
       if (!rc) return;
       window.activeRiskConfig = rc;
-      if (rc.kelly_fraction_nav_pct !== undefined) {
-        const el = document.getElementById("tele-kelly-tag");
-        if (el) el.innerText = `${rc.kelly_fraction_nav_pct}% NAV`;
+      const el = document.getElementById("tele-kelly-tag");
+      if (el) {
+        if (rc.min_kelly_fraction_nav_pct !== undefined && rc.max_kelly_fraction_nav_pct !== undefined) {
+          el.innerText = `${rc.min_kelly_fraction_nav_pct}% - ${rc.max_kelly_fraction_nav_pct}% DYNAMIC`;
+        } else if (rc.kelly_fraction_nav_pct !== undefined) {
+          el.innerText = `${rc.kelly_fraction_nav_pct}% NAV`;
+        }
       }
       if (rc.jito_tip_lamports !== undefined) {
-        const el = document.getElementById("tip-floor-badge");
-        if (el) el.innerText = `${rc.jito_tip_lamports.toLocaleString()} Tip Floor`;
+        const tipEl = document.getElementById("tip-floor-badge");
+        if (tipEl) tipEl.innerText = `${rc.jito_tip_lamports.toLocaleString()} Tip Floor`;
       }
     }
 
@@ -1946,6 +2020,7 @@
         const res = await fetch('/api/state');
         if (res.ok) {
           const data = await res.json();
+          window.lastState = data;
           if (data.risk_config) {
             syncRiskConfigUI(data.risk_config);
           }
@@ -1971,6 +2046,7 @@
           const baseSub = document.getElementById("baseline-subtext");
           if (baseSub) baseSub.innerText = `Virtual Baseline: ${initial.toFixed(4)} SOL`;
 
+          renderActivePositions(positions);
           if (data.closed_trades) {
             renderSettledTable(data.closed_trades);
             renderNavEquitySparkline(data.closed_trades, initial, liveNavSol);
@@ -2066,14 +2142,25 @@
         renderRadar(data.radar_candidates || []);
 
         if (data.recent_onchain_events) {
+          const rc = window.activeRiskConfig || {};
+          const emerTip = (rc.emergency_jito_tip_lamports !== undefined ? rc.emergency_jito_tip_lamports : 75000).toLocaleString();
+          const routineTip = (rc.jito_tip_lamports !== undefined ? rc.jito_tip_lamports : 10000).toLocaleString();
+
           data.recent_onchain_events.forEach(ev => {
-                        if (ev.includes("REJECT") || ev.includes("Reject") || ev.includes("HHI") || ev.includes("LP")) {
+            const isEmergency = ev.includes("Flash Dump") || ev.includes("Stop-Loss") || ev.includes("Stop Loss") || ev.includes("Early Abort") || ev.includes("Max Slippage") || ev.includes("HIGH_URGENCY_EMERGENCY");
+            const isRoutineExit = ev.includes("Scale-Out") || ev.includes("TP1") || ev.includes("TP2") || ev.includes("Stagnation") || ev.includes("Breakeven") || ev.includes("Trailing") || ev.includes("STANDARD_ROUTINE");
+
+            if (isEmergency) {
+              addLog(`EMERGENCY JITO ESCALATION: ${emerTip} LAMPORTS`, "tag-emergency", ev);
+            } else if (isRoutineExit) {
+              addLog(`ROUTINE JITO: ${routineTip} LAMPORTS`, "tag-jito-routine", ev);
+            } else if (ev.includes("REJECT") || ev.includes("Reject") || ev.includes("HHI") || ev.includes("LP")) {
               rejectCount++;
               document.getElementById("rejected-count").innerText = rejectCount;
               addLog("GATE", "tag-reject", ev);
             } else if (ev.includes("PREFLIGHT")) {
               addLog("PREFLIGHT", "tag-preflight", ev);
-            } else if (ev.includes("CRUISE") || ev.includes("Flash Dump")) {
+            } else if (ev.includes("CRUISE")) {
               addLog("CRUISE", "tag-cruise", ev);
             } else if (ev.includes("BUY") || ev.includes("FILLED")) {
               addLog("EXEC", "tag-fill", ev);
