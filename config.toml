@@ -50,9 +50,17 @@ early_abort_max_peak_pct = 1.0
 early_abort_loss_pct = -10.0
 
 kelly_fraction_nav_pct = 7.5
+min_kelly_fraction_nav_pct = 4.5
+base_kelly_fraction_nav_pct = 6.5
+max_kelly_fraction_nav_pct = 8.5
+high_conviction_buy_ratio_threshold = 2.0
 max_active_slots = 4
 dex_roundtrip_fee_pct = 0.60
 jito_tip_lamports = 10000
+emergency_jito_tip_lamports = 75000
+min_entry_sol = 0.010
+max_entry_sol = 0.045
+min_gas_reserve_sol = 0.030
 
 [sandbox]
 hawkes_mu_baseline = 0.05

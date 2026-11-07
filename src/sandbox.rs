@@ -10,7 +10,10 @@
 
 use std::collections::HashMap;
 use crate::config::{RiskConfig, SandboxConfig};
-use crate::risk::{compute_net_pnl_pct, compute_net_realized_sol};
+use crate::risk::{
+    compute_dynamic_entry_size_sol, compute_net_pnl_pct, compute_net_realized_sol_with_tip,
+    evaluate_conviction_tier, resolve_exit_tip,
+};
 
 // ============================================================================
 // STRICT TYPE-SYSTEM FIREWALL: PRE-ENTRY CONTEXT (Observable at t <= entry_epoch)
@@ -576,9 +579,32 @@ pub fn simulate_v071_exit(
         risk_cfg,
         sl_mode,
     );
-    let net_sol = compute_net_realized_sol(size_sol, gross_pnl_pct, risk_cfg);
+    let tip = resolve_exit_tip(reason, risk_cfg);
+    let net_sol = compute_net_realized_sol_with_tip(size_sol, gross_pnl_pct, risk_cfg, tip);
     let net_pnl_pct = compute_net_pnl_pct(size_sol, net_sol);
     (net_pnl_pct, net_sol, reason.to_string())
+}
+
+/// Dynamic Conviction-Tiered Kelly Sizing evaluator for Sandbox simulation contexts
+pub fn compute_sandbox_dynamic_size(
+    ctx: &PreEntryContext,
+    bankroll_sol: f64,
+    active_slots_used: usize,
+    risk_cfg: &RiskConfig,
+) -> f64 {
+    let buy_sell_ratio = if ctx.liquidity_usd > 0.0 {
+        (ctx.fdv_usd / ctx.liquidity_usd).clamp(1.0, 5.0)
+    } else {
+        1.5
+    };
+    let tier = evaluate_conviction_tier(
+        buy_sell_ratio,
+        ctx.bonding_curve_pct,
+        (ctx.pre_entry_total_observations as u64).max(20),
+        ctx.liquidity_usd * 0.10,
+        risk_cfg,
+    );
+    compute_dynamic_entry_size_sol(bankroll_sol, tier, active_slots_used, risk_cfg)
 }
 
 // ============================================================================
@@ -755,5 +781,28 @@ mod tests {
         let (net_pnl, _net_sol, reason) = simulate_v071_exit(entry_price, 1.15, 1.08, 100, size_sol, &risk_cfg, StopLossExecutionMode::Ideal);
         assert_eq!(reason, "NATURAL_EXIT");
         assert!(net_pnl > 6.0 && net_pnl < 8.0);
+    }
+
+    #[test]
+    fn test_sandbox_conviction_tiered_sizing() {
+        let risk_cfg = RiskConfig::default();
+        let mut ctx = sample_ctx();
+        let bankroll_sol = 0.50;
+
+        // Baseline sizing
+        let base_size = compute_sandbox_dynamic_size(&ctx, bankroll_sol, 0, &risk_cfg);
+        assert!(base_size >= risk_cfg.min_entry_sol && base_size <= risk_cfg.max_entry_sol);
+
+        // High conviction context (FDV / liq >= 2.0 and high bonding curve)
+        ctx.bonding_curve_pct = 90.0;
+        ctx.fdv_usd = 80_000.0;
+        ctx.liquidity_usd = 35_000.0;
+        let high_size = compute_sandbox_dynamic_size(&ctx, bankroll_sol, 0, &risk_cfg);
+        assert!(high_size >= base_size);
+        assert!((high_size - 0.0425).abs() < 1e-4);
+
+        // Solvency & headroom bounds
+        let full_headroom = compute_sandbox_dynamic_size(&ctx, bankroll_sol, 4, &risk_cfg);
+        assert_eq!(full_headroom, 0.0);
     }
 }

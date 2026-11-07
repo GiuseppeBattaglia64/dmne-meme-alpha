@@ -134,12 +134,28 @@ pub struct RiskConfig {
     pub rejected_candidate_cooldown_secs: u64,
     #[serde(default = "default_kelly_fraction_nav_pct")]
     pub kelly_fraction_nav_pct: f64,
+    #[serde(default = "default_min_kelly_fraction_nav_pct")]
+    pub min_kelly_fraction_nav_pct: f64,
+    #[serde(default = "default_base_kelly_fraction_nav_pct")]
+    pub base_kelly_fraction_nav_pct: f64,
+    #[serde(default = "default_max_kelly_fraction_nav_pct")]
+    pub max_kelly_fraction_nav_pct: f64,
+    #[serde(default = "default_high_conviction_buy_ratio_threshold")]
+    pub high_conviction_buy_ratio_threshold: f64,
     #[serde(default = "default_max_active_slots")]
     pub max_active_slots: usize,
     #[serde(default = "default_dex_roundtrip_fee_pct")]
     pub dex_roundtrip_fee_pct: f64,
     #[serde(default = "default_jito_tip_lamports")]
     pub jito_tip_lamports: u64,
+    #[serde(default = "default_emergency_jito_tip_lamports")]
+    pub emergency_jito_tip_lamports: u64,
+    #[serde(default = "default_min_entry_sol")]
+    pub min_entry_sol: f64,
+    #[serde(default = "default_max_entry_sol")]
+    pub max_entry_sol: f64,
+    #[serde(default = "default_min_gas_reserve_sol")]
+    pub min_gas_reserve_sol: f64,
 }
 
 fn default_flash_dump_tick_pct() -> f64 { -15.0 }
@@ -172,9 +188,17 @@ fn default_max_confirm_tick_gain_pct() -> f64 { 25.0 }
 fn default_min_confirm_liquidity_retention_ratio() -> f64 { 0.98 }
 fn default_rejected_candidate_cooldown_secs() -> u64 { 300 }
 fn default_kelly_fraction_nav_pct() -> f64 { 7.5 }
+fn default_min_kelly_fraction_nav_pct() -> f64 { 4.5 }
+fn default_base_kelly_fraction_nav_pct() -> f64 { 6.5 }
+fn default_max_kelly_fraction_nav_pct() -> f64 { 8.5 }
+fn default_high_conviction_buy_ratio_threshold() -> f64 { 2.0 }
 fn default_max_active_slots() -> usize { 4 }
 fn default_dex_roundtrip_fee_pct() -> f64 { 0.60 }
 fn default_jito_tip_lamports() -> u64 { 10000 }
+fn default_emergency_jito_tip_lamports() -> u64 { 75000 }
+fn default_min_entry_sol() -> f64 { 0.010 }
+fn default_max_entry_sol() -> f64 { 0.045 }
+fn default_min_gas_reserve_sol() -> f64 { 0.030 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -221,9 +245,17 @@ impl Default for RiskConfig {
             min_confirm_liquidity_retention_ratio: 0.98,
             rejected_candidate_cooldown_secs: 300,
             kelly_fraction_nav_pct: 7.5,
+            min_kelly_fraction_nav_pct: 4.5,
+            base_kelly_fraction_nav_pct: 6.5,
+            max_kelly_fraction_nav_pct: 8.5,
+            high_conviction_buy_ratio_threshold: 2.0,
             max_active_slots: 4,
             dex_roundtrip_fee_pct: 0.60,
             jito_tip_lamports: 10000,
+            emergency_jito_tip_lamports: 75000,
+            min_entry_sol: 0.010,
+            max_entry_sol: 0.045,
+            min_gas_reserve_sol: 0.030,
         }
     }
 }
@@ -427,5 +459,51 @@ impl EngineConfig {
         } else {
             0.5556
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_risk_config_defaults() {
+        let cfg = RiskConfig::default();
+        assert_eq!(cfg.emergency_jito_tip_lamports, 75_000);
+        assert_eq!(cfg.min_kelly_fraction_nav_pct, 4.5);
+        assert_eq!(cfg.base_kelly_fraction_nav_pct, 6.5);
+        assert_eq!(cfg.max_kelly_fraction_nav_pct, 8.5);
+        assert_eq!(cfg.high_conviction_buy_ratio_threshold, 2.0);
+        assert_eq!(cfg.jito_tip_lamports, 10_000);
+        assert_eq!(cfg.min_entry_sol, 0.010);
+        assert_eq!(cfg.max_entry_sol, 0.045);
+        assert_eq!(cfg.min_gas_reserve_sol, 0.030);
+    }
+
+    #[test]
+    fn test_risk_config_deserialization_defaults() {
+        let toml_str = r#"
+            stop_loss_pct = -20.0
+            breakeven_arm_pct = 24.0
+            breakeven_floor_pct = 8.0
+            tp1_trigger_pct = 45.0
+            tp1_sell_fraction = 0.40
+            tp2_trigger_pct = 90.0
+            tp2_sell_fraction = 0.35
+            runner_trailing_drop_pct = 18.0
+            stagnation_ttl_secs = 160
+            stagnation_max_peak_pct = 12.0
+            stagnation_band_min_pct = -8.0
+            stagnation_band_max_pct = 5.0
+        "#;
+        let cfg: RiskConfig = toml::from_str(toml_str).expect("Failed to deserialize minimal toml");
+        assert_eq!(cfg.emergency_jito_tip_lamports, 75_000);
+        assert_eq!(cfg.min_kelly_fraction_nav_pct, 4.5);
+        assert_eq!(cfg.base_kelly_fraction_nav_pct, 6.5);
+        assert_eq!(cfg.max_kelly_fraction_nav_pct, 8.5);
+        assert_eq!(cfg.high_conviction_buy_ratio_threshold, 2.0);
+        assert_eq!(cfg.min_entry_sol, 0.010);
+        assert_eq!(cfg.max_entry_sol, 0.045);
+        assert_eq!(cfg.min_gas_reserve_sol, 0.030);
     }
 }

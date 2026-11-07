@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // DMNE QUANT // RISK MANAGEMENT & EXIT ARBITRATION SUBSYSTEM
 // Multi-Tiered Convex Exit Engine, Uncapped Breakeven Floor Guard & Moonbag Trailing Runner
 
@@ -17,7 +18,14 @@ pub struct ActivePosition {
     pub tp1_executed: bool,
     pub tp2_executed: bool,
     pub opened_at_epoch: u64,
+    #[serde(default = "default_position_tip_lamports")]
+    pub jito_tip_lamports: u64,
+    #[serde(default = "default_position_execution_priority")]
+    pub execution_priority: String,
 }
+
+fn default_position_tip_lamports() -> u64 { 10_000 }
+fn default_position_execution_priority() -> String { "STANDARD_ROUTINE".to_string() }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExitAction {
@@ -26,11 +34,50 @@ pub enum ExitAction {
         sell_fraction_of_remaining: f64,
         sol_basis_closed: f64,
         rule_label: String,
+        tip_lamports: u64,
     },
     FullExit {
         rule_label: String,
         is_toxic: bool,
+        tip_lamports: u64,
     },
+}
+
+impl ExitAction {
+    pub fn tip_lamports(&self, _cfg: &RiskConfig) -> u64 {
+        match self {
+            ExitAction::Hold => 0,
+            ExitAction::PartialSell { tip_lamports, .. } => *tip_lamports,
+            ExitAction::FullExit { tip_lamports, .. } => *tip_lamports,
+        }
+    }
+
+    pub fn is_emergency(&self) -> bool {
+        match self {
+            ExitAction::Hold => false,
+            ExitAction::PartialSell { .. } => false,
+            ExitAction::FullExit { rule_label, .. } => is_emergency_risk_exit(rule_label),
+        }
+    }
+}
+
+pub fn is_emergency_risk_exit(rule_label: &str) -> bool {
+    let lower = rule_label.to_lowercase();
+    lower.contains("stop-loss")
+        || lower.contains("stop loss")
+        || lower.contains("flash dump")
+        || lower.contains("slippage")
+        || lower.contains("early abort")
+        || lower.contains("hard_stop_loss")
+        || lower.contains("early_abort")
+}
+
+pub fn resolve_exit_tip(rule_label: &str, cfg: &RiskConfig) -> u64 {
+    if is_emergency_risk_exit(rule_label) {
+        cfg.emergency_jito_tip_lamports
+    } else {
+        cfg.jito_tip_lamports
+    }
 }
 
 pub fn evaluate_position_exit(
@@ -54,39 +101,43 @@ pub fn evaluate_position_exit(
 
     let elapsed_secs = now_epoch.saturating_sub(pos.opened_at_epoch);
 
-    // 1. Max Adverse Slippage Cutoff
+    // 1. Max Adverse Slippage Cutoff (Emergency tip escalation)
     if pnl_pct <= cfg.max_slippage_loss_pct {
         return ExitAction::FullExit {
             rule_label: format!("Max Slippage Loss ({:.0}%)", cfg.max_slippage_loss_pct),
             is_toxic: true,
+            tip_lamports: cfg.emergency_jito_tip_lamports,
         };
     }
 
-    // 2. Hard Stop-Loss
+    // 2. Hard Stop-Loss (Emergency tip escalation)
     if pnl_pct <= cfg.stop_loss_pct {
         return ExitAction::FullExit {
             rule_label: format!("Stop-Loss ({:.0}%)", cfg.stop_loss_pct),
             is_toxic: true,
+            tip_lamports: cfg.emergency_jito_tip_lamports,
         };
     }
 
-    // 3. Flash Dump Circuit Breaker (Only triggers when underwater <= flash_dump_max_pnl_pct)
+    // 3. Flash Dump Circuit Breaker (Emergency tip escalation)
     if tick_drop_pct <= cfg.flash_dump_tick_pct && pnl_pct <= cfg.flash_dump_max_pnl_pct {
         return ExitAction::FullExit {
             rule_label: format!("Flash Dump Breaker ({:.0}%)", cfg.flash_dump_tick_pct),
             is_toxic: true,
+            tip_lamports: cfg.emergency_jito_tip_lamports,
         };
     }
 
-    // 3b. Early Fail-Fast Abort for Dead-on-Arrival Entries
+    // 3b. Early Fail-Fast Abort for Dead-on-Arrival Entries (Emergency tip escalation)
     if !pos.tp1_executed && elapsed_secs >= cfg.early_abort_window_secs && pos.peak_pnl_pct < cfg.early_abort_max_peak_pct && pnl_pct <= cfg.early_abort_loss_pct {
         return ExitAction::FullExit {
             rule_label: format!("Early Abort ({:.0}%)", cfg.early_abort_loss_pct),
             is_toxic: true,
+            tip_lamports: cfg.emergency_jito_tip_lamports,
         };
     }
 
-    // 4. Tier 1 Take-Profit
+    // 4. Tier 1 Take-Profit (Standard tip)
     if !pos.tp1_executed && pnl_pct >= cfg.tp1_trigger_pct {
         pos.tp1_executed = true;
         let sol_closed = pos.initial_size_sol * cfg.tp1_sell_fraction;
@@ -96,10 +147,11 @@ pub fn evaluate_position_exit(
             sell_fraction_of_remaining: cfg.tp1_sell_fraction,
             sol_basis_closed: sol_closed,
             rule_label: format!("TP1 Scale-Out (+{:.0}%)", cfg.tp1_trigger_pct),
+            tip_lamports: cfg.jito_tip_lamports,
         };
     }
 
-    // 5. Tier 2 Take-Profit
+    // 5. Tier 2 Take-Profit (Standard tip)
     if pos.tp1_executed && !pos.tp2_executed && pnl_pct >= cfg.tp2_trigger_pct {
         pos.tp2_executed = true;
         let sol_closed = pos.initial_size_sol * cfg.tp2_sell_fraction;
@@ -110,10 +162,11 @@ pub fn evaluate_position_exit(
             sell_fraction_of_remaining: fraction_of_current.min(1.0),
             sol_basis_closed: sol_closed,
             rule_label: format!("TP2 Scale-Out (+{:.0}%)", cfg.tp2_trigger_pct),
+            tip_lamports: cfg.jito_tip_lamports,
         };
     }
 
-    // 6. Moonbag Trailing Stop (True relative drawdown from high-water mark price)
+    // 6. Moonbag Trailing Stop (Standard tip)
     let peak_mult = 1.0 + (pos.peak_pnl_pct / 100.0);
     let curr_mult = 1.0 + (pnl_pct / 100.0);
     let peak_drawdown_pct = if peak_mult > 0.0 {
@@ -129,10 +182,11 @@ pub fn evaluate_position_exit(
                 cfg.runner_trailing_drop_pct, pos.peak_pnl_pct
             ),
             is_toxic: false,
+            tip_lamports: cfg.jito_tip_lamports,
         };
     }
 
-    // 7. Uncapped Breakeven Guard
+    // 7. Uncapped Breakeven Guard (Standard tip)
     if !pos.tp1_executed
         && pos.peak_pnl_pct >= cfg.breakeven_arm_pct
         && pnl_pct <= cfg.breakeven_floor_pct
@@ -140,10 +194,11 @@ pub fn evaluate_position_exit(
         return ExitAction::FullExit {
             rule_label: format!("Breakeven Guard (+{:.0}%)", cfg.breakeven_floor_pct),
             is_toxic: false,
+            tip_lamports: cfg.jito_tip_lamports,
         };
     }
 
-    // 8. Conditional Stagnation TTL
+    // 8. Conditional Stagnation TTL (Standard tip)
     if !pos.tp1_executed
         && elapsed_secs >= cfg.stagnation_ttl_secs
         && pos.peak_pnl_pct < cfg.stagnation_max_peak_pct
@@ -153,6 +208,7 @@ pub fn evaluate_position_exit(
         return ExitAction::FullExit {
             rule_label: "Stagnation TTL Exit".to_string(),
             is_toxic: false,
+            tip_lamports: cfg.jito_tip_lamports,
         };
     }
 
@@ -281,12 +337,31 @@ pub fn validate_live_tick_confirmation(
 pub const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
 
 pub fn compute_net_realized_sol(basis_sol: f64, gross_pnl_pct: f64, cfg: &RiskConfig) -> f64 {
+    compute_net_realized_sol_with_tip(basis_sol, gross_pnl_pct, cfg, cfg.jito_tip_lamports)
+}
+
+pub fn compute_net_realized_sol_with_tip(
+    basis_sol: f64,
+    gross_pnl_pct: f64,
+    cfg: &RiskConfig,
+    tip_lamports: u64,
+) -> f64 {
     let gross_sol = basis_sol * (gross_pnl_pct / 100.0);
     let exit_notional_sol = (basis_sol + gross_sol).max(0.0);
     let half_fee_rate = (cfg.dex_roundtrip_fee_pct / 2.0) / 100.0;
     let dex_fee_sol = (basis_sol * half_fee_rate) + (exit_notional_sol * half_fee_rate);
-    let jito_tip_sol = (cfg.jito_tip_lamports as f64) / LAMPORTS_PER_SOL;
+    let jito_tip_sol = (tip_lamports as f64) / LAMPORTS_PER_SOL;
     gross_sol - dex_fee_sol - jito_tip_sol
+}
+
+pub fn compute_net_realized_sol_for_exit(
+    basis_sol: f64,
+    gross_pnl_pct: f64,
+    rule_label: &str,
+    cfg: &RiskConfig,
+) -> f64 {
+    let tip = resolve_exit_tip(rule_label, cfg);
+    compute_net_realized_sol_with_tip(basis_sol, gross_pnl_pct, cfg, tip)
 }
 
 pub fn compute_net_pnl_pct(basis_sol: f64, net_realized_sol: f64) -> f64 {
@@ -294,6 +369,91 @@ pub fn compute_net_pnl_pct(basis_sol: f64, net_realized_sol: f64) -> f64 {
         (net_realized_sol / basis_sol) * 100.0
     } else {
         0.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConvictionTier {
+    LowVelocity,
+    Baseline,
+    HighConviction,
+}
+
+impl ConvictionTier {
+    pub fn label(&self) -> &'static str {
+        match self {
+            ConvictionTier::HighConviction => "HIGH_CONVICTION",
+            ConvictionTier::Baseline => "BASELINE",
+            ConvictionTier::LowVelocity => "LOW_VELOCITY",
+        }
+    }
+}
+
+/// Evaluates candidate conviction tier based on buy/sell ratio, conviction %, and 5m velocity metrics
+pub fn evaluate_conviction_tier(
+    buy_sell_ratio: f64,
+    conviction_pct: f64,
+    m5_txns: u64,
+    m5_volume_usd: f64,
+    cfg: &RiskConfig,
+) -> ConvictionTier {
+    // Upper-tier cutoff: buy/sell ratio >= high_conviction_buy_ratio_threshold or top conviction score
+    if buy_sell_ratio >= cfg.high_conviction_buy_ratio_threshold || conviction_pct >= 85.0 {
+        ConvictionTier::HighConviction
+    } else if buy_sell_ratio <= (cfg.min_entry_buy_sell_ratio + 0.15)
+        || m5_txns <= (cfg.min_entry_m5_txns as u64 + 3)
+        || m5_volume_usd <= (cfg.min_entry_m5_volume_usd * 1.25)
+    {
+        ConvictionTier::LowVelocity
+    } else {
+        ConvictionTier::Baseline
+    }
+}
+
+/// Resolves the Kelly fraction percentage for a given conviction tier
+pub fn resolve_kelly_fraction_pct(tier: ConvictionTier, cfg: &RiskConfig) -> f64 {
+    match tier {
+        ConvictionTier::HighConviction => cfg.max_kelly_fraction_nav_pct,
+        ConvictionTier::Baseline => cfg.base_kelly_fraction_nav_pct,
+        ConvictionTier::LowVelocity => cfg.min_kelly_fraction_nav_pct,
+    }
+}
+
+/// Dynamic Conviction-Tiered Kelly Sizing with slot headroom and bankroll solvency guards
+pub fn compute_dynamic_entry_size_sol(
+    bankroll_sol: f64,
+    tier: ConvictionTier,
+    active_slots_used: usize,
+    cfg: &RiskConfig,
+) -> f64 {
+    // Headroom guard: if maximum active slots are already full, no new position can be opened
+    if active_slots_used >= cfg.max_active_slots {
+        return 0.0;
+    }
+
+    // 1. Determine Kelly fraction according to conviction tier
+    let kelly_fraction = resolve_kelly_fraction_pct(tier, cfg) / 100.0;
+    let raw_allocation = bankroll_sol * kelly_fraction;
+
+    // 2. Headroom guard: cannot exceed equal-share capacity across active slots
+    let max_slots = (cfg.max_active_slots as f64).max(1.0);
+    let slot_headroom_cap = bankroll_sol / max_slots;
+
+    // 3. Solvency guard: ensure minimum operational gas reserve remains untouched
+    let available_capital = (bankroll_sol - cfg.min_gas_reserve_sol).max(0.0);
+
+    let constrained = raw_allocation
+        .min(slot_headroom_cap)
+        .min(available_capital);
+
+    // 4. Bound between min_entry_sol and max_entry_sol
+    if constrained < cfg.min_entry_sol {
+        if available_capital < cfg.min_entry_sol {
+            return 0.0; // Preserve solvency when bankroll cannot safely support even minimum entry
+        }
+        cfg.min_entry_sol
+    } else {
+        constrained.min(cfg.max_entry_sol)
     }
 }
 
@@ -327,6 +487,8 @@ mod tests {
             tp1_executed: false,
             tp2_executed: false,
             opened_at_epoch: 1000,
+            jito_tip_lamports: 10_000,
+            execution_priority: "STANDARD_ROUTINE".to_string(),
         }
     }
 
@@ -336,9 +498,10 @@ mod tests {
         let cfg = RiskConfig::default();
         let action = evaluate_position_exit(&mut pos, 0.79, 1050, &cfg);
         match action {
-            ExitAction::FullExit { rule_label, is_toxic } => {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Stop-Loss"));
                 assert!(is_toxic);
+                assert_eq!(tip_lamports, cfg.emergency_jito_tip_lamports);
             }
             _ => panic!("Expected Stop-Loss exit"),
         }
@@ -352,9 +515,10 @@ mod tests {
         // Single-tick drop of -16% from last_price 1.0 to 0.84, with PnL <= 0%
         let action = evaluate_position_exit(&mut pos, 0.84, 1050, &cfg);
         match action {
-            ExitAction::FullExit { rule_label, is_toxic } => {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Flash Dump Breaker"));
                 assert!(is_toxic);
+                assert_eq!(tip_lamports, cfg.emergency_jito_tip_lamports);
             }
             _ => panic!("Expected Flash Dump Breaker exit"),
         }
@@ -368,11 +532,12 @@ mod tests {
         // TP1 at +45% (price 1.45)
         let action1 = evaluate_position_exit(&mut pos, 1.45, 1050, &cfg);
         match action1 {
-            ExitAction::PartialSell { sell_fraction_of_remaining, sol_basis_closed, .. } => {
+            ExitAction::PartialSell { sell_fraction_of_remaining, sol_basis_closed, tip_lamports, .. } => {
                 assert_eq!(sell_fraction_of_remaining, 0.40);
                 assert!((sol_basis_closed - 0.04).abs() < 1e-6);
                 assert!((pos.remaining_size_sol - 0.06).abs() < 1e-6);
                 assert!(pos.tp1_executed);
+                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
             },
             _ => panic!("Expected TP1 PartialSell"),
         }
@@ -380,10 +545,11 @@ mod tests {
         // TP2 at +90% (price 1.90)
         let action2 = evaluate_position_exit(&mut pos, 1.90, 1060, &cfg);
         match action2 {
-            ExitAction::PartialSell { sol_basis_closed, .. } => {
+            ExitAction::PartialSell { sol_basis_closed, tip_lamports, .. } => {
                 assert!((sol_basis_closed - 0.035).abs() < 1e-6);
                 assert!((pos.remaining_size_sol - 0.025).abs() < 1e-6); // 25% moonbag runner
                 assert!(pos.tp2_executed);
+                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
             },
             _ => panic!("Expected TP2 PartialSell"),
         }
@@ -402,9 +568,10 @@ mod tests {
         // Pull back from +60% (price 1.60) to price 1.29 (relative peak drawdown of 19.375% > 18%)
         let action = evaluate_position_exit(&mut pos, 1.29, 1060, &cfg);
         match action {
-            ExitAction::FullExit { rule_label, is_toxic } => {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Trailing Runner (-18% from +60.0% Peak)"));
                 assert!(!is_toxic);
+                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
             }
             _ => panic!("Expected Trailing Runner exit"),
         }
@@ -423,9 +590,10 @@ mod tests {
         // Retrace to +7% (below +8% floor)
         let action = evaluate_position_exit(&mut pos, 1.07, 1060, &cfg);
         match action {
-            ExitAction::FullExit { rule_label, is_toxic } => {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Breakeven Guard"));
                 assert!(!is_toxic);
+                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
             }
             _ => panic!("Expected Breakeven Guard exit"),
         }
@@ -439,9 +607,10 @@ mod tests {
         // After 250s, peak was only +4%, currently -2%
         let action = evaluate_position_exit(&mut pos, 0.98, 1250, &cfg);
         match action {
-            ExitAction::FullExit { rule_label, is_toxic } => {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Stagnation TTL"));
                 assert!(!is_toxic);
+                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
             }
             _ => panic!("Expected Stagnation TTL exit"),
         }
@@ -455,9 +624,10 @@ mod tests {
         // Gap down to -26% (exceeds -25% max slippage)
         let action = evaluate_position_exit(&mut pos, 0.74, 1050, &cfg);
         match action {
-            ExitAction::FullExit { rule_label, is_toxic } => {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Max Slippage Loss"));
                 assert!(is_toxic);
+                assert_eq!(tip_lamports, cfg.emergency_jito_tip_lamports);
             }
             _ => panic!("Expected Max Slippage Loss exit"),
         }
@@ -560,9 +730,10 @@ mod tests {
         pos.peak_pnl_pct = 0.5;
         let action = evaluate_position_exit(&mut pos, 0.89, 1046, &cfg);
         match action {
-            ExitAction::FullExit { rule_label, is_toxic } => {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Early Abort"));
                 assert!(is_toxic);
+                assert_eq!(tip_lamports, cfg.emergency_jito_tip_lamports);
             }
             _ => panic!("Expected Early Abort exit"),
         }
@@ -635,5 +806,92 @@ mod tests {
 
         let slow_prices = vec![1.000, 1.004];
         assert_eq!(validate_live_tick_confirmation(&slow_prices, &valid_liq, &strict_cfg), Err("CONFIRMATION_MOMENTUM_BELOW_MIN"));
+    }
+
+    #[test]
+    fn test_emergency_tip_resolution() {
+        let cfg = RiskConfig::default();
+        // Emergency risk exits escalate to 75,000 lamports
+        assert_eq!(resolve_exit_tip("Stop-Loss (-20%)", &cfg), cfg.emergency_jito_tip_lamports);
+        assert_eq!(resolve_exit_tip("Flash Dump Breaker (-15%)", &cfg), cfg.emergency_jito_tip_lamports);
+        assert_eq!(resolve_exit_tip("Max Slippage Loss (-25%)", &cfg), cfg.emergency_jito_tip_lamports);
+        assert_eq!(resolve_exit_tip("Early Abort (-10%)", &cfg), cfg.emergency_jito_tip_lamports);
+
+        // Standard exits stay at 10,000 lamports
+        assert_eq!(resolve_exit_tip("TP1 Scale-Out (+45%)", &cfg), cfg.jito_tip_lamports);
+        assert_eq!(resolve_exit_tip("TP2 Scale-Out (+90%)", &cfg), cfg.jito_tip_lamports);
+        assert_eq!(resolve_exit_tip("Trailing Runner (-18% from +50.0% Peak)", &cfg), cfg.jito_tip_lamports);
+        assert_eq!(resolve_exit_tip("Breakeven Guard (+8%)", &cfg), cfg.jito_tip_lamports);
+        assert_eq!(resolve_exit_tip("Stagnation TTL Exit", &cfg), cfg.jito_tip_lamports);
+    }
+
+    #[test]
+    fn test_compute_net_realized_sol_with_emergency_tip() {
+        let cfg = RiskConfig::default();
+        let basis_sol: f64 = 0.10;
+        let gross_pnl_pct: f64 = -20.0;
+
+        let net_standard = compute_net_realized_sol(basis_sol, gross_pnl_pct, &cfg);
+        let net_emergency = compute_net_realized_sol_for_exit(basis_sol, gross_pnl_pct, "Stop-Loss (-20%)", &cfg);
+
+        // Emergency tip deducts 75,000 lamports (0.000075 SOL) vs standard 10,000 lamports (0.000010 SOL)
+        let tip_difference = (cfg.emergency_jito_tip_lamports - cfg.jito_tip_lamports) as f64 / LAMPORTS_PER_SOL;
+        assert!((net_standard - net_emergency - tip_difference).abs() < 1e-12);
+        assert!(net_emergency < net_standard);
+    }
+
+    #[test]
+    fn test_conviction_tier_evaluation() {
+        let cfg = RiskConfig::default();
+
+        // 1. High conviction: buy_sell_ratio >= 2.0 (allocates 8.5%)
+        let tier_high = evaluate_conviction_tier(2.2, 70.0, 30, 5000.0, &cfg);
+        assert_eq!(tier_high, ConvictionTier::HighConviction);
+        assert_eq!(resolve_kelly_fraction_pct(tier_high, &cfg), 8.5);
+
+        // 2. High conviction via top conviction %: conviction >= 85.0%
+        let tier_high_conv = evaluate_conviction_tier(1.6, 90.0, 30, 5000.0, &cfg);
+        assert_eq!(tier_high_conv, ConvictionTier::HighConviction);
+
+        // 3. Baseline tier: standard momentum
+        let tier_base = evaluate_conviction_tier(1.6, 70.0, 30, 5000.0, &cfg);
+        assert_eq!(tier_base, ConvictionTier::Baseline);
+        assert_eq!(resolve_kelly_fraction_pct(tier_base, &cfg), 6.5);
+
+        // 4. Low velocity tier: borderline buy/sell ratio or low volume
+        let tier_low = evaluate_conviction_tier(1.30, 60.0, 16, 2800.0, &cfg);
+        assert_eq!(tier_low, ConvictionTier::LowVelocity);
+        assert_eq!(resolve_kelly_fraction_pct(tier_low, &cfg), 4.5);
+    }
+
+    #[test]
+    fn test_compute_dynamic_entry_size_sol_tiers_and_guards() {
+        let cfg = RiskConfig::default();
+        let bankroll_sol = 0.50; // $90-100 equivalent
+
+        // Tiered sizing tests
+        let size_high = compute_dynamic_entry_size_sol(bankroll_sol, ConvictionTier::HighConviction, 0, &cfg);
+        let size_base = compute_dynamic_entry_size_sol(bankroll_sol, ConvictionTier::Baseline, 0, &cfg);
+        let size_low = compute_dynamic_entry_size_sol(bankroll_sol, ConvictionTier::LowVelocity, 0, &cfg);
+
+        // High tier (8.5% of 0.50 = 0.0425 SOL) > Base (6.5% of 0.50 = 0.0325 SOL) > Low (4.5% of 0.50 = 0.0225 SOL)
+        assert!(size_high > size_base);
+        assert!(size_base > size_low);
+        assert!((size_high - 0.0425).abs() < 1e-4);
+        assert!((size_base - 0.0325).abs() < 1e-4);
+        assert!((size_low - 0.0225).abs() < 1e-4);
+
+        // Clamping to bounds
+        assert!(size_high <= cfg.max_entry_sol);
+        assert!(size_low >= cfg.min_entry_sol);
+
+        // Headroom guard: when active slots == max_active_slots (4), return 0.0
+        let full_headroom = compute_dynamic_entry_size_sol(bankroll_sol, ConvictionTier::HighConviction, 4, &cfg);
+        assert_eq!(full_headroom, 0.0);
+
+        // Solvency guard: when bankroll is near or below min_gas_reserve_sol (0.030), entry is rejected
+        let insolvent_bankroll = 0.032; // only 0.002 available above reserve < 0.010 min entry
+        let insolvent_size = compute_dynamic_entry_size_sol(insolvent_bankroll, ConvictionTier::HighConviction, 0, &cfg);
+        assert_eq!(insolvent_size, 0.0);
     }
 }

@@ -135,6 +135,9 @@ const SOLANA_WSS_URL: &str = "wss://api.mainnet-beta.solana.com";
 const PUMP_FUN_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 const DASHBOARD_PORT: u16 = 8090;
 
+fn default_standard_jito_tip() -> u64 { 10_000 }
+fn default_execution_priority() -> String { "STANDARD_ROUTINE".to_string() }
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Position {
     pub id: String,
@@ -157,6 +160,10 @@ pub struct Position {
     pub liquidity_usd: f64,
     pub fdv_usd: f64,
     pub price_buffer: Vec<f64>,
+    #[serde(default = "default_standard_jito_tip")]
+    pub jito_tip_lamports: u64,
+    #[serde(default = "default_execution_priority")]
+    pub execution_priority: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -171,7 +178,13 @@ pub struct ClosedTrade {
     pub closed_at_epoch: u64,
     #[serde(default)]
     pub is_toxic: bool,
+    #[serde(default = "default_standard_jito_tip")]
+    pub jito_tip_lamports: u64,
+    #[serde(default = "default_execution_priority")]
+    pub execution_priority: String,
 }
+
+pub type SettledTrade = ClosedTrade;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BotState {
@@ -612,6 +625,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let historical_trades = db::fetch_settled_trades_for_reconcile(&pg).await;
         for (mint, symbol, size, pnl_sol, pnl_pct, rule, epoch, db_toxic) in historical_trades {
             let is_toxic = db_toxic || risk::is_historical_exit_toxic(pnl_pct, &config.risk);
+            let tip = risk::resolve_exit_tip(&rule, &config.risk);
+            let priority = if risk::is_emergency_risk_exit(&rule) {
+                "HIGH_URGENCY_EMERGENCY".to_string()
+            } else {
+                "STANDARD_ROUTINE".to_string()
+            };
             g.closed_trades.push(ClosedTrade {
                 token_mint: mint,
                 symbol,
@@ -621,6 +640,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 reason: rule,
                 closed_at_epoch: epoch,
                 is_toxic,
+                jito_tip_lamports: tip,
+                execution_priority: priority,
             });
         }
         println!("[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Rejections: {} | Restored Closed Trades: {}", 
@@ -663,6 +684,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else {
                             risk::is_historical_exit_toxic(pnl_pct, &config.risk)
                         };
+                        let tip = risk::resolve_exit_tip(&reason, &config.risk);
+                        let priority = if risk::is_emergency_risk_exit(&reason) {
+                            "HIGH_URGENCY_EMERGENCY".to_string()
+                        } else {
+                            "STANDARD_ROUTINE".to_string()
+                        };
                         if !token_mint.is_empty() {
                             g.banned_tokens.insert(token_mint.clone());
                         }
@@ -678,6 +705,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             reason,
                             closed_at_epoch,
                             is_toxic,
+                            jito_tip_lamports: tip,
+                            execution_priority: priority,
                         });
                     }
                 }
@@ -1291,18 +1320,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                                 state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             } else if state.active_positions.len() < eval_cfg.risk.max_active_slots {
+                                let current_nav = state.current_bankroll_sol;
+                                let tier = risk::evaluate_conviction_tier(
+                                    final_snap.buy_sell_ratio,
+                                    conviction_pct,
+                                    final_snap.m5_buys + final_snap.m5_sells,
+                                    final_snap.m5_volume_usd,
+                                    &eval_cfg.risk,
+                                );
+                                let dynamic_entry_sol = risk::compute_dynamic_entry_size_sol(
+                                    current_nav,
+                                    tier,
+                                    state.active_positions.len(),
+                                    &eval_cfg.risk,
+                                );
+                                if dynamic_entry_sol < eval_cfg.risk.min_entry_sol {
+                                    println!("[SOLVENCY GUARD] Dynamic entry size {:.4} SOL below min entry floor ({:.4} SOL); skipping entry on {}",
+                                        dynamic_entry_sol, eval_cfg.risk.min_entry_sol, candidate.symbol);
+                                    state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                                    state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                                    continue;
+                                }
+
                                 state.total_trades += 1;
                                 let trade_id = state.total_trades;
-                                let current_nav = state.current_bankroll_sol;
-                                let dynamic_entry_sol = (current_nav * (eval_cfg.risk.kelly_fraction_nav_pct / 100.0)).max(0.0100).min(0.0450);
                                 let now_epoch = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
                                     .unwrap_or_default()
                                     .as_secs();
                                 let now_iso = chrono::Utc::now().to_rfc3339();
                                 let final_confirmed_spot = *prices.last().unwrap();
-                                println!("[CANONICAL ENTRY] Opened position on CONFIRMED candidate: {} ({}) | Confirmed Spot: {:.10e} | Ticks: {:?} | Sized: {:.4} SOL", 
-                                    candidate.symbol, candidate.token_mint, final_confirmed_spot, prices, dynamic_entry_sol);
+                                println!("[CANONICAL ENTRY] Opened position on CONFIRMED candidate: {} ({}) | Tier: {} (Kelly: {:.1}%) | Confirmed Spot: {:.10e} | Ticks: {:?} | Sized: {:.4} SOL", 
+                                    candidate.symbol, candidate.token_mint, tier.label(), risk::resolve_kelly_fraction_pct(tier, &eval_cfg.risk), final_confirmed_spot, prices, dynamic_entry_sol);
                                 
                                 eval_shadow.log_evaluation(
                                     &candidate.token_mint,
@@ -1338,6 +1387,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     liquidity_usd: final_snap.liquidity_usd,
                                     fdv_usd: final_snap.fdv_usd,
                                     price_buffer: prices.clone(),
+                                    jito_tip_lamports: eval_cfg.risk.jito_tip_lamports,
+                                    execution_priority: "STANDARD_ROUTINE".to_string(),
                                 });
                                 let log_msg = format!("SNIPED CONFIRMED TOKEN: {} ({}) at {:.4e} SOL", candidate.symbol, &candidate.token_mint[..8.min(candidate.token_mint.len())], final_confirmed_spot);
                                 state.recent_onchain_events.insert(0, log_msg);
@@ -1441,6 +1492,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tp1_executed: pos.tranche_1_taken,
                     tp2_executed: pos.tranche_2_taken,
                     opened_at_epoch: pos.entry_timestamp_epoch,
+                    jito_tip_lamports: pos.jito_tip_lamports,
+                    execution_priority: pos.execution_priority.clone(),
                 };
 
                 let action = risk::evaluate_position_exit(
@@ -1451,9 +1504,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
                 match action {
-                    risk::ExitAction::PartialSell { sol_basis_closed, rule_label, .. } => {
-                        let realized = risk::compute_net_realized_sol(sol_basis_closed, pos.pnl_pct, &effective_risk_cfg);
+                    risk::ExitAction::PartialSell { sol_basis_closed, rule_label, tip_lamports, .. } => {
+                        let realized = risk::compute_net_realized_sol_with_tip(sol_basis_closed, pos.pnl_pct, &effective_risk_cfg, tip_lamports);
                         let net_exit_pnl_pct = risk::compute_net_pnl_pct(sol_basis_closed, realized);
+                        let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_jito_tip_lamports {
+                            "HIGH_URGENCY_EMERGENCY"
+                        } else {
+                            "STANDARD_ROUTINE"
+                        };
+                        println!(
+                            "[EXECUTION_PRIORITY] [{}] Partial exit order dispatched for {}: {} | Jito Tip: {} lamports ({:.6} SOL)",
+                            priority_tag, pos.symbol, rule_label, tip_lamports, (tip_lamports as f64) / risk::LAMPORTS_PER_SOL
+                        );
                         let bankroll_before = state.current_bankroll_sol;
                         state.current_bankroll_sol += realized;
                         state.total_realized_pnl_sol += realized;
@@ -1516,17 +1578,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             reason: rule_label,
                             closed_at_epoch: now_epoch,
                             is_toxic: false,
+                            jito_tip_lamports: tip_lamports,
+                            execution_priority: priority_tag.to_string(),
                         });
                     }
-                    risk::ExitAction::FullExit { rule_label, is_toxic } => {
+                    risk::ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                         let exit_pnl = pos.pnl_pct;
-                        let realized = risk::compute_net_realized_sol(pos.size_sol, exit_pnl, &effective_risk_cfg);
+                        let realized = risk::compute_net_realized_sol_with_tip(pos.size_sol, exit_pnl, &effective_risk_cfg, tip_lamports);
                         let net_exit_pnl_pct = risk::compute_net_pnl_pct(pos.size_sol, realized);
+                        let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_jito_tip_lamports {
+                            "HIGH_URGENCY_EMERGENCY"
+                        } else {
+                            "STANDARD_ROUTINE"
+                        };
+                        println!(
+                            "[EXECUTION_PRIORITY] [{}] Full exit order dispatched for {}: {} | Jito Tip: {} lamports ({:.6} SOL) | toxic: {}",
+                            priority_tag, pos.symbol, rule_label, tip_lamports, (tip_lamports as f64) / risk::LAMPORTS_PER_SOL, is_toxic
+                        );
                         println!(
                             "[CRUISE CONTROL] Exit triggered on {} by {} (Net PnL: {:+.1}%, Gross: {:+.1}%, toxic: {}).",
                             pos.symbol, rule_label, net_exit_pnl_pct, exit_pnl, is_toxic
                         );
-                        closed_indices.push((idx, rule_label, realized, net_exit_pnl_pct, is_toxic));
+                        closed_indices.push((idx, rule_label, realized, net_exit_pnl_pct, is_toxic, tip_lamports, priority_tag.to_string()));
                     }
                     risk::ExitAction::Hold => {}
                 }
@@ -1538,7 +1611,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pos.last_price_sol = pos.current_price_sol;
             }
 
-            for (idx, reason, pnl_sol, pnl_pct, is_toxic) in closed_indices.into_iter().rev() {
+            for (idx, reason, pnl_sol, pnl_pct, is_toxic, tip_lamports, priority_tag) in closed_indices.into_iter().rev() {
                 let bankroll_before = state.current_bankroll_sol;
                 let pos = state.active_positions.remove(idx);
                 state.current_bankroll_sol += pnl_sol;
@@ -1597,6 +1670,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     reason,
                     closed_at_epoch: now_epoch,
                     is_toxic: is_toxic_exit,
+                    jito_tip_lamports: tip_lamports,
+                    execution_priority: priority_tag,
                 });
             }
         }
