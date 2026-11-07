@@ -7,4 +7,5 @@ pub mod ws_ingest;
 pub mod sandbox;
 pub mod shadow_logger;
 pub mod hawkes;
+pub mod funder_graph;
 

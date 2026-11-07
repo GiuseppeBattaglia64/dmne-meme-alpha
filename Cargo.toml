@@ -19,6 +19,10 @@ path = "src/bin/sandbox_replay.rs"
 name = "hawkes_sandbox"
 path = "src/bin/hawkes_sandbox.rs"
 
+[[bin]]
+name = "funder_sandbox"
+path = "src/bin/funder_sandbox.rs"
+
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
 tokio-tungstenite = { version = "0.23", features = ["native-tls"] }

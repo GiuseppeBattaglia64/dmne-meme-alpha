@@ -30699,5 +30699,5375 @@
     ],
     "pre_entry_recent_rejections": 1001,
     "pre_entry_total_observations": 1001
+  },
+  "funder_graph": {
+    "Cy6F9HUKj29dTS9hUWopk2RkRLXRhcRaysrsQiXQpump": [
+      {
+        "holder_address": "POOL_AMM_Cy6F9HUK",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Cy6F_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cy6F_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "CzwzQw6eGr9RjF3ZLmEPxcxspSk6csRg9Gpvsnycz5eD": [
+      {
+        "holder_address": "POOL_AMM_CzwzQw6e",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Czwz_DevSub_1",
+        "supply_pct": 10.64,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_FUSE_CzwzQw",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Czwz_DevSub_2",
+        "supply_pct": 8.96,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_FUSE_CzwzQw",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Czwz_DevSub_3",
+        "supply_pct": 8.4,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_FUSE_CzwzQw",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Czwz_Outside_1",
+        "supply_pct": 8.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Czwz_Outside_2",
+        "supply_pct": 8.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "HGHJCdysTaaYDJKwwQ3UmcodCw9xjpfFDvcShVVBpump": [
+      {
+        "holder_address": "POOL_AMM_HGHJCdys",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "HGHJ_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HGHJ_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "8nFy4Hw9VAy3NQjwNVVbfNi1HM96VKodNMf5zFt1PhJ8": [
+      {
+        "holder_address": "POOL_AMM_8nFy4Hw9",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "8nFy_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LEAPCAT_8nFy4H",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "8nFy_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LEAPCAT_8nFy4H",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "8nFy_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LEAPCAT_8nFy4H",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "8nFy_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "8nFy_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "4VyS1DWXDEbu8jVyJUjqNJN3SXGgZYf2uo3YZ6QLpump": [
+      {
+        "holder_address": "POOL_AMM_4VyS1DWX",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "4VyS_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4VyS_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "Hy4iuJwuo9hAUMgMsNpFXANvKSnGmFFqcjBZuiCFpJCP": [
+      {
+        "holder_address": "POOL_AMM_Hy4iuJwu",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Hy4i_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PI_Hy4iuJ",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Hy4i_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PI_Hy4iuJ",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Hy4i_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PI_Hy4iuJ",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Hy4i_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Hy4i_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "FwouH3pvMPUN5t84SvVxYkbUXfi1W7j8ucUiGfGvpump": [
+      {
+        "holder_address": "POOL_AMM_FwouH3pv",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Fwou_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_DINU_FwouH3",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fwou_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_DINU_FwouH3",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fwou_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_DINU_FwouH3",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fwou_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fwou_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "Bmhp8nat7zTFu3Ct8HpQftiHHmB6dnf4B9ivvYYzpump": [
+      {
+        "holder_address": "POOL_AMM_Bmhp8nat",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Bmhp_DevSub_1",
+        "supply_pct": 8.06,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_TIRED_Bmhp8n",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bmhp_DevSub_2",
+        "supply_pct": 6.78,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_TIRED_Bmhp8n",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bmhp_DevSub_3",
+        "supply_pct": 6.36,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_TIRED_Bmhp8n",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bmhp_Outside_1",
+        "supply_pct": 11.9,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bmhp_Outside_2",
+        "supply_pct": 11.9,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "H4Yco8GenmbchjBhNRinG96cXBgNJhFRPFyJYPwKpump": [
+      {
+        "holder_address": "POOL_AMM_H4Yco8Ge",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "H4Yc_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_VETO_H4Yco8",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "H4Yc_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_VETO_H4Yco8",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "H4Yc_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_VETO_H4Yco8",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "H4Yc_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "H4Yc_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "5pdu9jrUf9ryLzCsv3S92ikoBiK3n2zA9tMN9Rr7pump": [
+      {
+        "holder_address": "POOL_AMM_5pdu9jrU",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "5pdu_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "5pdu_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "87CQtouHSb6YCXaPZ1pp8jD56VudRMXBVqU3oDMD1UJT": [
+      {
+        "holder_address": "POOL_AMM_87CQtouH",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "87CQ_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Jos\u00e9_87CQto",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "87CQ_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Jos\u00e9_87CQto",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "87CQ_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Jos\u00e9_87CQto",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "87CQ_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "87CQ_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "46r5vJSK4vZWvU4roBXoQYoBZE8d4nmN3b6wRa6Gpump": [
+      {
+        "holder_address": "POOL_AMM_46r5vJSK",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "46r5_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "46r5_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "9irzXvqHLGdCXkHxQD9ZTZFbeYRVmBg1cT2oT7ppump": [
+      {
+        "holder_address": "POOL_AMM_9irzXvqH",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "9irz_DevSub_1",
+        "supply_pct": 12.73,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LATE_9irzXv",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9irz_DevSub_2",
+        "supply_pct": 10.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LATE_9irzXv",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9irz_DevSub_3",
+        "supply_pct": 10.05,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LATE_9irzXv",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9irz_Outside_1",
+        "supply_pct": 5.75,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9irz_Outside_2",
+        "supply_pct": 5.75,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "BFkjyPar9gFv49gvEzwFW3PcjvyWn77LNYhnBSzYpump": [
+      {
+        "holder_address": "POOL_AMM_BFkjyPar",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "BFkj_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LUCKY_BFkjyP",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "BFkj_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LUCKY_BFkjyP",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "BFkj_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LUCKY_BFkjyP",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "BFkj_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "BFkj_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "FzmSx4UuG8Jhsrxvyt1xNtk6qFxo7KY4zGwPifKZpump": [
+      {
+        "holder_address": "POOL_AMM_FzmSx4Uu",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "FzmS_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FzmS_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "ZFtb1eDmcDmkWtmyqSjVQDfGS7tdshyzzuJoTeEpump": [
+      {
+        "holder_address": "POOL_AMM_ZFtb1eDm",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "ZFtb_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ZFtb_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "Ey4YG29k4hQmTPfRr3aRrpzSx8THEeSWbgCo2yWypump": [
+      {
+        "holder_address": "POOL_AMM_Ey4YG29k",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Ey4Y_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LKY_Ey4YG2",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Ey4Y_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LKY_Ey4YG2",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Ey4Y_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_LKY_Ey4YG2",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Ey4Y_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Ey4Y_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "6mXFCoZ515w37YfmwXGJMPfQfiK5tr9WkihW3oN9pump": [
+      {
+        "holder_address": "POOL_AMM_6mXFCoZ5",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "6mXF_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6mXF_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "FhtLRwmMfuZAghT8HQ3hhvFYBV3Cw7duGyvjnU7Apump": [
+      {
+        "holder_address": "POOL_AMM_FhtLRwmM",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "FhtL_DevSub_1",
+        "supply_pct": 9.16,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_SCAMCHI_FhtLRw",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FhtL_DevSub_2",
+        "supply_pct": 7.71,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_SCAMCHI_FhtLRw",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FhtL_DevSub_3",
+        "supply_pct": 7.23,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_SCAMCHI_FhtLRw",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FhtL_Outside_1",
+        "supply_pct": 10.45,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FhtL_Outside_2",
+        "supply_pct": 10.45,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "C89aVBvoZjSGuXQzhsLvNzekDuJrhezzR58rEN9RMk4u": [
+      {
+        "holder_address": "POOL_AMM_C89aVBvo",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "C89a_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C89a_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "41WpXn15fxQXEGhiKnkqHcoJn14tNXXgmymLKE57pump": [
+      {
+        "holder_address": "POOL_AMM_41WpXn15",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "41Wp_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_scamsem_41WpXn",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "41Wp_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_scamsem_41WpXn",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "41Wp_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_scamsem_41WpXn",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "41Wp_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "41Wp_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "C1w2cSCc4GmXfUL2y5amkGLhDPsJT7Ts7VyS71inpump": [
+      {
+        "holder_address": "POOL_AMM_C1w2cSCc",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "C1w2_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C1w2_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "BdouwEr3mwXkT6S6EmHNCjn9oEtykRKCKiUSTRF9pump": [
+      {
+        "holder_address": "POOL_AMM_BdouwEr3",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Bdou_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Alice_BdouwE",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bdou_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Alice_BdouwE",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bdou_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Alice_BdouwE",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bdou_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bdou_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "GsZANz2KPDJdrQgcdmmYdmCUkxRWFfhkukcYeMSvpump": [
+      {
+        "holder_address": "POOL_AMM_GsZANz2K",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "GsZA_DevSub_1",
+        "supply_pct": 8.89,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PALICO_GsZANz",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "GsZA_DevSub_2",
+        "supply_pct": 7.49,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PALICO_GsZANz",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "GsZA_DevSub_3",
+        "supply_pct": 7.02,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PALICO_GsZANz",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "GsZA_Outside_1",
+        "supply_pct": 10.8,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "GsZA_Outside_2",
+        "supply_pct": 10.8,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "Bhe7zAmLTxsV2JiiibujUX4yHJbKjPFYTLSGTQUzpump": [
+      {
+        "holder_address": "POOL_AMM_Bhe7zAmL",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Bhe7_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bhe7_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "9DubmcpjdeJvJv225TjDL3uz9579dT1U8nGrWa9xpump": [
+      {
+        "holder_address": "POOL_AMM_9Dubmcpj",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "9Dub_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_jailsem_9Dubmc",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9Dub_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_jailsem_9Dubmc",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9Dub_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_jailsem_9Dubmc",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9Dub_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9Dub_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "2SquPKDVfGw9rBFBBZjJ2QPzSaDYjfwBY72FGBHZpump": [
+      {
+        "holder_address": "POOL_AMM_2SquPKDV",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "2Squ_DevSub_1",
+        "supply_pct": 7.45,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_MUTTAPE_2SquPK",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "2Squ_DevSub_2",
+        "supply_pct": 6.27,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_MUTTAPE_2SquPK",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "2Squ_DevSub_3",
+        "supply_pct": 5.88,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_MUTTAPE_2SquPK",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "2Squ_Outside_1",
+        "supply_pct": 12.7,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "2Squ_Outside_2",
+        "supply_pct": 12.7,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "3J9aZ8aJq8c5Xz7DmBHGPi1e4v6Dw1S87tatoPXYpump": [
+      {
+        "holder_address": "POOL_AMM_3J9aZ8aJ",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "3J9a_DevSub_1",
+        "supply_pct": 9.58,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Capiboo_3J9aZ8",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "3J9a_DevSub_2",
+        "supply_pct": 8.06,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Capiboo_3J9aZ8",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "3J9a_DevSub_3",
+        "supply_pct": 7.56,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Capiboo_3J9aZ8",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "3J9a_Outside_1",
+        "supply_pct": 9.9,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "3J9a_Outside_2",
+        "supply_pct": 9.9,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "Fmu6ykGrbaBRsDHn4NZZYgsAwLnXTkjqWyMbn3XBpump": [
+      {
+        "holder_address": "POOL_AMM_Fmu6ykGr",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Fmu6_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Twizter_Fmu6yk",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fmu6_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Twizter_Fmu6yk",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fmu6_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Twizter_Fmu6yk",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fmu6_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fmu6_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "GoqdpMVvqawNUvdfTmqXvvoSaDRrqDQexzG7wzf2pump": [
+      {
+        "holder_address": "POOL_AMM_GoqdpMVv",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Goqd_DevSub_1",
+        "supply_pct": 10.45,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_SLINGFOLIO_GoqdpM",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Goqd_DevSub_2",
+        "supply_pct": 8.8,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_SLINGFOLIO_GoqdpM",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Goqd_DevSub_3",
+        "supply_pct": 8.25,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_SLINGFOLIO_GoqdpM",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Goqd_Outside_1",
+        "supply_pct": 8.75,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Goqd_Outside_2",
+        "supply_pct": 8.75,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "21azpu32qfuNZR6TkKdUZKVnDtmvTUSBrXxhRFE5pump": [
+      {
+        "holder_address": "POOL_AMM_21azpu32",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "21az_DevSub_1",
+        "supply_pct": 7.64,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Hakutaku_21azpu",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "21az_DevSub_2",
+        "supply_pct": 6.43,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Hakutaku_21azpu",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "21az_DevSub_3",
+        "supply_pct": 6.03,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_Hakutaku_21azpu",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "21az_Outside_1",
+        "supply_pct": 12.45,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "21az_Outside_2",
+        "supply_pct": 12.45,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "Cp1qJ5CMyJCPakpSNJ9C7sbSMMENzeLidtamFk5gpump": [
+      {
+        "holder_address": "POOL_AMM_Cp1qJ5CM",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Cp1q_DevSub_1",
+        "supply_pct": 12.08,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_BRUH_Cp1qJ5",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cp1q_DevSub_2",
+        "supply_pct": 10.18,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_BRUH_Cp1qJ5",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cp1q_DevSub_3",
+        "supply_pct": 9.54,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_BRUH_Cp1qJ5",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cp1q_Outside_1",
+        "supply_pct": 6.6,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Cp1q_Outside_2",
+        "supply_pct": 6.6,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "FFgnd8bifG8zGBE7dij7g3HWp4gveJS4gDyjdk5epump": [
+      {
+        "holder_address": "POOL_AMM_FFgnd8bi",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "FFgn_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_trauma _FFgnd8",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FFgn_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_trauma _FFgnd8",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FFgn_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_trauma _FFgnd8",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FFgn_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FFgn_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "DFq4aBnZkNd4PcKaSb37wRpaUGKAFUXenGbd78pTpump": [
+      {
+        "holder_address": "POOL_AMM_DFq4aBnZ",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "DFq4_DevSub_1",
+        "supply_pct": 7.37,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_HAIRICORN_DFq4aB",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "DFq4_DevSub_2",
+        "supply_pct": 6.21,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_HAIRICORN_DFq4aB",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "DFq4_DevSub_3",
+        "supply_pct": 5.82,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_HAIRICORN_DFq4aB",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "DFq4_Outside_1",
+        "supply_pct": 12.8,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "DFq4_Outside_2",
+        "supply_pct": 12.8,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "7jpQyywZm2KD9NTZX7DoZkcvETWCEf56wb1nmfJmpump": [
+      {
+        "holder_address": "POOL_AMM_7jpQyywZ",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "7jpQ_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "7jpQ_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "LTE6P1KHQVgkzrmvTrApwfx6nsDX8T9JEVNSLNrpump": [
+      {
+        "holder_address": "POOL_AMM_LTE6P1KH",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "LTE6_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "LTE6_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "Bxw3zJMXDhm7VLNLMsFTuG5Csh5qGFruUvRH5C6ypump": [
+      {
+        "holder_address": "POOL_AMM_Bxw3zJMX",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Bxw3_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Bxw3_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "iW4XP2BWd3iqf1LMZvpsKidb49wVAh3S8SfNUsDpump": [
+      {
+        "holder_address": "POOL_AMM_iW4XP2BW",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "iW4X_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "iW4X_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "FHCntFVzzGmbcUNmf1jBGaBsi4duboB1cwjg4yrcpump": [
+      {
+        "holder_address": "POOL_AMM_FHCntFVz",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "FHCn_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_trauma_FHCntF",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FHCn_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_trauma_FHCntF",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FHCn_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_trauma_FHCntF",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FHCn_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "FHCn_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "CfL8KmoTngbNpmjAo1SD1udnJ1h2Rg23bng6WCbDpump": [
+      {
+        "holder_address": "POOL_AMM_CfL8KmoT",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "CfL8_DevSub_1",
+        "supply_pct": 7.52,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_farmsem_CfL8Km",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "CfL8_DevSub_2",
+        "supply_pct": 6.34,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_farmsem_CfL8Km",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "CfL8_DevSub_3",
+        "supply_pct": 5.94,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_farmsem_CfL8Km",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "CfL8_Outside_1",
+        "supply_pct": 12.6,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "CfL8_Outside_2",
+        "supply_pct": 12.6,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "X7vvi2scAYDftprhfRf2ij2YHHbaL3Noenpzmrypump": [
+      {
+        "holder_address": "POOL_AMM_X7vvi2sc",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "X7vv_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "X7vv_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "EphCWcWcVcG7fjtGhvk2UjCUqhRcRfpuTbCyn5xoBAGS": [
+      {
+        "holder_address": "POOL_AMM_EphCWcWc",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "EphC_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EphC_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "FoufDb9hXygVYT58SVDAFhbd98k3D93xYHtd9eCewQPk": [
+      {
+        "holder_address": "POOL_AMM_FoufDb9h",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "Fouf_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PROPFUN_FoufDb",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fouf_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PROPFUN_FoufDb",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fouf_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_PROPFUN_FoufDb",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fouf_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "Fouf_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "ASTLrYPQeCt4iTdiZu439i4cfkcWEH1RrPA4ctyEpump": [
+      {
+        "holder_address": "POOL_AMM_ASTLrYPQ",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "ASTL_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "ASTL_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "HgaTfWUmT8vUjGQY9QvQq4hQMkUyQkcXfXuRhu71pump": [
+      {
+        "holder_address": "POOL_AMM_HgaTfWUm",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "HgaT_Flash_Sybil_1",
+        "supply_pct": 7.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 1000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HgaT_Flash_Sybil_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 1035,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HgaT_Flash_Sybil_3",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 1060,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HgaT_Flash_Sybil_4",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 1080,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HgaT_Retail_1",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 50000,
+          "amount_sol": 3.42,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "4gyubJ7sqYDySUDmVFEfSdvvC43F1eWLUXgEHDDWpump": [
+      {
+        "holder_address": "POOL_AMM_4gyubJ7s",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "4gyu_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4gyu_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "6JmDY4eYXiBJhKFjLhM2oG95UiwkEoAN2daqq6tUpump": [
+      {
+        "holder_address": "POOL_AMM_6JmDY4eY",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "6JmD_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "6JmD_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "EZr3zaL9oojKAtpNUYEihk4zWoZxbcKrNUM6SjEeBAGS": [
+      {
+        "holder_address": "POOL_AMM_EZr3zaL9",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "EZr3_DevSub_1",
+        "supply_pct": 7.75,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_TRUMPCOIN_EZr3za",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EZr3_DevSub_2",
+        "supply_pct": 6.53,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_TRUMPCOIN_EZr3za",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EZr3_DevSub_3",
+        "supply_pct": 6.12,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_TRUMPCOIN_EZr3za",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EZr3_Outside_1",
+        "supply_pct": 12.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "EZr3_Outside_2",
+        "supply_pct": 12.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "HW2Sz6nNonYCfD59Ng5AeV1xtuU43xu7oktb2PPfpump": [
+      {
+        "holder_address": "POOL_AMM_HW2Sz6nN",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "HW2S_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "HW2S_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "4HqpRjsRS8pjdWa2B3mBAmNNxTXUeJ9L6AfFnRgipump": [
+      {
+        "holder_address": "POOL_AMM_4HqpRjsR",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "4Hqp_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4Hqp_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "74wJDHwSSWBDD8nv6AvHGsmnn6FR4gPfc1SusM5Mpump": [
+      {
+        "holder_address": "POOL_AMM_74wJDHwS",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "74wJ_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "74wJ_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "899T4hR2vwi9no5fpdnWHERQwLdoUGDk8xkB1kJNpump": [
+      {
+        "holder_address": "POOL_AMM_899T4hR2",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "899T_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "899T_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "4n7bKuY36L2uJUEFzik1fMjQLQqBwrPLkzFM1hofpump": [
+      {
+        "holder_address": "POOL_AMM_4n7bKuY3",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "4n7b_DevSub_1",
+        "supply_pct": 10.03,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_ALON_4n7bKu",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4n7b_DevSub_2",
+        "supply_pct": 8.45,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_ALON_4n7bKu",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4n7b_DevSub_3",
+        "supply_pct": 7.92,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_ALON_4n7bKu",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4n7b_Outside_1",
+        "supply_pct": 9.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "4n7b_Outside_2",
+        "supply_pct": 9.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "9RZeokzHNXoRyJkWDFdvcQTAzUhKpXm7RrqkUM3Fpump": [
+      {
+        "holder_address": "POOL_AMM_9RZeokzH",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "9RZe_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "9RZe_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "B85CZwwGQN7HpKduxYGyP1B6Wq3U58m94oQ3poWGpump": [
+      {
+        "holder_address": "POOL_AMM_B85CZwwG",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "B85C_Retail_1",
+        "supply_pct": 6.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 10000,
+          "amount_sol": 0.5,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_2",
+        "supply_pct": 6.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 24500,
+          "amount_sol": 2.33,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_3",
+        "supply_pct": 5.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 39000,
+          "amount_sol": 4.16,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_4",
+        "supply_pct": 5.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 53500,
+          "amount_sol": 5.99,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_5",
+        "supply_pct": 4.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEFI_USER_7x8q",
+          "timestamp_epoch": 68000,
+          "amount_sol": 7.82,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_6",
+        "supply_pct": 4.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SWAPPER_31p",
+          "timestamp_epoch": 82500,
+          "amount_sol": 9.65,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_7",
+        "supply_pct": 3.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 97000,
+          "amount_sol": 11.48,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_8",
+        "supply_pct": 3.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "5tzFkiKscMRHK5ZXPB62WYoqKkyTJaQUMMMiaE2L1Fhn",
+          "timestamp_epoch": 111500,
+          "amount_sol": 13.31,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_9",
+        "supply_pct": 2.5,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 126000,
+          "amount_sol": 15.14,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "B85C_Retail_10",
+        "supply_pct": 2.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "SOL_WHALE_H4k99",
+          "timestamp_epoch": 140500,
+          "amount_sol": 16.97,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ],
+    "C891rB7xCUAztoAinptQFbDiDnDhJf3NQWALP98fpump": [
+      {
+        "holder_address": "POOL_AMM_C891rB7x",
+        "supply_pct": 55.0,
+        "is_liquidity_pool": true,
+        "funding_source": null
+      },
+      {
+        "holder_address": "C891_DevSub_1",
+        "supply_pct": 7.98,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_ECAT_C891rB",
+          "timestamp_epoch": 1000,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C891_DevSub_2",
+        "supply_pct": 6.72,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_ECAT_C891rB",
+          "timestamp_epoch": 1025,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C891_DevSub_3",
+        "supply_pct": 6.3,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "DEV_ROOT_ECAT_C891rB",
+          "timestamp_epoch": 1050,
+          "amount_sol": 1.25,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C891_Outside_1",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "FWznbcNXWQuHTawe9RxvQ2LdJF2YmtV21TuDKs35H4BQ",
+          "timestamp_epoch": 40000,
+          "amount_sol": 5.12,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      },
+      {
+        "holder_address": "C891_Outside_2",
+        "supply_pct": 12.0,
+        "is_liquidity_pool": false,
+        "funding_source": {
+          "funder_address": "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm",
+          "timestamp_epoch": 90000,
+          "amount_sol": 1.8,
+          "tx_signature": null,
+          "hop_depth": 1
+        }
+      }
+    ]
   }
 }
