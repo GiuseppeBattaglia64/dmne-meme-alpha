@@ -1,0 +1,820 @@
+[
+  {
+    "symbol": "ALON",
+    "type": "TOXIC_RUG",
+    "mint": "4n7bKuY36L2uJUEFzik1fMjQLQqBwrPLkzFM1hofpump",
+    "total_ms": 59222,
+    "avg_holder_ms": 4018,
+    "resolved_count": 10,
+    "unique_clusters": 10,
+    "s_max": 0.058733613784631905,
+    "hhi": 0.41848229545912724,
+    "clusters": {
+      "DYPNxJqZgNvkZGJGAofpxMK13haEJcKN3JSQfgXzbkxV": {
+        "holders": [
+          "EKEiVrdWUKTDXvQegVwQ2kwWjd8TsQk4zJ8RvGX8qjzc"
+        ],
+        "total_pct": 0.058733613784631905
+      },
+      "F1aeaWYLWG5tn7NxGq7jCUWctTwFgtjuTCVm5WSvesMm": {
+        "holders": [
+          "ChHxyP53sj4JjerpSYy5EUCJ8DJYcLSRxaFJ8eD1mqwH"
+        ],
+        "total_pct": 0.047363204501554894
+      },
+      "54Pz1e35z9uoFdnxtzjp7xZQoFiofqhdayQWBMN7dsuy": {
+        "holders": [
+          "AudtLzi7wfgCAXGZHUsjdNh7kwbxi58h2DCsvvUiNmRm"
+        ],
+        "total_pct": 0.0042812423583064585
+      },
+      "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t": {
+        "holders": [
+          "Aj2dPmCHw6sjDEe1Tbxw9ZWy95s4zoCNcTA3qmokm2r9"
+        ],
+        "total_pct": 0.0036172263212147456
+      },
+      "AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51": {
+        "holders": [
+          "99TezCdxQ1fBpvAky2FDrJSx1pNac7PJVQqEBr7kbPg2"
+        ],
+        "total_pct": 0.001593591342860994
+      },
+      "74777E1VDLrDrdHaVNBixivaW2gcqSinYjVvEjDqmkXY": {
+        "holders": [
+          "74777E1VDLrDrdHaVNBixivaW2gcqSinYjVvEjDqmkXY"
+        ],
+        "total_pct": 0.0009552105003561243
+      },
+      "ANJdiZchTohkQ8eo6fCL9TdnQBDuAASDWgewbzX7Kw3U": {
+        "holders": [
+          "ANJdiZchTohkQ8eo6fCL9TdnQBDuAASDWgewbzX7Kw3U"
+        ],
+        "total_pct": 0.00029607013830442775
+      },
+      "9tAgZMUGAMU3Ev8cnYqrkg57zmw9qf6UaDNPTRmXTN2d": {
+        "holders": [
+          "8psNvWTrdNTiVRNzAgsou9kETXNJm2SXZyaKuJraVRtf"
+        ],
+        "total_pct": 9.060637408175862e-05
+      },
+      "BrQDgJtFYXJseQXQ2NZA42qLCPnm4x2vxAen7cgoe7Wk": {
+        "holders": [
+          "7iWnBRRhBCiNXXPhqiGzvvBkKrvFSWqqmxRyu9VyYBxE"
+        ],
+        "total_pct": 6.17939891101036e-05
+      },
+      "HuykpUeH1UL7kiFzHA2owJhYUqHgxdYmsAYL547HiWMw": {
+        "holders": [
+          "HuykpUeH1UL7kiFzHA2owJhYUqHgxdYmsAYL547HiWMw"
+        ],
+        "total_pct": 1.0212334020742096e-13
+      }
+    },
+    "holders": [
+      {
+        "owner": "EKEiVrdWUKTDXvQegVwQ2kwWjd8TsQk4zJ8RvGX8qjzc",
+        "balance": 575124.292501,
+        "balance_pct": 0.058733613784631905,
+        "root_funder": "DYPNxJqZgNvkZGJGAofpxMK13haEJcKN3JSQfgXzbkxV",
+        "funded_sol": 1e-05,
+        "block_time": 1779839945,
+        "earliest_sig": "qErUVBbtVPXLSAxcuTjUE6czv1v8zHJSoK2QKMzKUi9KCpWhwsW9DjtBp5969fZBDh6xUiS2cr553bKWNbYJR5b",
+        "latency_ms": 2338
+      },
+      {
+        "owner": "ChHxyP53sj4JjerpSYy5EUCJ8DJYcLSRxaFJ8eD1mqwH",
+        "balance": 463784.325947,
+        "balance_pct": 0.047363204501554894,
+        "root_funder": "F1aeaWYLWG5tn7NxGq7jCUWctTwFgtjuTCVm5WSvesMm",
+        "funded_sol": 0.0,
+        "block_time": 1794004283,
+        "earliest_sig": "56xcpzs7k1xKZT5HPBCPJsDjHdGF76praPbnhxcDTxsRFxSKv62z5466To1SJ2MuuLHa6AFiw9kfyZ72xQdEoFiA",
+        "latency_ms": 23914
+      },
+      {
+        "owner": "AudtLzi7wfgCAXGZHUsjdNh7kwbxi58h2DCsvvUiNmRm",
+        "balance": 41922.271144,
+        "balance_pct": 0.0042812423583064585,
+        "root_funder": "54Pz1e35z9uoFdnxtzjp7xZQoFiofqhdayQWBMN7dsuy",
+        "funded_sol": 0.0,
+        "block_time": 1794060237,
+        "earliest_sig": "3Kf594SLvu6tQaNjaXHnwPTUk8Kr4XMy8iS5CKCCNczHTHLpHpRfPsGaBBgBn1kuG8mTbgcMrsRDBRpy824BVVGS",
+        "latency_ms": 3001
+      },
+      {
+        "owner": "Aj2dPmCHw6sjDEe1Tbxw9ZWy95s4zoCNcTA3qmokm2r9",
+        "balance": 35420.172449,
+        "balance_pct": 0.0036172263212147456,
+        "root_funder": "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t",
+        "funded_sol": 0.0,
+        "block_time": 1793918194,
+        "earliest_sig": "4SMcniKSR8GN23Lr2DzHtzwDcJQAg9EUaiSie2udeeg3BFuG6svJDoXGPVVgTjUYnrSoyrVmBtVUyrpqVwzFdKuR",
+        "latency_ms": 2099
+      },
+      {
+        "owner": "99TezCdxQ1fBpvAky2FDrJSx1pNac7PJVQqEBr7kbPg2",
+        "balance": 15604.575209,
+        "balance_pct": 0.001593591342860994,
+        "root_funder": "AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51",
+        "funded_sol": 0.0,
+        "block_time": 1793480604,
+        "earliest_sig": "3ZP43wshn89m1PvokT83Feexj1cfDz3Ac8XAa7iAadASHFBSMeqknX56LWvhBtXkeudNufTQMBmq1dHqftvTvrwT",
+        "latency_ms": 2467
+      },
+      {
+        "owner": "74777E1VDLrDrdHaVNBixivaW2gcqSinYjVvEjDqmkXY",
+        "balance": 9353.498411,
+        "balance_pct": 0.0009552105003561243,
+        "root_funder": "74777E1VDLrDrdHaVNBixivaW2gcqSinYjVvEjDqmkXY",
+        "funded_sol": 0.0,
+        "block_time": 1794013555,
+        "earliest_sig": "viRwwcJbm8qy65PRkrS1ukpXHwUW1EpsRBnSK4tCxcLuh1Cwn14oogPwCk8ZGvsGAHbiH5iHQVHAKvkhVKf4DKn",
+        "latency_ms": 1866
+      },
+      {
+        "owner": "ANJdiZchTohkQ8eo6fCL9TdnQBDuAASDWgewbzX7Kw3U",
+        "balance": 2899.14272,
+        "balance_pct": 0.00029607013830442775,
+        "root_funder": "ANJdiZchTohkQ8eo6fCL9TdnQBDuAASDWgewbzX7Kw3U",
+        "funded_sol": 0.0,
+        "block_time": 1794017540,
+        "earliest_sig": "4bBxqeHxz9RjbG2spUcRLGouvxsY998qPAFNYQ2Sg8mCW6udLnf7cniFstJP74TnKbVxXfNtN16WiVUBcKFyxrwB",
+        "latency_ms": 1534
+      },
+      {
+        "owner": "8psNvWTrdNTiVRNzAgsou9kETXNJm2SXZyaKuJraVRtf",
+        "balance": 887.224937,
+        "balance_pct": 9.060637408175862e-05,
+        "root_funder": "9tAgZMUGAMU3Ev8cnYqrkg57zmw9qf6UaDNPTRmXTN2d",
+        "funded_sol": 0.0,
+        "block_time": 1794079138,
+        "earliest_sig": "4kDGD97XUPzQMCgfdU1x5bbj4EAB6xmxj2vPfdxQrPyCWmi3DEwFUAGMwWt7HWQ6RWjDHXw5VeFirDhRA3UQi7iq",
+        "latency_ms": 916
+      },
+      {
+        "owner": "7iWnBRRhBCiNXXPhqiGzvvBkKrvFSWqqmxRyu9VyYBxE",
+        "balance": 605.091735,
+        "balance_pct": 6.17939891101036e-05,
+        "root_funder": "BrQDgJtFYXJseQXQ2NZA42qLCPnm4x2vxAen7cgoe7Wk",
+        "funded_sol": 0.0,
+        "block_time": 1794078778,
+        "earliest_sig": "3US1qsHWuFWG9us7zECvtDZuGGMuJMkbM5asoYh2xX5yGJNA4Nm1CHRvpjVzySiheECyTGMWHSRzTSd7eHkcfPR5",
+        "latency_ms": 784
+      },
+      {
+        "owner": "HuykpUeH1UL7kiFzHA2owJhYUqHgxdYmsAYL547HiWMw",
+        "balance": 1e-06,
+        "balance_pct": 1.0212334020742096e-13,
+        "root_funder": "HuykpUeH1UL7kiFzHA2owJhYUqHgxdYmsAYL547HiWMw",
+        "funded_sol": 0.0,
+        "block_time": 1793988335,
+        "earliest_sig": "37WP5dpJD6JCFtJCrVKg2RtELLv9NTPYW4f2TSqhkWqV6LzK7dxowKd5SAx8MKsGZL6LE1am5ahjECYXdf8izT5c",
+        "latency_ms": 1266
+      }
+    ]
+  },
+  {
+    "symbol": "BRUH",
+    "type": "TOXIC_RUG",
+    "mint": "Cp1qJ5CMyJCPakpSNJ9C7sbSMMENzeLidtamFk5gpump",
+    "total_ms": 18889,
+    "avg_holder_ms": 1275,
+    "resolved_count": 10,
+    "unique_clusters": 10,
+    "s_max": 96.12122089922333,
+    "hhi": 0.926097229536954,
+    "clusters": {
+      "9iGH8W7dKQM4hieLkNAhDtfsE9BSycGCi3MwcLbVXMuj": {
+        "holders": [
+          "CAZ5yPdZ7vrJZkG2EMERwnFDs6L7DUTjjzwXZ7inNBaW"
+        ],
+        "total_pct": 96.12122089922333
+      },
+      "CuQ4A1dZSxPX6pawcsXgMsP3N1u5Qw6gjTuSceeUWfFm": {
+        "holders": [
+          "CuQ4A1dZSxPX6pawcsXgMsP3N1u5Qw6gjTuSceeUWfFm"
+        ],
+        "total_pct": 3.5609388054633775
+      },
+      "FtfQi1xHPBGGHoBYo94XDpgXJegops7imggLuURDT8uh": {
+        "holders": [
+          "BM9CcyErJcu2mjrFvUsRRrD3snGeHDDVirJLvL6EjvMN"
+        ],
+        "total_pct": 0.18290414316632975
+      },
+      "9UnZnrFJ1CXCmCorgGU9NvYkX5np1h4v4ympx3Nrdw3v": {
+        "holders": [
+          "9UnZnrFJ1CXCmCorgGU9NvYkX5np1h4v4ympx3Nrdw3v"
+        ],
+        "total_pct": 0.05130724148409252
+      },
+      "2GYEYHBnQHP52f699vz3kwTBvcvsQKqHDjuxfKm4ALnx": {
+        "holders": [
+          "4EXBKqjePNVpPAJw6V9DvpWCwm5ifX7SpwYcWLHR1nrw"
+        ],
+        "total_pct": 0.010131883983980721
+      },
+      "7XiXFHgKZs7xheJqJBtgZHdYu54ATCD6pAgNwXHgvfSU": {
+        "holders": [
+          "7XiXFHgKZs7xheJqJBtgZHdYu54ATCD6pAgNwXHgvfSU"
+        ],
+        "total_pct": 0.008144820103068955
+      },
+      "7rtiKSUDLBm59b1SBmD9oajcP8xE64vAGSMbAN5CXy1q": {
+        "holders": [
+          "3XVPNADDXYYExXmWFpS3yy8eNTJ6PN3TY3sd2CPQCfPX"
+        ],
+        "total_pct": 0.006485358815566073
+      },
+      "DuaSY4SsBhFEnjLjAGLsVXbbAKEHo9pFLf7GxBRiDR3Q": {
+        "holders": [
+          "7W3uKrMfAT65JcXAm4JPW1ubLZNEUa2WaE79M2QHEwf1"
+        ],
+        "total_pct": 0.005006033790192662
+      },
+      "HZGjdU8brM9SqsffzcPB4iFmMG75fDQZmLbF1ERPnuZh": {
+        "holders": [
+          "61CY6GdtMjwcmcwmDYPe6oFizSfPTS8ZN8JRsJpmqGEZ"
+        ],
+        "total_pct": 0.003022799777688219
+      },
+      "GHkJfuq4o8jpUeE2iK1baG2f3CFCmvWDYjfLX2DvfaZR": {
+        "holders": [
+          "GHkJfuq4o8jpUeE2iK1baG2f3CFCmvWDYjfLX2DvfaZR"
+        ],
+        "total_pct": 0.0024157927701203073
+      }
+    },
+    "holders": [
+      {
+        "owner": "CAZ5yPdZ7vrJZkG2EMERwnFDs6L7DUTjjzwXZ7inNBaW",
+        "balance": 944051620.502375,
+        "balance_pct": 96.12122089922333,
+        "root_funder": "9iGH8W7dKQM4hieLkNAhDtfsE9BSycGCi3MwcLbVXMuj",
+        "funded_sol": 0.0,
+        "block_time": 1794039477,
+        "earliest_sig": "26MsyNQms6ZsPv5gJL9Nv9HUeV3Wu8zCwb22LvxCKe5uCT9mRqHodpa3FZtdy9YxLPihp4417x3AUuVtwvkFif6k",
+        "latency_ms": 1225
+      },
+      {
+        "owner": "CuQ4A1dZSxPX6pawcsXgMsP3N1u5Qw6gjTuSceeUWfFm",
+        "balance": 34973651.170453,
+        "balance_pct": 3.5609388054633775,
+        "root_funder": "CuQ4A1dZSxPX6pawcsXgMsP3N1u5Qw6gjTuSceeUWfFm",
+        "funded_sol": 0.0,
+        "block_time": 1793884274,
+        "earliest_sig": "4BvmQxECQdj6o4G3q4JEr66xtFgvp6C3eai452HC4FSpiqyCXJk8uoB97hvARLZU6dpC2FmHw9DYkm8TthdVMLsk",
+        "latency_ms": 1059
+      },
+      {
+        "owner": "BM9CcyErJcu2mjrFvUsRRrD3snGeHDDVirJLvL6EjvMN",
+        "balance": 1796387.42764,
+        "balance_pct": 0.18290414316632975,
+        "root_funder": "FtfQi1xHPBGGHoBYo94XDpgXJegops7imggLuURDT8uh",
+        "funded_sol": 0.00148844,
+        "block_time": 1794077759,
+        "earliest_sig": "5h3u5QG3XEDZpYWoM5RLs7aKRT7v3pjTfwnFe7Lxp4UQFz7BvjEQwW22mSC2Pp7dws9bbnccRecL1nkSXgKQPXJV",
+        "latency_ms": 849
+      },
+      {
+        "owner": "9UnZnrFJ1CXCmCorgGU9NvYkX5np1h4v4ympx3Nrdw3v",
+        "balance": 503912.497297,
+        "balance_pct": 0.05130724148409252,
+        "root_funder": "9UnZnrFJ1CXCmCorgGU9NvYkX5np1h4v4ympx3Nrdw3v",
+        "funded_sol": 0.0,
+        "block_time": 1794065051,
+        "earliest_sig": "5G1uXE1DYpHHY136Yckoio3X4caLFHBdkdqtVo8PpKQTFVEVmEP53BbKfQJ1aCZh9VTNai3vMU5UGXD8a1uxehAc",
+        "latency_ms": 905
+      },
+      {
+        "owner": "4EXBKqjePNVpPAJw6V9DvpWCwm5ifX7SpwYcWLHR1nrw",
+        "balance": 99509.987538,
+        "balance_pct": 0.010131883983980721,
+        "root_funder": "2GYEYHBnQHP52f699vz3kwTBvcvsQKqHDjuxfKm4ALnx",
+        "funded_sol": 0.0,
+        "block_time": 1794021960,
+        "earliest_sig": "hamBgekH2XK3J1144h8R4aeRXxau9w8pzoRqZLj4AN88qbY4DABnAuLKos7eyjoAT3BVFpEdD5M8DAqDaoyQ8ue",
+        "latency_ms": 1238
+      },
+      {
+        "owner": "7XiXFHgKZs7xheJqJBtgZHdYu54ATCD6pAgNwXHgvfSU",
+        "balance": 79994.100627,
+        "balance_pct": 0.008144820103068955,
+        "root_funder": "7XiXFHgKZs7xheJqJBtgZHdYu54ATCD6pAgNwXHgvfSU",
+        "funded_sol": 0.0,
+        "block_time": 1793550852,
+        "earliest_sig": "5HWnrTXs9u1CM23WNc8sxhYnC1kbEivXJyzp2v1pwoSb7CmUWsU1EK1xSH6KycGBk86DqC11dorKQZ5nY32jqtAH",
+        "latency_ms": 1368
+      },
+      {
+        "owner": "3XVPNADDXYYExXmWFpS3yy8eNTJ6PN3TY3sd2CPQCfPX",
+        "balance": 63695.752531,
+        "balance_pct": 0.006485358815566073,
+        "root_funder": "7rtiKSUDLBm59b1SBmD9oajcP8xE64vAGSMbAN5CXy1q",
+        "funded_sol": 0.0,
+        "block_time": 1767228107,
+        "earliest_sig": "5FJZuN8VR4Ejk25V1z7XXs63Wd3t9haRH8yT6zXn1FRXxwzzp9n7JtVcnLE2F2iQoeJMHEzdxjBvcQh1E8vwfn9n",
+        "latency_ms": 1351
+      },
+      {
+        "owner": "7W3uKrMfAT65JcXAm4JPW1ubLZNEUa2WaE79M2QHEwf1",
+        "balance": 49166.607204,
+        "balance_pct": 0.005006033790192662,
+        "root_funder": "DuaSY4SsBhFEnjLjAGLsVXbbAKEHo9pFLf7GxBRiDR3Q",
+        "funded_sol": 9.5699e-05,
+        "block_time": 1794037749,
+        "earliest_sig": "5BKKDcWG3HeDCEgWnWSQuhgHb1p2vEmW4urVWfbYQYLzhhRPejFusT3Gm7upMYbmQautLaybPBGUjC9BEFxYzCKu",
+        "latency_ms": 1348
+      },
+      {
+        "owner": "61CY6GdtMjwcmcwmDYPe6oFizSfPTS8ZN8JRsJpmqGEZ",
+        "balance": 29688.335228,
+        "balance_pct": 0.003022799777688219,
+        "root_funder": "HZGjdU8brM9SqsffzcPB4iFmMG75fDQZmLbF1ERPnuZh",
+        "funded_sol": 0.045948794,
+        "block_time": 1783064039,
+        "earliest_sig": "67kwBhMUEQpE232g3HL9z5ynPrGiHtrAAomgVYyH4ZoBSL7KiVnZaqc1W33d8hNzNkMGbZHJ7zCgoW3uXaf18xKW",
+        "latency_ms": 1460
+      },
+      {
+        "owner": "GHkJfuq4o8jpUeE2iK1baG2f3CFCmvWDYjfLX2DvfaZR",
+        "balance": 23726.634536,
+        "balance_pct": 0.0024157927701203073,
+        "root_funder": "GHkJfuq4o8jpUeE2iK1baG2f3CFCmvWDYjfLX2DvfaZR",
+        "funded_sol": 0.0,
+        "block_time": 1793758394,
+        "earliest_sig": "4fDGhZK1vJErhxeihZfSLXk4oc4U7HCSi1inAWdaMV1DA9s1hyAboDrvkWRpp3SpywnufZUNtZLtZtxcM6qrKsuT",
+        "latency_ms": 1952
+      }
+    ]
+  },
+  {
+    "symbol": "Elysion Pad",
+    "type": "ORGANIC_WINNER",
+    "mint": "HW2Sz6nNonYCfD59Ng5AeV1xtuU43xu7oktb2PPfpump",
+    "total_ms": 82422,
+    "avg_holder_ms": 4811,
+    "resolved_count": 9,
+    "unique_clusters": 7,
+    "s_max": 7.7489322758948225,
+    "hhi": 0.1985041639554037,
+    "clusters": {
+      "32jz2BHhZw4hNtCJFzacV5jFaXYXxgeECqY74TiZnw19": {
+        "holders": [
+          "EygeuMcz3NAAxGmwK9tTFgKu7w3raZzChHHULCiBRRim"
+        ],
+        "total_pct": 3.197117389523917
+      },
+      "AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51": {
+        "holders": [
+          "9mi9NJmPCED44WUtakvnA6pSYDWeRpDRpkqJgCk2Zcf1",
+          "zHEdtBndDp6tVQ5yC35EPEx7HkAMps1HcFwYVVeX3Uz",
+          "F58YtoBSup7myV6Nzjj1G4RrP17L7XpRczAQktuiA3Bs"
+        ],
+        "total_pct": 7.7489322758948225
+      },
+      "FsDqDiXCqv8tiFMK39qVMJyw2VkDYEKu5cfcCLXh6aRZ": {
+        "holders": [
+          "4q5bUHgs3ddLzei3EXbBCbkR64wBBmqCcB3mjgS7jurn"
+        ],
+        "total_pct": 2.7586821215474915
+      },
+      "7F6Na42uAmWZCYwSiqgDQKaTiEfkiQRp1cJtnDZdZPQs": {
+        "holders": [
+          "Fkk7g5yrqwdYtdFj3ftvVF6cEHnCH5htqxHKhmYcmArS"
+        ],
+        "total_pct": 2.3542097065120844
+      },
+      "5PQJBEKLguACzZEj6YcgaEcbWXZJzHzwGnMpKM3kcVWv": {
+        "holders": [
+          "5PQJBEKLguACzZEj6YcgaEcbWXZJzHzwGnMpKM3kcVWv"
+        ],
+        "total_pct": 2.076131174095782
+      },
+      "8WXKcUjwMU5TxiEN4mjw52iP4uPKx8VpXGozqMadqhyq": {
+        "holders": [
+          "8WXKcUjwMU5TxiEN4mjw52iP4uPKx8VpXGozqMadqhyq"
+        ],
+        "total_pct": 2.0093974666842844
+      },
+      "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t": {
+        "holders": [
+          "3ywWS6zme65idMdkcpGVYkrfT4RcdeH6URLpv97TjL7w"
+        ],
+        "total_pct": 1.6878363805643448
+      }
+    },
+    "holders": [
+      {
+        "owner": "EygeuMcz3NAAxGmwK9tTFgKu7w3raZzChHHULCiBRRim",
+        "balance": 31354218.056426,
+        "balance_pct": 3.197117389523917,
+        "root_funder": "32jz2BHhZw4hNtCJFzacV5jFaXYXxgeECqY74TiZnw19",
+        "funded_sol": 0.0,
+        "block_time": 1792702428,
+        "earliest_sig": "2uJHCNhRLuXdsw65VeXUgEgCoRf1EFBwPVbpGqEsnq8BscZrWfa1QsQpAieuQHmoNKcXrybrTWT7eJ4vtJWf5pMA",
+        "latency_ms": 1529
+      },
+      {
+        "owner": "9mi9NJmPCED44WUtakvnA6pSYDWeRpDRpkqJgCk2Zcf1",
+        "balance": 29555872.936568,
+        "balance_pct": 3.013744280211592,
+        "root_funder": "AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51",
+        "funded_sol": 0.0,
+        "block_time": 1793591020,
+        "earliest_sig": "4mM8RvHQyQGp2zR7JcgHWV5xnYVpfJjnJQS2XZtU2fRzQXxYgMFKeLduEFypieAxuFUY9TEc9VsV2LdsdRPVSi4j",
+        "latency_ms": 1816
+      },
+      {
+        "owner": "zHEdtBndDp6tVQ5yC35EPEx7HkAMps1HcFwYVVeX3Uz",
+        "balance": 28066095.222538,
+        "balance_pct": 2.861835078474242,
+        "root_funder": "AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51",
+        "funded_sol": 0.0,
+        "block_time": 1793893421,
+        "earliest_sig": "4Prss4MzoviK1xiATvzgwauLhxhz8jdd59K5UXadSQaC5k3rj12QxdJfiEwFDHCBt1T8kJQzTGZUZJNcG4mWA4af",
+        "latency_ms": 1538
+      },
+      {
+        "owner": "4q5bUHgs3ddLzei3EXbBCbkR64wBBmqCcB3mjgS7jurn",
+        "balance": 27054471.340586,
+        "balance_pct": 2.7586821215474915,
+        "root_funder": "FsDqDiXCqv8tiFMK39qVMJyw2VkDYEKu5cfcCLXh6aRZ",
+        "funded_sol": 0.00148844,
+        "block_time": 1794061969,
+        "earliest_sig": "5VUJzmRHQ2tK6WFwq419wGHE4kp6t8HhqhKmHcYaUu777GuLwLti538i1JhHj8hysRR2Cutr2NnppL2axFVWH3JW",
+        "latency_ms": 1565
+      },
+      {
+        "owner": "Fkk7g5yrqwdYtdFj3ftvVF6cEHnCH5htqxHKhmYcmArS",
+        "balance": 23087799.256419,
+        "balance_pct": 2.3542097065120844,
+        "root_funder": "7F6Na42uAmWZCYwSiqgDQKaTiEfkiQRp1cJtnDZdZPQs",
+        "funded_sol": 0.0,
+        "block_time": 1794077784,
+        "earliest_sig": "3tUfPGLQ6S3N5buA5SdHpxuVDjMwGh2FVHSntvZCJgwwV9Er92ZBuN5HQ7gGqifPCgPRje7fezS68QD8DmZfEtsU",
+        "latency_ms": 1177
+      },
+      {
+        "owner": "5PQJBEKLguACzZEj6YcgaEcbWXZJzHzwGnMpKM3kcVWv",
+        "balance": 20360675.450843,
+        "balance_pct": 2.076131174095782,
+        "root_funder": "5PQJBEKLguACzZEj6YcgaEcbWXZJzHzwGnMpKM3kcVWv",
+        "funded_sol": 0.0,
+        "block_time": 1793717238,
+        "earliest_sig": "57vCu8t2xreN3GUGFcqaLUNVHw5yiCBDQZDJUxisLog9mLqgviL6rkPbgpT9EqXd7dHJWnCeXsPRGJRnMp2r8kZx",
+        "latency_ms": 31880
+      },
+      {
+        "owner": "8WXKcUjwMU5TxiEN4mjw52iP4uPKx8VpXGozqMadqhyq",
+        "balance": 19706216.149239,
+        "balance_pct": 2.0093974666842844,
+        "root_funder": "8WXKcUjwMU5TxiEN4mjw52iP4uPKx8VpXGozqMadqhyq",
+        "funded_sol": 0.0,
+        "block_time": 1793937762,
+        "earliest_sig": "63tvNruofnKQxN2HLHz3yJWBTCUDphcyq1dnbcqFhrz4P2JgyUVrbWNQndseY9Q8TB5eezkr4SoEkY3sDwkBR9cy",
+        "latency_ms": 1126
+      },
+      {
+        "owner": "F58YtoBSup7myV6Nzjj1G4RrP17L7XpRczAQktuiA3Bs",
+        "balance": 18372023.515708,
+        "balance_pct": 1.8733529172089882,
+        "root_funder": "AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51",
+        "funded_sol": 0.0,
+        "block_time": 1793976649,
+        "earliest_sig": "esNvnL5igw4dn5LL7XpTKyhyRpeTiXtZC9tfDg4hxp9xJadZPCNj8Zv7H4arATs3YV1mdNjH4MhWZgUCBuApdaT",
+        "latency_ms": 1331
+      },
+      {
+        "owner": "3ywWS6zme65idMdkcpGVYkrfT4RcdeH6URLpv97TjL7w",
+        "balance": 16552657.745127,
+        "balance_pct": 1.6878363805643448,
+        "root_funder": "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t",
+        "funded_sol": 0.0,
+        "block_time": 1793990919,
+        "earliest_sig": "5VmvSC8KTCvPuTgMbWutvGWZg3dtss3KceJzn6FqtrtEic5vjvqVbHAnu4d65rt4AeqqJGvZpLry7en4kimzAKUm",
+        "latency_ms": 1343
+      }
+    ]
+  },
+  {
+    "symbol": "DACITY",
+    "type": "ORGANIC_WINNER",
+    "mint": "EphCWcWcVcG7fjtGhvk2UjCUqhRcRfpuTbCyn5xoBAGS",
+    "total_ms": 22151,
+    "avg_holder_ms": 1589,
+    "resolved_count": 10,
+    "unique_clusters": 9,
+    "s_max": 20.611531110119603,
+    "hhi": 0.2466625135417545,
+    "clusters": {
+      "5w3N8onwWFs3Zqp2rz7hj7mWqBkgU9ZoXDixX2PnaMTi": {
+        "holders": [
+          "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC"
+        ],
+        "total_pct": 20.611531110119603
+      },
+      "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t": {
+        "holders": [
+          "4axH7nr6ocfUTVYJJxR8JVPMnbjqcdjHYkczWpCgcSpj",
+          "AY8hKzMQva6otqqDU7DZVF2rFLK7VHt9NRKq9kY2Hwvr"
+        ],
+        "total_pct": 6.555350384896482
+      },
+      "4PLxt1w5GG11FyDPfi1Khy5dpirPXvN499tGxSM9dNDm": {
+        "holders": [
+          "4PLxt1w5GG11FyDPfi1Khy5dpirPXvN499tGxSM9dNDm"
+        ],
+        "total_pct": 3.525104812314101
+      },
+      "6LY1JzAFVZsP2a2xKrtU6znQMQ5h4i7tocWdgrkZzkzF": {
+        "holders": [
+          "5fmEYs2F8eE4Z4mxLgx6oppYrVouAHvUeevff6TQSh6f"
+        ],
+        "total_pct": 3.019670110839609
+      },
+      "4eUfG6vWPeWo2xMC7YwaBinkdgyW9GPkZUD2QCNMMxE2": {
+        "holders": [
+          "4eUfG6vWPeWo2xMC7YwaBinkdgyW9GPkZUD2QCNMMxE2"
+        ],
+        "total_pct": 2.979343576451513
+      },
+      "23TmUDsQhNde2c1LFhN6SSw7VzmGR1LceBMjmJdAnxZh": {
+        "holders": [
+          "23TmUDsQhNde2c1LFhN6SSw7VzmGR1LceBMjmJdAnxZh"
+        ],
+        "total_pct": 2.871874360815134
+      },
+      "4UP7t9p3HEd9gfF9gFKkGa1ZvLXFS2naHgnxB4fwpLfS": {
+        "holders": [
+          "A7NMECcautNPEFqjExmG8JSAm9towjeTojzLXNwicE7m"
+        ],
+        "total_pct": 2.2297497658997116
+      },
+      "5T85UXqUEAyCFo1tkYM1rD4fF2r3LQ4BdfXmH3HzzVNr": {
+        "holders": [
+          "4fE5mXgXgKqFVnMWkCLVHX9VakZR3DZgr9fLaoatYX24"
+        ],
+        "total_pct": 2.1621872729163543
+      },
+      "HoTWADT1sU7FnWiXLpxwApzN59pwZj1CqQgojJCkh7vB": {
+        "holders": [
+          "BXwgucymE2PduyHSCiVDMKeqK6rzCC1yST8rtQDt18HG"
+        ],
+        "total_pct": 1.9577955723675557
+      }
+    },
+    "holders": [
+      {
+        "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+        "balance": 206114888.54638854,
+        "balance_pct": 20.611531110119603,
+        "root_funder": "5w3N8onwWFs3Zqp2rz7hj7mWqBkgU9ZoXDixX2PnaMTi",
+        "funded_sol": 0.0,
+        "block_time": 1794079451,
+        "earliest_sig": "5Cwi2KSsbTLPQYxvXwXKkVUGqhV1eZaC82AkD47q9iawGYtGh2rACkBaEELwBxwWPAJg2Z1gAJM79X98my9t1iqu",
+        "latency_ms": 785
+      },
+      {
+        "owner": "4axH7nr6ocfUTVYJJxR8JVPMnbjqcdjHYkczWpCgcSpj",
+        "balance": 45749913.92055906,
+        "balance_pct": 4.575000771216337,
+        "root_funder": "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t",
+        "funded_sol": 0.0,
+        "block_time": 1794022380,
+        "earliest_sig": "yViRG8dTMsv7JASUxUSAZ2p97sjGP8S63YTVKSMNRQd3BZrFEiGcCxs3m29VGcmJUdinU4eoArJWiiVshsJAD8F",
+        "latency_ms": 1694
+      },
+      {
+        "owner": "4PLxt1w5GG11FyDPfi1Khy5dpirPXvN499tGxSM9dNDm",
+        "balance": 35250975.85534211,
+        "balance_pct": 3.525104812314101,
+        "root_funder": "4PLxt1w5GG11FyDPfi1Khy5dpirPXvN499tGxSM9dNDm",
+        "funded_sol": 0.0,
+        "block_time": 1782380916,
+        "earliest_sig": "5LaPvDZWQLjN5LCJUuLb5mghf5ujdWM3Vf6oeSMgejMVkJFFaLjEgbvUcDUed3kAbFnB8D3wjGQUcJREfXsckH1U",
+        "latency_ms": 2179
+      },
+      {
+        "owner": "5fmEYs2F8eE4Z4mxLgx6oppYrVouAHvUeevff6TQSh6f",
+        "balance": 30196639.202460255,
+        "balance_pct": 3.019670110839609,
+        "root_funder": "6LY1JzAFVZsP2a2xKrtU6znQMQ5h4i7tocWdgrkZzkzF",
+        "funded_sol": 100.62944913,
+        "block_time": 1794045201,
+        "earliest_sig": "21SGQWGTbrh25g3GUF6FD6FqtFJZjcPpkqNdkQa1U91pDbkEXS8GsRKEKH7wGKefiVeokKCojxYqcvjB2BsndFQo",
+        "latency_ms": 1246
+      },
+      {
+        "owner": "4eUfG6vWPeWo2xMC7YwaBinkdgyW9GPkZUD2QCNMMxE2",
+        "balance": 29793374.685309287,
+        "balance_pct": 2.979343576451513,
+        "root_funder": "4eUfG6vWPeWo2xMC7YwaBinkdgyW9GPkZUD2QCNMMxE2",
+        "funded_sol": 0.0,
+        "block_time": 1794064253,
+        "earliest_sig": "5QPgfCJrH7n7dE9HJ6REkxYBW9fo2hN2YJmJqrH96aKknEdibhjTk3CLnZttR8LcGkWA8L44xrqPfYxGhddg41MT",
+        "latency_ms": 983
+      },
+      {
+        "owner": "23TmUDsQhNde2c1LFhN6SSw7VzmGR1LceBMjmJdAnxZh",
+        "balance": 28718684.732160456,
+        "balance_pct": 2.871874360815134,
+        "root_funder": "23TmUDsQhNde2c1LFhN6SSw7VzmGR1LceBMjmJdAnxZh",
+        "funded_sol": 0.0,
+        "block_time": 1794057190,
+        "earliest_sig": "5sTJdUcG7puLiBVkWuVUWiqpGsDtFL9J8HWwxjYKcnFRKZpXHRePnav4cbU49gxHadW42RZHJRsusyVrTkqvymv2",
+        "latency_ms": 1524
+      },
+      {
+        "owner": "A7NMECcautNPEFqjExmG8JSAm9towjeTojzLXNwicE7m",
+        "balance": 22297451.947134275,
+        "balance_pct": 2.2297497658997116,
+        "root_funder": "4UP7t9p3HEd9gfF9gFKkGa1ZvLXFS2naHgnxB4fwpLfS",
+        "funded_sol": 0.0,
+        "block_time": 1793049201,
+        "earliest_sig": "3sQTTvaHu4abQgRSFgQJGFnRTCBwToDrmUXfKcFZDodT63gqiVjVR61fuDxG2a5X5SM8wQN7LsfvoygTYtJrJRcY",
+        "latency_ms": 1998
+      },
+      {
+        "owner": "4fE5mXgXgKqFVnMWkCLVHX9VakZR3DZgr9fLaoatYX24",
+        "balance": 21621828.402392186,
+        "balance_pct": 2.1621872729163543,
+        "root_funder": "5T85UXqUEAyCFo1tkYM1rD4fF2r3LQ4BdfXmH3HzzVNr",
+        "funded_sol": 0.0,
+        "block_time": 1794077418,
+        "earliest_sig": "3mfiTXex3hTTZ1yhtSXq6CCmMqW5QcqunhQkvZtJctXYnkwq3mx9Mq93bNdkrWhuuq73eumzRg7PUGXb1crxdY1y",
+        "latency_ms": 1977
+      },
+      {
+        "owner": "AY8hKzMQva6otqqDU7DZVF2rFLK7VHt9NRKq9kY2Hwvr",
+        "balance": 19803455.537864596,
+        "balance_pct": 1.980349613680144,
+        "root_funder": "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t",
+        "funded_sol": 0.0,
+        "block_time": 1794014198,
+        "earliest_sig": "4EH6Cpy4Sjwk3zNQAv9DNuL3q3vq7Kd2xAxtqgZQe87vFe2ZfBpJvZnn3hRErwRhYcmMWnqCnpmm141icTrbbMKG",
+        "latency_ms": 2042
+      },
+      {
+        "owner": "BXwgucymE2PduyHSCiVDMKeqK6rzCC1yST8rtQDt18HG",
+        "balance": 19577915.58711672,
+        "balance_pct": 1.9577955723675557,
+        "root_funder": "HoTWADT1sU7FnWiXLpxwApzN59pwZj1CqQgojJCkh7vB",
+        "funded_sol": 1e-09,
+        "block_time": 1793971895,
+        "earliest_sig": "3H3MipraGdzEqZpPAENujRSREm8X9iamqgEPQ4iDkv5CY2P6XgihmxqTb9GURzBJzy11Rjt5j6jpVCZjudxU1KZt",
+        "latency_ms": 1463
+      }
+    ]
+  },
+  {
+    "symbol": "pip",
+    "type": "ORGANIC_WINNER",
+    "mint": "4VyS1DWXDEbu8jVyJUjqNJN3SXGgZYf2uo3YZ6QLpump",
+    "total_ms": 92032,
+    "avg_holder_ms": 5947,
+    "resolved_count": 9,
+    "unique_clusters": 7,
+    "s_max": 94.75128345745307,
+    "hhi": 0.9135145513315593,
+    "clusters": {
+      "9uGsPcu2a2hJ8XE7U1iqsof54GVTDBjMRoksLRGvTEzQ": {
+        "holders": [
+          "JDPAoNZcZKdEahxoXShtNSEPZa6hQRiPAfVNUqC3gYJK"
+        ],
+        "total_pct": 94.75128345745307
+      },
+      "7JCe3GHwkEr3feHgtLXnmuJ1yB3A7coSeyynxTBgdG8k": {
+        "holders": [
+          "6wR3bW5B6Tr6N5ESFBfKLqjfrRd8ds6Vo5Eop1jMQi77"
+        ],
+        "total_pct": 1.4083978990136237
+      },
+      "HgWdcArhyN29kzHrjNqrRm5c9yX9a73DA7faz8tXZBN1": {
+        "holders": [
+          "HgWdcArhyN29kzHrjNqrRm5c9yX9a73DA7faz8tXZBN1"
+        ],
+        "total_pct": 1.0150780024241095
+      },
+      "iGdFcQoyR2MwbXMHQskhmNsqddZ6rinsipHc4TNSdwu": {
+        "holders": [
+          "94RSdfrmctoDHPSDmCaUC8bWNgHu7kgxUYXTZn1ZKnZE"
+        ],
+        "total_pct": 0.7549262291015311
+      },
+      "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t": {
+        "holders": [
+          "GYaf9CfPjM2JXLGkSyMnfaQDFj7uej9EdK1kXkuS55NC",
+          "AeMQyQsFe9SxLha84qpLVi193GjA2RBzFADaALLSP2tL",
+          "EnuPc3P84sHMxRZKRK9wzP75QWaki1s57Q7d5qBGfDjH"
+        ],
+        "total_pct": 1.0215295098491954
+      },
+      "83Ro6vbNFBihhpCJpr95EB5uygeNGD51E1d1XVxvxC3n": {
+        "holders": [
+          "83Ro6vbNFBihhpCJpr95EB5uygeNGD51E1d1XVxvxC3n"
+        ],
+        "total_pct": 0.11310150032908248
+      },
+      "82NN7H8DMAr7CRqyCPfJdVhtbWoP2RyGTDYZQPmpBwAw": {
+        "holders": [
+          "44iL5UUzss9LrmScyATWVEcYK4kQdp6xSC3cuM6SVHTK"
+        ],
+        "total_pct": 0.09643169498703133
+      }
+    },
+    "holders": [
+      {
+        "owner": "JDPAoNZcZKdEahxoXShtNSEPZa6hQRiPAfVNUqC3gYJK",
+        "balance": 894113561.354679,
+        "balance_pct": 94.75128345745307,
+        "root_funder": "9uGsPcu2a2hJ8XE7U1iqsof54GVTDBjMRoksLRGvTEzQ",
+        "funded_sol": 0.0,
+        "block_time": 1794001466,
+        "earliest_sig": "4Rp5TXXZhNyWBD5VC1SqLSfmSTjrU3z84NUFSX4YDoUqcmYApQZeqe8fXM8ioXXTN3TCuX5bT34TVahHmPi4epwK",
+        "latency_ms": 1837
+      },
+      {
+        "owner": "6wR3bW5B6Tr6N5ESFBfKLqjfrRd8ds6Vo5Eop1jMQi77",
+        "balance": 13290243.839884,
+        "balance_pct": 1.4083978990136237,
+        "root_funder": "7JCe3GHwkEr3feHgtLXnmuJ1yB3A7coSeyynxTBgdG8k",
+        "funded_sol": 0.0,
+        "block_time": 1793885594,
+        "earliest_sig": "HomE8iRSeoxqDazXqZ6BLdFsQnW5Rc5RZmeTYMrp4ovonp2MTW8fd8NLAc8QQYX4kWZk1tnsie72V5VYg7wxJp9",
+        "latency_ms": 1562
+      },
+      {
+        "owner": "HgWdcArhyN29kzHrjNqrRm5c9yX9a73DA7faz8tXZBN1",
+        "balance": 9578709.381892,
+        "balance_pct": 1.0150780024241095,
+        "root_funder": "HgWdcArhyN29kzHrjNqrRm5c9yX9a73DA7faz8tXZBN1",
+        "funded_sol": 0.0,
+        "block_time": 1793717500,
+        "earliest_sig": "2jbH8dntTiNHLHwnvjD4PfeTDT8A5CHGskpASM88ZWem8m1KtwubT7YvymMM6HBFTfCNYkpDCoMxs59tztXNNW74",
+        "latency_ms": 2037
+      },
+      {
+        "owner": "94RSdfrmctoDHPSDmCaUC8bWNgHu7kgxUYXTZn1ZKnZE",
+        "balance": 7123806.186384,
+        "balance_pct": 0.7549262291015311,
+        "root_funder": "iGdFcQoyR2MwbXMHQskhmNsqddZ6rinsipHc4TNSdwu",
+        "funded_sol": 0.05388867,
+        "block_time": 1793216876,
+        "earliest_sig": "3mkHDPW1t7B2gEvQCidDXrBoVE9d5Dq2aKRfD2Gb83wocyfywr12D8Xk2W6qf5rn7NDYtSZTCK3u3FCwHBJ7RvwY",
+        "latency_ms": 2910
+      },
+      {
+        "owner": "GYaf9CfPjM2JXLGkSyMnfaQDFj7uej9EdK1kXkuS55NC",
+        "balance": 5528970.860901,
+        "balance_pct": 0.5859178385299273,
+        "root_funder": "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t",
+        "funded_sol": 0.0,
+        "block_time": 1793734802,
+        "earliest_sig": "4RxJCwm1eV99cAh43va1TXxpuyzxJUzUQ9MidFPrgEkpL62n887pEHJkvhJfxFDTFC8fR2JPBfZQo9kdKBoo2pcr",
+        "latency_ms": 3235
+      },
+      {
+        "owner": "AeMQyQsFe9SxLha84qpLVi193GjA2RBzFADaALLSP2tL",
+        "balance": 3441138.395851,
+        "balance_pct": 0.364665400072446,
+        "root_funder": "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t",
+        "funded_sol": 0.0,
+        "block_time": 1793901754,
+        "earliest_sig": "5pqMvEMDzC2g88k1kDdattBQx2qGgkSe7AANEhzkyxfApZjX9BFVwK5mR2p12W5nuMqmzvwxJ911k9SMnguGTjnt",
+        "latency_ms": 1963
+      },
+      {
+        "owner": "83Ro6vbNFBihhpCJpr95EB5uygeNGD51E1d1XVxvxC3n",
+        "balance": 1067274.04172,
+        "balance_pct": 0.11310150032908248,
+        "root_funder": "83Ro6vbNFBihhpCJpr95EB5uygeNGD51E1d1XVxvxC3n",
+        "funded_sol": 0.0,
+        "block_time": 1793626063,
+        "earliest_sig": "4hDzFLZwupN1Q1uuy9CWuDQnW1yC5d7mVCR4cJDmLPMaMom3NN29TxHG5SBn7wbhhhvmyXWbEnujSz5Nv3uZUHTt",
+        "latency_ms": 2560
+      },
+      {
+        "owner": "44iL5UUzss9LrmScyATWVEcYK4kQdp6xSC3cuM6SVHTK",
+        "balance": 909970.641939,
+        "balance_pct": 0.09643169498703133,
+        "root_funder": "82NN7H8DMAr7CRqyCPfJdVhtbWoP2RyGTDYZQPmpBwAw",
+        "funded_sol": 0.00034021,
+        "block_time": 1792270337,
+        "earliest_sig": "3EtABJVU6b4LVuZTCQL4rva7umxN28p7AeJH21c2o8CrYHGpif1hwHiKMF5oxVcNVeekv7vEVVUrznb5DdfspuGQ",
+        "latency_ms": 34126
+      },
+      {
+        "owner": "EnuPc3P84sHMxRZKRK9wzP75QWaki1s57Q7d5qBGfDjH",
+        "balance": 669479.303442,
+        "balance_pct": 0.07094627124682211,
+        "root_funder": "HckQ93Xqjjo8mwt5pNPWvyCTZXQZ858rvzmm7ZRrZg9t",
+        "funded_sol": 0.0,
+        "block_time": 1792847412,
+        "earliest_sig": "6432M11zRHekpfF4uib3JVj6bvdMfX2LQNotPJM9qM7nG2NFkYfUycDkmRSYXt4k5fpi82WX8ztM9VrFzxFdbsoB",
+        "latency_ms": 3295
+      }
+    ]
+  }
+]
