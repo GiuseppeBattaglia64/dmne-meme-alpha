@@ -10,6 +10,23 @@
     if (!activeToken && !window.location.search.includes('bypass=true')) {
       window.location.href = '/login';
     }
+
+    // Global SVG Identicon & Avatar Error Handler (Zero ReferenceError guarantee)
+    window.generateIdenticonSvg = function(symbol) {
+      const colors = ['#06b6d4', '#10b981', '#a855f7', '#f59e0b', '#ec4899'];
+      const sym = (symbol || 'TK').replace(/[^a-zA-Z0-9]/g, '') || 'TK';
+      const charCode = sym.charCodeAt(0) + (sym.charCodeAt(1) || 0);
+      const bg = colors[charCode % colors.length];
+      const initials = sym.substring(0, 2).toUpperCase();
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="${bg}"/><text x="16" y="21" font-family="sans-serif" font-weight="bold" font-size="12" fill="#ffffff" text-anchor="middle">${initials}</text></svg>`;
+      return 'data:image/svg+xml;base64,' + btoa(svg);
+    };
+
+    window.handleImgError = function(el, symbol) {
+      if (!el) return;
+      el.onerror = null;
+      el.src = window.generateIdenticonSvg(symbol);
+    };
   </script>
 
   <meta charset="UTF-8">
@@ -403,7 +420,27 @@
       gap: 6px;
       min-height: 0;
     }
-    .table-container { flex: 1; overflow-y: auto; min-height: 0; }
+    .table-container {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+      scroll-behavior: smooth;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-glow) rgba(7, 11, 19, 0.4);
+    }
+    .table-container::-webkit-scrollbar {
+      width: 5px;
+    }
+    .table-container::-webkit-scrollbar-track {
+      background: rgba(7, 11, 19, 0.4);
+    }
+    .table-container::-webkit-scrollbar-thumb {
+      background: var(--border-glow);
+      border-radius: 3px;
+    }
+    .table-container::-webkit-scrollbar-thumb:hover {
+      background: var(--cyan);
+    }
     table { width: 100%; border-collapse: collapse; font-size: 9.5px; font-family: 'JetBrains Mono', monospace; }
     th { text-align: left; padding: 4px 6px; background: var(--bg-subtle); color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2; }
     td { padding: 4px 6px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); }
@@ -1091,7 +1128,7 @@
       <div class="modal-head">
         <div style="display: flex; align-items: center; gap: 10px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <img id="tdm-avatar" class="token-avatar" src="" onerror="handleImgError(this, 'TOKEN')" alt="Token" style="width:26px; height:26px; border-radius:4px;">
+            <img id="tdm-avatar" class="token-avatar" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0iIzA2YjZkNCIvPjwvc3ZnPg==" onerror="handleImgError(this, 'TOKEN')" alt="Token" style="width:26px; height:26px; border-radius:4px;">
             <span class="mono" id="tdm-sym" style="font-size: 15px; font-weight: 800; color: #fff;">TOKEN</span>
           </div>
           <span id="tdm-badge" class="badge"></span>
@@ -1586,7 +1623,7 @@
         return 0;
       });
       const listToRender = (sorted.length > 0 && (sorted[0].closed_at_epoch || sorted[0].exit_epoch)) ? sorted : trades.slice().reverse();
-      tbody.innerHTML = listToRender.slice(0, 8).map(t => {
+      tbody.innerHTML = listToRender.map(t => {
         const pnl = parseFloat(t.pnl_pct || t.realized_pnl_pct || 0.0);
         const pnlColor = pnl >= 0 ? "var(--green)" : "var(--red)";
         const sizeSol = parseFloat(t.size_sol || t.entry_size_sol || 0.0417);
