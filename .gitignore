@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 logs/*_archive.csv
+logs/shadow_microstructure.jsonl

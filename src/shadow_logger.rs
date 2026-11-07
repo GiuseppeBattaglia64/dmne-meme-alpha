@@ -2,12 +2,14 @@
 // Zero-disruption on-chain Hawkes sequences, true VPIN volume bars, and RPC holder entropy
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, RwLock};
 
 pub const DEFAULT_SHADOW_LOG_PATH: &str = "logs/shadow_microstructure.jsonl";
+pub const DEFAULT_SOLANA_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
 pub const DEFAULT_RPC_TIMEOUT_SECS: u64 = 4;
 pub const MAX_TOP_HOLDERS_COUNT: usize = 10;
 pub const DEFAULT_HAWKES_WINDOW_SIZE: usize = 50;
@@ -146,6 +148,9 @@ pub async fn fetch_rpc_holder_distribution(
     mint: &str,
     timeout_secs: u64,
 ) -> (Vec<f64>, f64) {
+    if timeout_secs == 0 || rpc_url.is_empty() || mint.is_empty() {
+        return (Vec::new(), 0.0);
+    }
     let timeout = std::time::Duration::from_secs(timeout_secs);
 
     // 1. Fetch largest token accounts
@@ -241,107 +246,158 @@ pub async fn fetch_rpc_holder_distribution(
     (shares, entropy)
 }
 
-/// Asynchronous, non-blocking handle for logging shadow microstructure telemetry
+/// Asynchronous handle for non-blocking shadow logging across bot routines
 #[derive(Debug, Clone)]
-pub struct ShadowLogger {
+pub struct ShadowHandle {
     tx: mpsc::UnboundedSender<ShadowMicrostructureRecord>,
+    rpc_client: reqwest::Client,
+    pub rpc_url: String,
+    hawkes_tracker: HawkesArrivalTracker,
+    pub sol_price_usd: f64,
+    pub rpc_timeout_secs: u64,
 }
 
-impl ShadowLogger {
-    /// Spawns a background logging worker that appends records to a JSON Lines file
-    pub fn spawn(output_path: &str) -> Self {
-        let (tx, mut rx) = mpsc::unbounded_channel::<ShadowMicrostructureRecord>();
-        let path_str = output_path.to_string();
-
-        tokio::spawn(async move {
-            let path = Path::new(&path_str);
-            if let Some(parent) = path.parent() {
-                let _ = tokio::fs::create_dir_all(parent).await;
-            }
-
-            let file_res = tokio::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .await;
-
-            let mut file = match file_res {
-                Ok(f) => f,
-                Err(e) => {
-                    eprintln!("[SHADOW LOGGER ERROR] Failed to open {}: {}", path_str, e);
-                    return;
-                }
-            };
-
-            while let Some(record) = rx.recv().await {
-                if let Ok(serialized) = serde_json::to_string(&record) {
-                    let mut line = serialized;
-                    line.push('\n');
-                    if let Err(e) = file.write_all(line.as_bytes()).await {
-                        eprintln!("[SHADOW LOGGER ERROR] Failed to write log line: {}", e);
-                    }
-                    let _ = file.flush().await;
-                }
-            }
-        });
-
-        Self { tx }
+impl ShadowHandle {
+    pub fn new(
+        tx: mpsc::UnboundedSender<ShadowMicrostructureRecord>,
+        rpc_client: reqwest::Client,
+        rpc_url: String,
+    ) -> Self {
+        Self {
+            tx,
+            rpc_client,
+            rpc_url,
+            hawkes_tracker: HawkesArrivalTracker::default(),
+            sol_price_usd: DEFAULT_SOL_PRICE_USD,
+            rpc_timeout_secs: DEFAULT_RPC_TIMEOUT_SECS,
+        }
     }
 
-    /// Dispatches a record to the background logging worker without blocking the calling thread
-    pub fn log_record(&self, record: ShadowMicrostructureRecord) -> bool {
-        self.tx.send(record).is_ok()
+    pub fn with_rpc_url(mut self, url: String) -> Self {
+        self.rpc_url = url;
+        self
     }
-}
 
-/// Spawns an isolated background task to fetch RPC holder metrics and log the candidate
-pub fn spawn_shadow_candidate_logger(
-    logger: ShadowLogger,
-    client: reqwest::Client,
-    rpc_url: String,
-    token_mint: String,
-    symbol: String,
-    spot_price_sol: f64,
-    liquidity_usd: f64,
-    fdv_usd: f64,
-    swap_interval_deltas_ms: Vec<u64>,
-    buy_volume_sol_window: f64,
-    sell_volume_sol_window: f64,
-    is_admitted: bool,
-    rejection_reason: Option<String>,
-) {
-    tokio::spawn(async move {
-        let (top_10_holder_shares, holder_shannon_entropy) = fetch_rpc_holder_distribution(
-            &client,
-            &rpc_url,
-            &token_mint,
-            DEFAULT_RPC_TIMEOUT_SECS,
-        )
-        .await;
+    pub fn with_sol_price(mut self, price: f64) -> Self {
+        self.sol_price_usd = price;
+        self
+    }
 
+    pub fn with_rpc_timeout_secs(mut self, secs: u64) -> Self {
+        self.rpc_timeout_secs = secs;
+        self
+    }
+
+    /// Non-blocking evaluation logger that records Hawkes deltas, VPIN slices, and RPC holder entropy
+    pub fn log_evaluation(
+        &self,
+        token_mint: &str,
+        symbol: &str,
+        spot_price_sol: f64,
+        liquidity_usd: f64,
+        fdv_usd: f64,
+        volume_usd: f64,
+        buy_txns: u64,
+        sell_txns: u64,
+        is_admitted: bool,
+        rejection_reason: Option<String>,
+    ) {
         let now_epoch = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs_f64();
+        let now_ms = (now_epoch * 1000.0) as u64;
 
-        let record = ShadowMicrostructureRecord {
-            timestamp_epoch: now_epoch,
-            token_mint,
-            symbol,
-            spot_price_sol,
-            liquidity_usd,
-            fdv_usd,
-            swap_interval_deltas_ms,
-            buy_volume_sol_window,
-            sell_volume_sol_window,
-            top_10_holder_shares,
-            holder_shannon_entropy,
-            is_admitted,
-            rejection_reason,
+        let tx = self.tx.clone();
+        let client = self.rpc_client.clone();
+        let rpc_url = self.rpc_url.clone();
+        let hawkes = self.hawkes_tracker.clone();
+        let sol_price = self.sol_price_usd;
+        let timeout_secs = self.rpc_timeout_secs;
+
+        let mint = token_mint.to_string();
+        let sym = symbol.to_string();
+
+        tokio::spawn(async move {
+            hawkes.record_arrival(&mint, now_ms).await;
+            let deltas = hawkes.get_interval_deltas_ms(&mint).await;
+            let (buy_vol_sol, sell_vol_sol) = compute_vpin_volume_slices(
+                volume_usd,
+                buy_txns,
+                sell_txns,
+                sol_price,
+            );
+            let (top_10, entropy) = fetch_rpc_holder_distribution(
+                &client,
+                &rpc_url,
+                &mint,
+                timeout_secs,
+            )
+            .await;
+
+            let record = ShadowMicrostructureRecord {
+                timestamp_epoch: now_epoch,
+                token_mint: mint,
+                symbol: sym,
+                spot_price_sol,
+                liquidity_usd,
+                fdv_usd,
+                swap_interval_deltas_ms: deltas,
+                buy_volume_sol_window: buy_vol_sol,
+                sell_volume_sol_window: sell_vol_sol,
+                top_10_holder_shares: top_10,
+                holder_shannon_entropy: entropy,
+                is_admitted,
+                rejection_reason,
+            };
+
+            let _ = tx.send(record);
+        });
+    }
+}
+
+/// Initializes the non-blocking shadow logger returning a shared handle and a background worker future
+pub fn init_shadow_logger(
+    rpc_client: reqwest::Client,
+    output_path: &str,
+) -> (ShadowHandle, impl Future<Output = ()> + Send + 'static) {
+    let (tx, mut rx) = mpsc::unbounded_channel::<ShadowMicrostructureRecord>();
+    let handle = ShadowHandle::new(tx, rpc_client, DEFAULT_SOLANA_RPC_URL.to_string());
+    let path_str = output_path.to_string();
+
+    let worker = async move {
+        let path = Path::new(&path_str);
+        if let Some(parent) = path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+
+        let file_res = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .await;
+
+        let mut file = match file_res {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("[SHADOW LOGGER ERROR] Failed to open {}: {}", path_str, e);
+                return;
+            }
         };
 
-        logger.log_record(record);
-    });
+        while let Some(record) = rx.recv().await {
+            if let Ok(serialized) = serde_json::to_string(&record) {
+                let mut line = serialized;
+                line.push('\n');
+                if let Err(e) = file.write_all(line.as_bytes()).await {
+                    eprintln!("[SHADOW LOGGER ERROR] Failed to write log line: {}", e);
+                }
+                let _ = file.flush().await;
+            }
+        }
+    };
+
+    (handle, worker)
 }
 
 #[cfg(test)]
@@ -413,34 +469,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_shadow_logger_write_and_readback() {
+    async fn test_init_shadow_logger_write_and_readback() {
         let temp_dir = std::env::temp_dir();
-        let log_file = temp_dir.join(format!("test_shadow_{}.jsonl", std::process::id()));
+        let log_file = temp_dir.join(format!("test_init_shadow_{}.jsonl", std::process::id()));
         let log_file_str = log_file.to_str().unwrap();
 
-        let logger = ShadowLogger::spawn(log_file_str);
+        let client = reqwest::Client::new();
+        let (shadow_handle, shadow_worker) = init_shadow_logger(client, log_file_str);
+        let shadow_handle = shadow_handle.with_rpc_timeout_secs(0);
+        tokio::spawn(shadow_worker);
 
-        let record = ShadowMicrostructureRecord {
-            timestamp_epoch: 1700000000.0,
-            token_mint: "TestMint1111111111111111111111111111111111".to_string(),
-            symbol: "TEST".to_string(),
-            spot_price_sol: 0.00005,
-            liquidity_usd: 25000.0,
-            fdv_usd: 50000.0,
-            swap_interval_deltas_ms: vec![120, 250, 310],
-            buy_volume_sol_window: 12.5,
-            sell_volume_sol_window: 4.2,
-            top_10_holder_shares: vec![0.15, 0.10, 0.08, 0.05],
-            holder_shannon_entropy: 1.32,
-            is_admitted: true,
-            rejection_reason: None,
-        };
+        shadow_handle.log_evaluation(
+            "TestMint1111111111111111111111111111111111",
+            "TEST",
+            0.00005,
+            25000.0,
+            50000.0,
+            10000.0,
+            30,
+            10,
+            true,
+            None,
+        );
 
-        let sent = logger.log_record(record.clone());
-        assert!(sent);
-
-        // Allow async flush
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        // Allow async task and flush
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
 
         let content = tokio::fs::read_to_string(&log_file).await.unwrap();
         let lines: Vec<&str> = content.lines().collect();
@@ -448,11 +501,9 @@ mod tests {
 
         let read_record: ShadowMicrostructureRecord = serde_json::from_str(lines[0]).unwrap();
         assert_eq!(read_record.symbol, "TEST");
-        assert_eq!(read_record.swap_interval_deltas_ms, vec![120, 250, 310]);
-        assert_eq!(read_record.top_10_holder_shares.len(), 4);
         assert!(read_record.is_admitted);
+        assert_eq!(read_record.rejection_reason, None);
 
         let _ = tokio::fs::remove_file(&log_file).await;
     }
 }
-

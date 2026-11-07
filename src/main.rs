@@ -129,6 +129,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tokio_tungstenite::connect_async;
+use dmne_meme_alpha::shadow_logger;
 
 const SOLANA_WSS_URL: &str = "wss://api.mainnet-beta.solana.com";
 const PUMP_FUN_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
@@ -301,6 +302,8 @@ pub struct LiveMarketSnapshot {
     pub h1_price_change_pct: f64,
     pub buy_sell_ratio: f64,
     pub m5_txns: u32,
+    pub m5_buys: u64,
+    pub m5_sells: u64,
     pub m5_volume_usd: f64,
 }
 
@@ -404,6 +407,8 @@ async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<LiveMarke
                             h1_price_change_pct: h1_change,
                             buy_sell_ratio,
                             m5_txns,
+                            m5_buys: buys as u64,
+                            m5_sells: sells as u64,
                             m5_volume_usd: m5_vol,
                         });
                     }
@@ -677,6 +682,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_client = Client::builder()
         .tcp_nodelay(true)
         .build()?;
+
+    let rpc_client = http_client.clone();
+    let (shadow_handle, shadow_worker) = shadow_logger::init_shadow_logger(rpc_client.clone(), "logs/shadow_microstructure.jsonl");
+    let shadow_handle = shadow_handle.with_rpc_url(config.default_rpc_url.clone());
+    tokio::spawn(shadow_worker);
 
     // 1. Dashboard Web Server (Port 8090)
     
@@ -1088,6 +1098,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let eval_client = http_client.clone();
     let eval_cfg = Arc::clone(&config);
     let eval_audit_tx = db_audit_tx.clone();
+    let eval_shadow = shadow_handle.clone();
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -1232,6 +1243,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 admitted: false,
                                 rejection_reason: reject_reason.to_string(),
                             });
+                            eval_shadow.log_evaluation(
+                                &candidate.token_mint,
+                                &candidate.symbol,
+                                *prices.last().unwrap_or(&final_snap.price_sol),
+                                final_snap.liquidity_usd,
+                                final_snap.fdv_usd,
+                                final_snap.m5_volume_usd,
+                                final_snap.m5_buys,
+                                final_snap.m5_sells,
+                                false,
+                                Some(reject_reason.to_string()),
+                            );
                         } else if let Err(reject_reason) = snapshot_res {
                             println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated during confirmation: {}", 
                                 candidate.symbol, candidate.token_mint, reject_reason);
@@ -1256,6 +1279,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 admitted: false,
                                 rejection_reason: reject_reason.to_string(),
                             });
+                            eval_shadow.log_evaluation(
+                                &candidate.token_mint,
+                                &candidate.symbol,
+                                *prices.last().unwrap_or(&final_snap.price_sol),
+                                final_snap.liquidity_usd,
+                                final_snap.fdv_usd,
+                                final_snap.m5_volume_usd,
+                                final_snap.m5_buys,
+                                final_snap.m5_sells,
+                                false,
+                                Some(reject_reason.to_string()),
+                            );
                         } else {
                             let mut state = eval_state.write().await;
                             let is_active = state.active_positions.iter().any(|p| p.token_mint == candidate.token_mint || p.symbol == candidate.symbol);
@@ -1276,6 +1311,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let final_confirmed_spot = *prices.last().unwrap();
                                 println!("[CANONICAL ENTRY] Opened position on CONFIRMED candidate: {} ({}) | Confirmed Spot: {:.10e} | Ticks: {:?} | Sized: {:.4} SOL", 
                                     candidate.symbol, candidate.token_mint, final_confirmed_spot, prices, dynamic_entry_sol);
+                                
+                                eval_shadow.log_evaluation(
+                                    &candidate.token_mint,
+                                    &candidate.symbol,
+                                    final_confirmed_spot,
+                                    final_snap.liquidity_usd,
+                                    final_snap.fdv_usd,
+                                    final_snap.m5_volume_usd,
+                                    final_snap.m5_buys,
+                                    final_snap.m5_sells,
+                                    true,
+                                    None,
+                                );
                                 
                                 state.active_positions.push(Position {
                                     id: format!("pos_{}", trade_id),
@@ -1566,6 +1614,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. Ingestion Loop: Fetch Newly Launched Solana Tokens in Real-Time
     let scanner_state = Arc::clone(&state);
     let scanner_audit_tx = db_audit_tx.clone();
+    let scanner_shadow = shadow_handle.clone();
     let scanner_client = http_client.clone();
     let scanner_cfg = Arc::clone(&config);
     tokio::spawn(async move {
@@ -1669,6 +1718,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 admitted: false,
                                                 rejection_reason: reject_reason.to_string(),
                                             });
+                                            scanner_shadow.log_evaluation(
+                                                &mint,
+                                                &sym,
+                                                snap.price_sol,
+                                                liq,
+                                                fdv,
+                                                snap.m5_volume_usd,
+                                                snap.m5_buys,
+                                                snap.m5_sells,
+                                                false,
+                                                Some(reject_reason.to_string()),
+                                            );
                                             continue;
                                         }
                                         let rpc_endpoint = &scanner_cfg.default_rpc_url;
@@ -1686,6 +1747,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 admitted: false,
                                                 rejection_reason: "PRE_TRADE_SECURITY_REJECT".to_string(),
                                             });
+                                            scanner_shadow.log_evaluation(
+                                                &mint,
+                                                &sym,
+                                                snap.price_sol,
+                                                liq,
+                                                fdv,
+                                                snap.m5_volume_usd,
+                                                snap.m5_buys,
+                                                snap.m5_sells,
+                                                false,
+                                                Some("PRE_TRADE_SECURITY_REJECT".to_string()),
+                                            );
                                             continue;
                                         }
                                         let mut dynamic_hhi = scanner_cfg.hhi_concentration_ceiling;
@@ -1708,6 +1781,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 admitted: false,
                                                 rejection_reason: "PRE_TRADE_HHI_REJECT".to_string(),
                                             });
+                                            scanner_shadow.log_evaluation(
+                                                &mint,
+                                                &sym,
+                                                snap.price_sol,
+                                                liq,
+                                                fdv,
+                                                snap.m5_volume_usd,
+                                                snap.m5_buys,
+                                                snap.m5_sells,
+                                                false,
+                                                Some("PRE_TRADE_HHI_REJECT".to_string()),
+                                            );
                                             continue;
                                         }
                                                                                 
@@ -1731,6 +1816,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 admitted: false,
                                                 rejection_reason: "LOW_SYMBOL_ENTROPY".to_string(),
                                             });
+                                            scanner_shadow.log_evaluation(
+                                                &mint,
+                                                &sym,
+                                                snap.price_sol,
+                                                liq,
+                                                fdv,
+                                                snap.m5_volume_usd,
+                                                snap.m5_buys,
+                                                snap.m5_sells,
+                                                false,
+                                                Some("LOW_SYMBOL_ENTROPY".to_string()),
+                                            );
                                             continue;
                                         }
 
@@ -1748,6 +1845,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 admitted: false,
                                                 rejection_reason: "DEPLOYER_HOLDING_EXCEEDS_1PCT".to_string(),
                                             });
+                                            scanner_shadow.log_evaluation(
+                                                &mint,
+                                                &sym,
+                                                snap.price_sol,
+                                                liq,
+                                                fdv,
+                                                snap.m5_volume_usd,
+                                                snap.m5_buys,
+                                                snap.m5_sells,
+                                                false,
+                                                Some("DEPLOYER_HOLDING_EXCEEDS_1PCT".to_string()),
+                                            );
                                             continue;
                                         }
 
@@ -1765,6 +1874,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 admitted: false,
                                                 rejection_reason: "TOP10_CONCENTRATION_EXCEEDS_18PCT".to_string(),
                                             });
+                                            scanner_shadow.log_evaluation(
+                                                &mint,
+                                                &sym,
+                                                snap.price_sol,
+                                                liq,
+                                                fdv,
+                                                snap.m5_volume_usd,
+                                                snap.m5_buys,
+                                                snap.m5_sells,
+                                                false,
+                                                Some("TOP10_CONCENTRATION_EXCEEDS_18PCT".to_string()),
+                                            );
                                             continue;
                                         }
 
@@ -1782,6 +1903,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 admitted: false,
                                                 rejection_reason: "PRE_TRADE_LP_REJECT".to_string(),
                                             });
+                                            scanner_shadow.log_evaluation(
+                                                &mint,
+                                                &sym,
+                                                snap.price_sol,
+                                                liq,
+                                                fdv,
+                                                snap.m5_volume_usd,
+                                                snap.m5_buys,
+                                                snap.m5_sells,
+                                                false,
+                                                Some("PRE_TRADE_LP_REJECT".to_string()),
+                                            );
                                             continue;
                                         }
 
@@ -1846,6 +1979,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     admitted: true,
                                                     rejection_reason: "Admitted".to_string(),
                                                 });
+                                                scanner_shadow.log_evaluation(
+                                                    &mint,
+                                                    &sym,
+                                                    snap.price_sol,
+                                                    liq,
+                                                    fdv,
+                                                    snap.m5_volume_usd,
+                                                    snap.m5_buys,
+                                                    snap.m5_sells,
+                                                    true,
+                                                    None,
+                                                );
                                             }
                                             Err(err) => {
                                                 scanner_state.write().await.rejections_count += 1;
@@ -1862,6 +2007,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     admitted: false,
                                                     rejection_reason: "PREFLIGHT_SIM_REJECT".to_string(),
                                                 });
+                                                scanner_shadow.log_evaluation(
+                                                    &mint,
+                                                    &sym,
+                                                    snap.price_sol,
+                                                    liq,
+                                                    fdv,
+                                                    snap.m5_volume_usd,
+                                                    snap.m5_buys,
+                                                    snap.m5_sells,
+                                                    false,
+                                                    Some("PREFLIGHT_SIM_REJECT".to_string()),
+                                                );
                                                 continue;
                                             }
                                         }
