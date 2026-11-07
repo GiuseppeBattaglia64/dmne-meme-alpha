@@ -9,4 +9,5 @@ pub mod shadow_logger;
 pub mod hawkes;
 pub mod funder_graph;
 pub mod adaptive_exits;
+pub mod congestion;
 

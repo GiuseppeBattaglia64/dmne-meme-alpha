@@ -27,6 +27,10 @@ path = "src/bin/funder_sandbox.rs"
 name = "adaptive_exits_sandbox"
 path = "src/bin/adaptive_exits_sandbox.rs"
 
+[[bin]]
+name = "congestion_sandbox"
+path = "src/bin/congestion_sandbox.rs"
+
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
 tokio-tungstenite = { version = "0.23", features = ["native-tls"] }
