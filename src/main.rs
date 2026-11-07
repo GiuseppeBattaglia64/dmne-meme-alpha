@@ -130,6 +130,10 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tokio_tungstenite::connect_async;
 use dmne_meme_alpha::shadow_logger;
+use dmne_meme_alpha::radar::{
+    truncate_mint_address, RejectionCategory, RejectionGaugeTelemetry, Stage2AuditEntry,
+    Stage2AuditRingBuffer, STAGE2_AUDIT_LOG_CAPACITY,
+};
 
 const SOLANA_WSS_URL: &str = "wss://api.mainnet-beta.solana.com";
 const PUMP_FUN_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
@@ -212,6 +216,10 @@ pub struct BotState {
     pub banned_tokens: std::collections::HashSet<String>,
     #[serde(default)]
     pub rejected_candidates: std::collections::HashMap<String, u64>,
+    #[serde(default)]
+    pub rejection_gauge: RejectionGaugeTelemetry,
+    #[serde(default)]
+    pub stage2_audit_log: Stage2AuditRingBuffer,
 }
 
 impl BotState {
@@ -238,7 +246,33 @@ impl BotState {
             effective_risk_cfg: config::RiskConfig::default(),
             banned_tokens: std::collections::HashSet::new(),
             rejected_candidates: std::collections::HashMap::new(),
+            rejection_gauge: RejectionGaugeTelemetry::new(),
+            stage2_audit_log: Stage2AuditRingBuffer::new(STAGE2_AUDIT_LOG_CAPACITY),
         }
+    }
+
+    pub fn record_stage2_audit(
+        &mut self,
+        symbol: &str,
+        mint: &str,
+        liquidity_usd: f64,
+        key_metric: String,
+        verdict: String,
+        is_admitted: bool,
+        category: RejectionCategory,
+    ) {
+        self.rejection_gauge.record(category);
+        let time_str = chrono::Utc::now().format("%H:%M:%S").to_string();
+        let entry = Stage2AuditEntry {
+            timestamp: time_str,
+            symbol: symbol.to_string(),
+            mint: truncate_mint_address(mint),
+            liquidity_usd,
+            key_metric,
+            verdict,
+            is_admitted,
+        };
+        self.stage2_audit_log.push(entry);
     }
 }
 
@@ -659,6 +693,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         println!("[STARTUP RECONCILE] Restored {} lifetime one-shot banned tokens from settled_trades archive", settled_count);
+
+        // Hydrate recent Stage 2 audits into fixed ring buffer
+        let recent_audits = db::fetch_recent_stage2_audits(&pg, 8).await;
+        let audit_count = recent_audits.len();
+        for (time_str, mint, liq, hhi, admitted, reason) in recent_audits.into_iter().rev() {
+            let cat = if admitted {
+                RejectionCategory::Admitted
+            } else if reason.contains("LIQUIDITY") {
+                RejectionCategory::LowLiquidity
+            } else if reason.contains("ENTROPY") {
+                RejectionCategory::LowDispersion
+            } else if reason.contains("HHI") || reason.contains("CONCENTRATION") || reason.contains("DEV") {
+                RejectionCategory::DevCluster
+            } else if reason.contains("HAWKES") || reason.contains("WASH") {
+                RejectionCategory::HawkesWash
+            } else {
+                RejectionCategory::Other
+            };
+            let (metric, verdict) = if admitted {
+                (format!("HHI: {:.2}", hhi), "ADMITTED".to_string())
+            } else if reason.contains("LIQUIDITY") {
+                (format!("Liq: ${:.1}k", liq / 1000.0), "REJECT: LOW_LIQUIDITY".to_string())
+            } else if reason.contains("ENTROPY") {
+                ("Entropy: <1.8b".to_string(), "REJECT: LOW_DISPERSION".to_string())
+            } else if reason.contains("HHI") || reason.contains("CONCENTRATION") || reason.contains("DEV") {
+                (format!("HHI: {:.2}", hhi), "REJECT: DEV_CLUSTER".to_string())
+            } else if reason.contains("HAWKES") || reason.contains("WASH") {
+                ("BR: >0.92".to_string(), "REJECT: HAWKES_WASH".to_string())
+            } else {
+                (format!("Liq: ${:.1}k", liq / 1000.0), format!("REJECT: {}", reason))
+            };
+            let entry = Stage2AuditEntry {
+                timestamp: time_str,
+                symbol: "AUDIT".to_string(),
+                mint: truncate_mint_address(&mint),
+                liquidity_usd: liq,
+                key_metric: metric,
+                verdict,
+                is_admitted: admitted,
+            };
+            g.rejection_gauge.record(cat);
+            g.stage2_audit_log.push(entry);
+        }
+        println!("[STARTUP RECONCILE] Restored {} recent Stage 2 audits into ring buffer", audit_count);
     }
 
     // Fallback: If DB had no closed trades or was unreachable, load from trades_forensic.csv
@@ -820,6 +898,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "closed_trades": guard.closed_trades,
                                         "recent_onchain_events": guard.recent_onchain_events,
                                         "risk_config": &guard.effective_risk_cfg,
+                                        "rejection_gauge": &guard.rejection_gauge,
+                                        "stage2_audit_log": &guard.stage2_audit_log.entries,
                                     })).unwrap_or_default()
                                 };
                                 let payload = format!("data: {}\n\n", snapshot);
@@ -858,6 +938,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "closed_trades": guard.closed_trades,
                                 "recent_onchain_events": guard.recent_onchain_events,
                                 "risk_config": &guard.effective_risk_cfg,
+                                "rejection_gauge": &guard.rejection_gauge,
+                                "stage2_audit_log": &guard.stage2_audit_log.entries,
                             })).unwrap_or_default();
                             let res = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1764,7 +1846,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             conviction_pct,
                                             &scanner_cfg.risk,
                                         ) {
-                                            scanner_state.write().await.rejections_count += 1;
+                                            {
+                                                let mut g = scanner_state.write().await;
+                                                g.rejections_count += 1;
+                                                let (cat, metric, verdict) = if reject_reason == "LIQUIDITY_BELOW_FLOOR" {
+                                                    (RejectionCategory::LowLiquidity, format!("${:.1}k (<${:.0}k)", liq / 1000.0, scanner_cfg.risk.min_entry_liquidity_usd / 1000.0), "REJECT: LOW_LIQUIDITY".to_string())
+                                                } else if reject_reason == "CONVICTION_BELOW_FLOOR" {
+                                                    (RejectionCategory::Other, format!("Conv: {:.0}%", conviction_pct), "REJECT: LOW_CONVICTION".to_string())
+                                                } else if reject_reason.contains("MOMENTUM") {
+                                                    (RejectionCategory::Other, format!("m5: {:+.1}%", snap.m5_price_change_pct), "REJECT: LOW_MOMENTUM".to_string())
+                                                } else {
+                                                    (RejectionCategory::Other, format!("B/S: {:.2}", snap.buy_sell_ratio), format!("REJECT: {}", reject_reason))
+                                                };
+                                                g.record_stage2_audit(&sym, &mint, liq, metric, verdict, false, cat);
+                                            }
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
                                                 pair_address: pair_addr.clone(),
@@ -1793,7 +1888,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                         let rpc_endpoint = &scanner_cfg.default_rpc_url;
                                         if !verify_token_security(&scanner_client, rpc_endpoint, &mint).await {
-                                            scanner_state.write().await.rejections_count += 1;
+                                            {
+                                                let mut g = scanner_state.write().await;
+                                                g.rejections_count += 1;
+                                                g.record_stage2_audit(&sym, &mint, liq, "Auth: Invalid".to_string(), "REJECT: SECURITY_CHECK".to_string(), false, RejectionCategory::Other);
+                                            }
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
                                                 pair_address: pair_addr.clone(),
@@ -1827,7 +1926,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             }
                                         }
                                         if !institutional::evaluate_holder_hhi(&scanner_client, rpc_endpoint, &mint, dynamic_hhi).await {
-                                            scanner_state.write().await.rejections_count += 1;
+                                            {
+                                                let mut g = scanner_state.write().await;
+                                                g.rejections_count += 1;
+                                                g.record_stage2_audit(&sym, &mint, liq, format!("HHI: >{:.2}", dynamic_hhi), "REJECT: DEV_CLUSTER".to_string(), false, RejectionCategory::DevCluster);
+                                            }
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
                                                 pair_address: pair_addr.clone(),
@@ -1862,7 +1965,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         
                                         // Shannon Entropy Filter: Reject degenerate spam tickers (e.g., AAAAAAAAAAAA)
                                         if sym.len() >= 4 && calculate_string_entropy(&sym) < scanner_cfg.min_symbol_entropy {
-                                            scanner_state.write().await.rejections_count += 1;
+                                            {
+                                                let mut g = scanner_state.write().await;
+                                                g.rejections_count += 1;
+                                                g.record_stage2_audit(&sym, &mint, liq, format!("Entropy: {:.2}b", calculate_string_entropy(&sym)), "REJECT: LOW_DISPERSION".to_string(), false, RejectionCategory::LowDispersion);
+                                            }
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
                                                 pair_address: pair_addr.clone(),
@@ -1891,7 +1998,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
 
                                         if dev_holding >= scanner_cfg.max_dev_holding_pct {
-                                            scanner_state.write().await.rejections_count += 1;
+                                            {
+                                                let mut g = scanner_state.write().await;
+                                                g.rejections_count += 1;
+                                                g.record_stage2_audit(&sym, &mint, liq, format!("Dev: {:.1}%", dev_holding), "REJECT: DEV_CLUSTER".to_string(), false, RejectionCategory::DevCluster);
+                                            }
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
                                                 pair_address: pair_addr.clone(),
@@ -1920,7 +2031,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
 
                                         if top10_concentration > scanner_cfg.max_top10_concentration_pct {
-                                            scanner_state.write().await.rejections_count += 1;
+                                            {
+                                                let mut g = scanner_state.write().await;
+                                                g.rejections_count += 1;
+                                                g.record_stage2_audit(&sym, &mint, liq, format!("Top10: {:.1}%", top10_concentration), "REJECT: DEV_CLUSTER".to_string(), false, RejectionCategory::DevCluster);
+                                            }
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
                                                 pair_address: pair_addr.clone(),
@@ -1949,7 +2064,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
 
                                         if !institutional::verify_lp_burned_or_locked(&scanner_client, rpc_endpoint, &mint, &pair_addr, &dex_id, scanner_cfg.min_dead_lp_ratio).await {
-                                            scanner_state.write().await.rejections_count += 1;
+                                            {
+                                                let mut g = scanner_state.write().await;
+                                                g.rejections_count += 1;
+                                                g.record_stage2_audit(&sym, &mint, liq, format!("Liq: ${:.1}k", liq / 1000.0), "REJECT: LP_UNVERIFIED".to_string(), false, RejectionCategory::LowLiquidity);
+                                            }
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
                                                 pair_address: pair_addr.clone(),
@@ -2004,6 +2123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 };
                                                 {
                                                     let mut g = scanner_state.write().await;
+                                                    g.record_stage2_audit(&sym, &mint, liq, format!("CU: {}k", sim.optimized_cu_limit / 1000), "ADMITTED".to_string(), true, RejectionCategory::Admitted);
                                                     let is_active_pos = g.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
                                                     if !is_active_pos {
                                                         if !g.radar_candidates.iter().any(|c| c.token_mint == mint) {
@@ -2052,7 +2172,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 );
                                             }
                                             Err(err) => {
-                                                scanner_state.write().await.rejections_count += 1;
+                                                {
+                                                    let mut g = scanner_state.write().await;
+                                                    g.rejections_count += 1;
+                                                    g.record_stage2_audit(&sym, &mint, liq, "Sim: Revert".to_string(), "REJECT: SIM_FAIL".to_string(), false, RejectionCategory::Other);
+                                                }
                                                 println!("[PREFLIGHT REJECT] Simulation reverted for mint {}: {}", mint, err);
                                                 let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                     token_mint: mint.clone(),

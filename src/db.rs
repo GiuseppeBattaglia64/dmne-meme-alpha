@@ -451,3 +451,31 @@ pub fn spawn_db_audit_worker(db_url: &'static str) -> mpsc::UnboundedSender<Audi
 
     tx
 }
+
+/// Queries the most recent Stage 2 audits from PostgreSQL for fast startup hydration
+pub async fn fetch_recent_stage2_audits(
+    client: &Client,
+    limit: i64,
+) -> Vec<(String, String, f64, f64, bool, String)> {
+    let stmt = "
+        SELECT to_char(timestamp, 'HH24:MI:SS') as time_str,
+               token_mint, liquidity_usd, hhi_concentration, admitted,
+               COALESCE(rejection_reason, 'Admitted') as rejection_reason
+        FROM pre_trade_audits
+        ORDER BY timestamp DESC
+        LIMIT $1
+    ";
+    let mut out = Vec::new();
+    if let Ok(rows) = client.query(stmt, &[&limit]).await {
+        for r in rows {
+            let time: String = r.get("time_str");
+            let mint: String = r.get("token_mint");
+            let liq: f64 = r.get("liquidity_usd");
+            let hhi: f64 = r.get("hhi_concentration");
+            let admitted: bool = r.get("admitted");
+            let reason: String = r.get("rejection_reason");
+            out.push((time, mint, liq, hhi, admitted, reason));
+        }
+    }
+    out
+}

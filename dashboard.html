@@ -247,7 +247,8 @@
 
     /* COLUMN 1: MEMESCOPE RADAR */
     .radar-list {
-      flex: 1;
+      flex: 1.1;
+      max-height: 44%;
       overflow-y: auto;
       padding: 6px;
       display: flex;
@@ -1035,6 +1036,91 @@
       <div class="radar-list" id="radar-container">
         <!-- Rendered dynamically -->
       </div>
+
+      <!-- COMPONENT A: REJECTION BREAKDOWN (ROLLING 1,000) -->
+      <div class="rejection-breakdown-panel" style="border-top: 1px solid var(--border-subtle); padding: 8px 10px; background: rgba(13, 19, 34, 0.75); flex-shrink: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div class="panel-title" style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; color: var(--text-main);">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="margin-right: 4px;"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+            REJECTION BREAKDOWN (ROLLING 1,000)
+          </div>
+          <span class="mono" id="rejection-total-badge" style="font-size: 9px; color: var(--cyan); background: rgba(6, 182, 212, 0.1); padding: 1px 5px; border-radius: 3px; border: 1px solid rgba(6, 182, 212, 0.25);">0 EVAL</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <!-- LOW LIQUIDITY -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 9px; margin-bottom: 2px;">
+              <span style="color: var(--text-muted); font-weight: 500;">LOW LIQUIDITY</span>
+              <span class="mono" id="gauge-low-liq-val" style="color: #ef4444; font-weight: 700;">0.0% (0)</span>
+            </div>
+            <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+              <div id="gauge-low-liq-bar" style="width: 0%; height: 100%; background: #ef4444; border-radius: 2px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+          <!-- HAWKES WASH -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 9px; margin-bottom: 2px;">
+              <span style="color: var(--text-muted); font-weight: 500;">HAWKES WASH</span>
+              <span class="mono" id="gauge-hawkes-val" style="color: #f59e0b; font-weight: 700;">0.0% (0)</span>
+            </div>
+            <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+              <div id="gauge-hawkes-bar" style="width: 0%; height: 100%; background: #f59e0b; border-radius: 2px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+          <!-- LOW DISPERSION -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 9px; margin-bottom: 2px;">
+              <span style="color: var(--text-muted); font-weight: 500;">LOW DISPERSION</span>
+              <span class="mono" id="gauge-dispersion-val" style="color: #a855f7; font-weight: 700;">0.0% (0)</span>
+            </div>
+            <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+              <div id="gauge-dispersion-bar" style="width: 0%; height: 100%; background: #a855f7; border-radius: 2px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+          <!-- DEV CLUSTER -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 9px; margin-bottom: 2px;">
+              <span style="color: var(--text-muted); font-weight: 500;">DEV CLUSTER</span>
+              <span class="mono" id="gauge-dev-cluster-val" style="color: #06b6d4; font-weight: 700;">0.0% (0)</span>
+            </div>
+            <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+              <div id="gauge-dev-cluster-bar" style="width: 0%; height: 100%; background: #06b6d4; border-radius: 2px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPONENT B: STAGE 2 DEEP AUDIT LOG -->
+      <div class="stage2-audit-panel" style="border-top: 1px solid var(--border-subtle); background: var(--bg-panel); flex: 1; min-height: 180px; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: rgba(13, 19, 34, 0.85); border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;">
+          <div class="panel-title" style="font-size: 10px; font-weight: 700; letter-spacing: 0.05em; color: var(--text-main);">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" style="margin-right: 4px;"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            STAGE 2 DEEP AUDIT LOG
+          </div>
+          <span class="mono" style="font-size: 9px; color: var(--green); display: flex; align-items: center; gap: 4px;">
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); display: inline-block;"></span>
+            LIVE VERDICTS
+          </span>
+        </div>
+        <div style="flex: 1; overflow-y: auto; padding: 4px;">
+          <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 9px;">
+            <thead>
+              <tr style="color: var(--text-dim); text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 8.5px;">
+                <th style="padding: 3px 6px;">TIME</th>
+                <th style="padding: 3px 6px;">TOKEN</th>
+                <th style="padding: 3px 6px;">LIQ</th>
+                <th style="padding: 3px 6px;">METRIC</th>
+                <th style="padding: 3px 6px; text-align: right;">VERDICT</th>
+              </tr>
+            </thead>
+            <tbody id="stage2-audit-body">
+              <tr>
+                <td colspan="5" style="padding: 14px; text-align: center; color: var(--text-dim);">Listening for Stage 2 pre-trade audits...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- COLUMN 2: ACTIVE DESK -->
@@ -1651,6 +1737,91 @@
       }).join('');
     }
 
+    // --- REJECTION BREAKDOWN GAUGE ---
+    function renderRejectionGauge(gauge) {
+      if (!gauge) return;
+      const totalEl = document.getElementById("rejection-total-badge");
+      if (totalEl) totalEl.innerText = `${gauge.total_evaluated || 0} EVAL`;
+
+      const lowLiqVal = document.getElementById("gauge-low-liq-val");
+      const lowLiqBar = document.getElementById("gauge-low-liq-bar");
+      if (lowLiqVal) lowLiqVal.innerText = `${(gauge.pct_low_liquidity || 0).toFixed(1)}% (${gauge.low_liquidity || 0})`;
+      if (lowLiqBar) lowLiqBar.style.width = `${Math.min(100, Math.max(0, gauge.pct_low_liquidity || 0))}%`;
+
+      const hawkesVal = document.getElementById("gauge-hawkes-val");
+      const hawkesBar = document.getElementById("gauge-hawkes-bar");
+      if (hawkesVal) hawkesVal.innerText = `${(gauge.pct_hawkes_wash || 0).toFixed(1)}% (${gauge.hawkes_wash || 0})`;
+      if (hawkesBar) hawkesBar.style.width = `${Math.min(100, Math.max(0, gauge.pct_hawkes_wash || 0))}%`;
+
+      const dispVal = document.getElementById("gauge-dispersion-val");
+      const dispBar = document.getElementById("gauge-dispersion-bar");
+      if (dispVal) dispVal.innerText = `${(gauge.pct_low_dispersion || 0).toFixed(1)}% (${gauge.low_dispersion || 0})`;
+      if (dispBar) dispBar.style.width = `${Math.min(100, Math.max(0, gauge.pct_low_dispersion || 0))}%`;
+
+      const devVal = document.getElementById("gauge-dev-cluster-val");
+      const devBar = document.getElementById("gauge-dev-cluster-bar");
+      if (devVal) devVal.innerText = `${(gauge.pct_dev_cluster || 0).toFixed(1)}% (${gauge.dev_cluster || 0})`;
+      if (devBar) devBar.style.width = `${Math.min(100, Math.max(0, gauge.pct_dev_cluster || 0))}%`;
+    }
+
+    // --- STAGE 2 DEEP AUDIT LOG ---
+    function renderStage2AuditLog(audits) {
+      const tbody = document.getElementById("stage2-audit-body");
+      if (!tbody) return;
+      if (!audits || audits.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="padding: 14px; text-align: center; color: var(--text-dim);">Listening for Stage 2 pre-trade audits...</td></tr>`;
+        return;
+      }
+
+      // Display up to the last 6 entries
+      const list = audits.slice(0, 6);
+      tbody.innerHTML = list.map(entry => {
+        let verdictBadge = '';
+        if (entry.is_admitted) {
+          verdictBadge = `<span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #10b981; padding: 1px 5px; border-radius: 3px; font-weight: 700; font-size: 8px;">ADMITTED</span>`;
+        } else {
+          const v = entry.verdict || "REJECT";
+          let badgeColor = "#ef4444";
+          let badgeBg = "rgba(239, 68, 68, 0.15)";
+          let badgeBorder = "rgba(239, 68, 68, 0.4)";
+          if (v.includes("HAWKES")) {
+            badgeColor = "#f59e0b";
+            badgeBg = "rgba(245, 158, 11, 0.15)";
+            badgeBorder = "rgba(245, 158, 11, 0.4)";
+          } else if (v.includes("DISPERSION")) {
+            badgeColor = "#a855f7";
+            badgeBg = "rgba(168, 85, 247, 0.15)";
+            badgeBorder = "rgba(168, 85, 247, 0.4)";
+          } else if (v.includes("DEV") || v.includes("CLUSTER")) {
+            badgeColor = "#06b6d4";
+            badgeBg = "rgba(6, 182, 212, 0.15)";
+            badgeBorder = "rgba(6, 182, 212, 0.4)";
+          }
+          verdictBadge = `<span style="background: ${badgeBg}; border: 1px solid ${badgeBorder}; color: ${badgeColor}; padding: 1px 5px; border-radius: 3px; font-weight: 600; font-size: 8px;" title="${escapeAttr(v)}">${escapeAttr(v)}</span>`;
+        }
+
+        const sym = entry.symbol || "UNKNOWN";
+        const mint = entry.mint || "";
+        const liq = entry.liquidity_usd ? `$${Math.round(entry.liquidity_usd).toLocaleString()}` : "$0";
+        const metric = entry.key_metric || "-";
+
+        return `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.15s ease;"
+              onmouseover="this.style.background='rgba(255,255,255,0.03)'"
+              onmouseout="this.style.background='transparent'">
+            <td style="padding: 3px 6px; color: var(--text-dim); white-space: nowrap;">${escapeAttr(entry.timestamp)}</td>
+            <td style="padding: 3px 6px; white-space: nowrap;">
+              <span style="font-weight: 700; color: #fff;">${escapeAttr(sym)}</span>
+              <span style="font-size: 7.5px; color: var(--text-dim); margin-left: 3px;">${escapeAttr(mint)}</span>
+            </td>
+            <td style="padding: 3px 6px; color: var(--cyan); white-space: nowrap;">${liq}</td>
+            <td style="padding: 3px 6px; color: var(--text-muted); font-size: 8px; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(metric)}">${escapeAttr(metric)}</td>
+            <td style="padding: 3px 6px; text-align: right; white-space: nowrap;">${verdictBadge}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     // --- FORENSIC SETTLED TRADES ---
     function renderSettledTable(trades) {
       const tbody = document.getElementById("settled-tbody");
@@ -2052,6 +2223,12 @@
             renderNavEquitySparkline(data.closed_trades, initial, liveNavSol);
           }
           renderRadar(data.radar_candidates || []);
+          if (data.rejection_gauge) {
+            renderRejectionGauge(data.rejection_gauge);
+          }
+          if (data.stage2_audit_log) {
+            renderStage2AuditLog(data.stage2_audit_log);
+          }
         }
       } catch (e) {
         console.error("Initial state sync error", e);
@@ -2140,6 +2317,12 @@
         }
 
         renderRadar(data.radar_candidates || []);
+        if (data.rejection_gauge) {
+          renderRejectionGauge(data.rejection_gauge);
+        }
+        if (data.stage2_audit_log) {
+          renderStage2AuditLog(data.stage2_audit_log);
+        }
 
         if (data.recent_onchain_events) {
           const rc = window.activeRiskConfig || {};
