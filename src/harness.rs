@@ -16,6 +16,12 @@ pub const MAX_PERMISSIBLE_STOP_LOSS_PCT: f64 = -25.0; // Stop loss cannot widen 
 pub const MIN_POSITION_SIZE_SOL: f64 = 0.010;
 pub const MAX_POSITION_SIZE_SOL: f64 = 0.10;
 
+pub const MIN_BASE_POSITION_PCT_NAV: f64 = 0.02;
+pub const MAX_BASE_POSITION_PCT_NAV: f64 = 0.07;
+pub const MIN_MAX_POSITION_PCT_NAV: f64 = 0.04;
+pub const MAX_MAX_POSITION_PCT_NAV: f64 = 0.12;
+pub const HARD_CEILING_MAX_COMMITTED_SOL: f64 = 0.10;
+
 pub const MIN_MFE_ACTIVATION_PCT: f64 = 10.0;
 pub const MAX_MFE_ACTIVATION_PCT: f64 = 50.0;
 
@@ -130,6 +136,31 @@ pub fn validate_safety_invariants_on_toml(cfg: &crate::config::TomlConfigFile) -
             violations.push(format!(
                 "base_position_size_sol ({:.4} SOL) violates permissible bounds [{:.4} SOL, {:.4} SOL]",
                 r.base_position_size_sol, MIN_POSITION_SIZE_SOL, MAX_POSITION_SIZE_SOL
+            ));
+        }
+
+        if r.base_position_pct_nav < MIN_BASE_POSITION_PCT_NAV
+            || r.base_position_pct_nav > MAX_BASE_POSITION_PCT_NAV
+        {
+            violations.push(format!(
+                "base_position_pct_nav ({:.3}) violates permissible bounds [{:.3}, {:.3}]",
+                r.base_position_pct_nav, MIN_BASE_POSITION_PCT_NAV, MAX_BASE_POSITION_PCT_NAV
+            ));
+        }
+
+        if r.max_position_pct_nav < MIN_MAX_POSITION_PCT_NAV
+            || r.max_position_pct_nav > MAX_MAX_POSITION_PCT_NAV
+        {
+            violations.push(format!(
+                "max_position_pct_nav ({:.3}) violates permissible bounds [{:.3}, {:.3}]",
+                r.max_position_pct_nav, MIN_MAX_POSITION_PCT_NAV, MAX_MAX_POSITION_PCT_NAV
+            ));
+        }
+
+        if r.max_entry_sol > HARD_CEILING_MAX_COMMITTED_SOL {
+            violations.push(format!(
+                "max_entry_sol ({:.4} SOL) breaches hard safety ceiling ({:.4} SOL)",
+                r.max_entry_sol, HARD_CEILING_MAX_COMMITTED_SOL
             ));
         }
 
@@ -607,6 +638,37 @@ mod tests {
         let res_mfe = validate_safety_invariants_on_toml(&cfg);
         assert!(res_mfe.is_err());
         assert!(res_mfe.unwrap_err()[0].contains("mfe_activation_pct"));
+
+        // Reset and test invalid base_position_pct_nav (< 0.02 or > 0.07)
+        cfg.dynamic_exits.as_mut().unwrap().mfe_activation_pct = 15.0;
+        cfg.risk.as_mut().unwrap().base_position_pct_nav = 0.01;
+        let res_nav_low = validate_safety_invariants_on_toml(&cfg);
+        assert!(res_nav_low.is_err());
+        assert!(res_nav_low.unwrap_err()[0].contains("base_position_pct_nav"));
+
+        cfg.risk.as_mut().unwrap().base_position_pct_nav = 0.09;
+        let res_nav_high = validate_safety_invariants_on_toml(&cfg);
+        assert!(res_nav_high.is_err());
+        assert!(res_nav_high.unwrap_err()[0].contains("base_position_pct_nav"));
+
+        // Reset and test invalid max_position_pct_nav (< 0.04 or > 0.12)
+        cfg.risk.as_mut().unwrap().base_position_pct_nav = 0.045;
+        cfg.risk.as_mut().unwrap().max_position_pct_nav = 0.03;
+        let res_max_low = validate_safety_invariants_on_toml(&cfg);
+        assert!(res_max_low.is_err());
+        assert!(res_max_low.unwrap_err()[0].contains("max_position_pct_nav"));
+
+        cfg.risk.as_mut().unwrap().max_position_pct_nav = 0.15;
+        let res_max_high = validate_safety_invariants_on_toml(&cfg);
+        assert!(res_max_high.is_err());
+        assert!(res_max_high.unwrap_err()[0].contains("max_position_pct_nav"));
+
+        // Reset and test invalid max_entry_sol (> 0.10)
+        cfg.risk.as_mut().unwrap().max_position_pct_nav = 0.085;
+        cfg.risk.as_mut().unwrap().max_entry_sol = 0.15;
+        let res_entry_high = validate_safety_invariants_on_toml(&cfg);
+        assert!(res_entry_high.is_err());
+        assert!(res_entry_high.unwrap_err()[0].contains("max_entry_sol"));
     }
 }
 

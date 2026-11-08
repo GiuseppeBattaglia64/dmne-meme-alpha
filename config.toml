@@ -62,6 +62,9 @@ emergency_jito_tip_lamports = 75000
 min_entry_sol = 0.010
 max_entry_sol = 0.045
 min_gas_reserve_sol = 0.030
+base_position_size_sol = 0.0225
+base_position_pct_nav = 0.045
+max_position_pct_nav = 0.085
 
 [sandbox]
 hawkes_mu_baseline = 0.05

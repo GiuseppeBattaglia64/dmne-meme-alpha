@@ -175,6 +175,10 @@ pub struct RiskConfig {
     pub min_gas_reserve_sol: f64,
     #[serde(default = "default_base_position_size_sol")]
     pub base_position_size_sol: f64,
+    #[serde(default = "default_base_position_pct_nav")]
+    pub base_position_pct_nav: f64,
+    #[serde(default = "default_max_position_pct_nav")]
+    pub max_position_pct_nav: f64,
     #[serde(default = "default_admin_passphrase")]
     pub admin_passphrase: Option<String>,
     #[serde(default)]
@@ -344,6 +348,8 @@ fn default_min_entry_sol() -> f64 { 0.010 }
 fn default_max_entry_sol() -> f64 { 0.045 }
 fn default_min_gas_reserve_sol() -> f64 { 0.030 }
 fn default_base_position_size_sol() -> f64 { 0.0225 }
+fn default_base_position_pct_nav() -> f64 { 0.045 }
+fn default_max_position_pct_nav() -> f64 { 0.085 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -402,6 +408,8 @@ impl Default for RiskConfig {
             max_entry_sol: 0.045,
             min_gas_reserve_sol: 0.030,
             base_position_size_sol: default_base_position_size_sol(),
+            base_position_pct_nav: default_base_position_pct_nav(),
+            max_position_pct_nav: default_max_position_pct_nav(),
             admin_passphrase: default_admin_passphrase(),
             dynamic_exits: DynamicExitsConfig::default(),
             orderflow: OrderflowConfig::default(),
@@ -662,6 +670,8 @@ mod tests {
         assert_eq!(cfg.min_entry_sol, 0.010);
         assert_eq!(cfg.max_entry_sol, 0.045);
         assert_eq!(cfg.min_gas_reserve_sol, 0.030);
+        assert_eq!(cfg.base_position_pct_nav, 0.045);
+        assert_eq!(cfg.max_position_pct_nav, 0.085);
     }
 
     #[test]
@@ -689,6 +699,8 @@ mod tests {
         assert_eq!(cfg.min_entry_sol, 0.010);
         assert_eq!(cfg.max_entry_sol, 0.045);
         assert_eq!(cfg.min_gas_reserve_sol, 0.030);
+        assert_eq!(cfg.base_position_pct_nav, 0.045);
+        assert_eq!(cfg.max_position_pct_nav, 0.085);
     }
 
     #[test]
