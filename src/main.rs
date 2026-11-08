@@ -47,6 +47,7 @@ mod ws_ingest;
 mod risk;
 mod sandbox;
 mod hawkes;
+mod adaptive_exits;
 
 pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
 

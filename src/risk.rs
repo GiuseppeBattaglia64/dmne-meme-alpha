@@ -4,7 +4,11 @@
 
 use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
-use crate::config::{DynamicExitsConfig, RiskConfig};
+use crate::config::RiskConfig;
+#[allow(unused_imports)]
+pub use crate::adaptive_exits::{
+    compute_rolling_tick_volatility, compute_volatility_scaled_exit_band, VolatilityScaledExitBand,
+};
 
 pub const DEFAULT_PRICE_BUFFER_CAPACITY: usize = 30;
 
@@ -521,105 +525,6 @@ pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String 
         format!("Breakeven Armed (+{:.0}% Floor)", cfg.breakeven_floor_pct)
     } else {
         "Monitoring Momentum".to_string()
-    }
-}
-
-/// Volatility-scaled dynamic exit evaluation envelope
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct VolatilityScaledExitBand {
-    pub sigma_realized: f64,
-    pub delta_trail: f64,
-    pub dynamic_floor: f64,
-    pub is_ratchet_active: bool,
-}
-
-/// Computes realized micro-volatility in percentage points from recent price buffer ticks
-/// using logarithmic returns directly across contiguous or dual VecDeque slices without allocations.
-pub fn compute_rolling_tick_volatility(ticks: &VecDeque<f64>) -> f64 {
-    if ticks.len() < 2 {
-        return 6.0; // Default empirical baseline tick volatility in %
-    }
-
-    let (s1, s2) = ticks.as_slices();
-
-    let mut count = 0.0;
-    let mut sum = 0.0;
-
-    let process_pair = |p0: f64, p1: f64, count: &mut f64, sum: &mut f64| {
-        if p0 > 0.0 && p1 > 0.0 {
-            let r = (p1 / p0).ln() * 100.0;
-            *sum += r;
-            *count += 1.0;
-        }
-    };
-
-    // First slice contiguous pairs
-    for w in s1.windows(2) {
-        process_pair(w[0], w[1], &mut count, &mut sum);
-    }
-
-    // Boundary pair bridging s1 and s2
-    if let (Some(&last1), Some(&first2)) = (s1.last(), s2.first()) {
-        process_pair(last1, first2, &mut count, &mut sum);
-    }
-
-    // Second slice contiguous pairs
-    for w in s2.windows(2) {
-        process_pair(w[0], w[1], &mut count, &mut sum);
-    }
-
-    if count < 2.0 {
-        return 6.0;
-    }
-
-    let mean = sum / count;
-    let mut sum_sq_diff = 0.0;
-
-    let process_diff = |p0: f64, p1: f64, sum_sq_diff: &mut f64| {
-        if p0 > 0.0 && p1 > 0.0 {
-            let r = (p1 / p0).ln() * 100.0;
-            *sum_sq_diff += (r - mean).powi(2);
-        }
-    };
-
-    for w in s1.windows(2) {
-        process_diff(w[0], w[1], &mut sum_sq_diff);
-    }
-    if let (Some(&last1), Some(&first2)) = (s1.last(), s2.first()) {
-        process_diff(last1, first2, &mut sum_sq_diff);
-    }
-    for w in s2.windows(2) {
-        process_diff(w[0], w[1], &mut sum_sq_diff);
-    }
-
-    let variance = sum_sq_diff / (count - 1.0);
-    let s_tick = variance.sqrt();
-    if s_tick.is_finite() && s_tick > 0.0 {
-        s_tick
-    } else {
-        6.0
-    }
-}
-
-/// Evaluates dynamic trailing delta and ratcheted profit floor from tick volatility and MFE
-pub fn compute_volatility_scaled_exit_band(
-    ticks: &VecDeque<f64>,
-    peak_mfe: f64,
-    cfg: &DynamicExitsConfig,
-) -> VolatilityScaledExitBand {
-    let sigma_realized = compute_rolling_tick_volatility(ticks);
-    let delta_trail = (cfg.vol_multiplier * sigma_realized).clamp(cfg.min_trail_pct, cfg.max_trail_pct);
-    let is_ratchet_active = peak_mfe >= cfg.mfe_activation_pct;
-    let dynamic_floor = if is_ratchet_active {
-        cfg.min_locked_floor_pct.max(peak_mfe - delta_trail)
-    } else {
-        0.0
-    };
-    VolatilityScaledExitBand {
-        sigma_realized,
-        delta_trail,
-        dynamic_floor,
-        is_ratchet_active,
     }
 }
 

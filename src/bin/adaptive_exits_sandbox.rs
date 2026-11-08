@@ -13,10 +13,11 @@ use std::collections::HashMap;
 use chrono::DateTime;
 
 use dmne_meme_alpha::adaptive_exits::{
-    AdaptiveExitConfig, AdaptiveExitTargets, compute_realized_micro_volatility,
-    compute_adaptive_exit_targets, simulate_honest_adaptive_trade,
+    compute_adaptive_exit_targets, compute_rolling_tick_volatility, simulate_honest_adaptive_trade,
+    AdaptiveExitConfig,
 };
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct ForensicTradeRecord {
     pub idx: usize,
@@ -247,7 +248,13 @@ fn main() {
             .cloned()
             .collect();
 
-        let sigma_pre = compute_realized_micro_volatility(&pre_entry_prices, &cfg);
+        let sigma_pre = if pre_entry_prices.len() >= cfg.min_pre_entry_ticks {
+            let deque: std::collections::VecDeque<f64> = pre_entry_prices.iter().copied().collect();
+            let vol_pct = compute_rolling_tick_volatility(&deque);
+            (vol_pct / 100.0).clamp(cfg.min_vol_floor, cfg.max_vol_cap)
+        } else {
+            cfg.sigma_fallback.clamp(cfg.min_vol_floor, cfg.max_vol_cap)
+        };
 
         // 3. Dynamic Adaptive Targets
         let targets = compute_adaptive_exit_targets(t.entry_price_sol, sigma_pre, &cfg);

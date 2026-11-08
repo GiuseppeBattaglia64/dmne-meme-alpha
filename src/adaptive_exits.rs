@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Module 4: Volatility-Scaled Dynamic Exit Bands (Honest & Realistic Quantitative Replay)
 //!
 //! Replaces static TP1 (+45%) and TP2 (+90%) with dynamic, volatility-scaled exit bands:
@@ -8,7 +9,9 @@
 //! Zero phantom liquidity: trades experiencing liquidity collapses retain historical exit slippage.
 //! Fully typed, zero magic numbers, serde default fallbacks.
 
+use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
+use crate::config::DynamicExitsConfig;
 
 /// Strongly typed configuration for Volatility-Scaled Dynamic Exit Bands.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -169,34 +172,103 @@ pub struct AdaptiveExitResult {
     pub exit_price: f64,
 }
 
-/// Computes the realized micro-volatility (sigma_pre) SOLELY from pre-entry price ticks (t <= t_entry).
-/// Zero lookahead bias: peak_price and trough_price are completely removed from this calculation.
-pub fn compute_realized_micro_volatility(
-    pre_entry_ticks: &[f64],
-    cfg: &AdaptiveExitConfig,
-) -> f64 {
-    if pre_entry_ticks.len() >= cfg.min_pre_entry_ticks {
-        let mut returns = Vec::with_capacity(pre_entry_ticks.len() - 1);
-        for i in 1..pre_entry_ticks.len() {
-            let p0 = pre_entry_ticks[i - 1];
-            let p1 = pre_entry_ticks[i];
-            if p0 > 0.0 && p1 > 0.0 {
-                returns.push((p1 / p0).ln());
-            }
-        }
-        if returns.len() >= 2 {
-            let n = returns.len() as f64;
-            let mean = returns.iter().sum::<f64>() / n;
-            let variance = returns.iter().map(|&r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
-            let s_tick = variance.sqrt();
-            if s_tick > 0.0 && !s_tick.is_nan() {
-                return s_tick.clamp(cfg.min_vol_floor, cfg.max_vol_cap);
-            }
-        }
+/// Volatility-scaled dynamic exit evaluation envelope
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VolatilityScaledExitBand {
+    pub sigma_realized: f64,
+    pub delta_trail: f64,
+    pub dynamic_floor: f64,
+    pub is_ratchet_active: bool,
+}
+
+/// Computes realized micro-volatility in percentage points from recent price buffer ticks
+/// using logarithmic returns directly across contiguous or dual VecDeque slices without allocations.
+pub fn compute_rolling_tick_volatility(ticks: &VecDeque<f64>) -> f64 {
+    if ticks.len() < 2 {
+        return 6.0; // Default empirical baseline tick volatility in %
     }
 
-    // Strict empirical fallback when pre-entry ticks are unobserved or sparse
-    cfg.sigma_fallback.clamp(cfg.min_vol_floor, cfg.max_vol_cap)
+    let (s1, s2) = ticks.as_slices();
+
+    let mut count = 0.0;
+    let mut sum = 0.0;
+
+    let process_pair = |p0: f64, p1: f64, count: &mut f64, sum: &mut f64| {
+        if p0 > 0.0 && p1 > 0.0 {
+            let r = (p1 / p0).ln() * 100.0;
+            *sum += r;
+            *count += 1.0;
+        }
+    };
+
+    // First slice contiguous pairs
+    for w in s1.windows(2) {
+        process_pair(w[0], w[1], &mut count, &mut sum);
+    }
+
+    // Boundary pair bridging s1 and s2
+    if let (Some(&last1), Some(&first2)) = (s1.last(), s2.first()) {
+        process_pair(last1, first2, &mut count, &mut sum);
+    }
+
+    // Second slice contiguous pairs
+    for w in s2.windows(2) {
+        process_pair(w[0], w[1], &mut count, &mut sum);
+    }
+
+    if count < 2.0 {
+        return 6.0;
+    }
+
+    let mean = sum / count;
+    let mut sum_sq_diff = 0.0;
+
+    let process_diff = |p0: f64, p1: f64, sum_sq_diff: &mut f64| {
+        if p0 > 0.0 && p1 > 0.0 {
+            let r = (p1 / p0).ln() * 100.0;
+            *sum_sq_diff += (r - mean).powi(2);
+        }
+    };
+
+    for w in s1.windows(2) {
+        process_diff(w[0], w[1], &mut sum_sq_diff);
+    }
+    if let (Some(&last1), Some(&first2)) = (s1.last(), s2.first()) {
+        process_diff(last1, first2, &mut sum_sq_diff);
+    }
+    for w in s2.windows(2) {
+        process_diff(w[0], w[1], &mut sum_sq_diff);
+    }
+
+    let variance = sum_sq_diff / (count - 1.0);
+    let s_tick = variance.sqrt();
+    if s_tick.is_finite() && s_tick > 0.0 {
+        s_tick
+    } else {
+        6.0
+    }
+}
+
+/// Evaluates dynamic trailing delta and ratcheted profit floor from tick volatility and MFE
+pub fn compute_volatility_scaled_exit_band(
+    ticks: &VecDeque<f64>,
+    peak_mfe: f64,
+    cfg: &DynamicExitsConfig,
+) -> VolatilityScaledExitBand {
+    let sigma_realized = compute_rolling_tick_volatility(ticks);
+    let delta_trail = (cfg.vol_multiplier * sigma_realized).clamp(cfg.min_trail_pct, cfg.max_trail_pct);
+    let is_ratchet_active = peak_mfe >= cfg.mfe_activation_pct;
+    let dynamic_floor = if is_ratchet_active {
+        cfg.min_locked_floor_pct.max(peak_mfe - delta_trail)
+    } else {
+        0.0
+    };
+    VolatilityScaledExitBand {
+        sigma_realized,
+        delta_trail,
+        dynamic_floor,
+        is_ratchet_active,
+    }
 }
 
 /// Resolves dynamic exit target prices and percentages from entry price and pre-entry micro-volatility.
@@ -394,17 +466,15 @@ mod tests {
 
     #[test]
     fn test_zero_lookahead_volatility() {
-        let cfg = AdaptiveExitConfig::default();
-        // 1. With pre-entry ticks:
-        let pre_ticks = vec![1.0, 1.05, 1.02, 1.08, 1.12];
-        let sigma = compute_realized_micro_volatility(&pre_ticks, &cfg);
-        assert!(sigma >= cfg.min_vol_floor);
-        assert!(sigma <= cfg.max_vol_cap);
+        // 1. With pre-entry ticks in bounded ring buffer:
+        let pre_ticks: VecDeque<f64> = vec![1.0, 1.05, 1.02, 1.08, 1.12].into();
+        let vol_pct = compute_rolling_tick_volatility(&pre_ticks);
+        assert!(vol_pct > 0.0 && vol_pct.is_finite());
 
-        // 2. Without pre-entry ticks: strictly falls back to sigma_fallback (0.22)
-        let empty_ticks = vec![];
-        let fallback_sigma = compute_realized_micro_volatility(&empty_ticks, &cfg);
-        assert_eq!(fallback_sigma, cfg.sigma_fallback);
+        // 2. Without pre-entry ticks: strictly falls back to 6.0% baseline
+        let empty_ticks: VecDeque<f64> = VecDeque::new();
+        let fallback_vol = compute_rolling_tick_volatility(&empty_ticks);
+        assert_eq!(fallback_vol, 6.0);
     }
 
     #[test]
