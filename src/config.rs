@@ -180,6 +180,8 @@ pub struct DynamicExitsConfig {
     pub mfe_activation_pct: f64,
     #[serde(default = "default_min_locked_floor_pct")]
     pub min_locked_floor_pct: f64,
+    #[serde(default = "default_vol_window_size")]
+    pub vol_window_size: usize,
 }
 
 fn default_dynamic_exits_enabled() -> bool { true }
@@ -188,6 +190,7 @@ fn default_min_trail_pct() -> f64 { 8.0 }
 fn default_max_trail_pct() -> f64 { 22.0 }
 fn default_mfe_activation_pct() -> f64 { 30.0 }
 fn default_min_locked_floor_pct() -> f64 { 12.0 }
+fn default_vol_window_size() -> usize { 30 }
 
 impl Default for DynamicExitsConfig {
     fn default() -> Self {
@@ -198,6 +201,7 @@ impl Default for DynamicExitsConfig {
             max_trail_pct: default_max_trail_pct(),
             mfe_activation_pct: default_mfe_activation_pct(),
             min_locked_floor_pct: default_min_locked_floor_pct(),
+            vol_window_size: default_vol_window_size(),
         }
     }
 }

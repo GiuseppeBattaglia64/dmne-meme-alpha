@@ -164,11 +164,20 @@ pub struct Position {
     pub trough_price_sol: f64,
     pub liquidity_usd: f64,
     pub fdv_usd: f64,
-    pub price_buffer: Vec<f64>,
+    pub price_buffer: std::collections::VecDeque<f64>,
     #[serde(default = "default_standard_jito_tip")]
     pub jito_tip_lamports: u64,
     #[serde(default = "default_execution_priority")]
     pub execution_priority: String,
+}
+
+impl Position {
+    pub fn record_price_tick(&mut self, price: f64, window_size: usize) {
+        if self.price_buffer.len() >= window_size && window_size > 0 {
+            self.price_buffer.pop_front();
+        }
+        self.price_buffer.push_back(price);
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -1534,7 +1543,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     trough_price_sol: final_confirmed_spot,
                                     liquidity_usd: final_snap.liquidity_usd,
                                     fdv_usd: final_snap.fdv_usd,
-                                    price_buffer: prices.clone(),
+                                    price_buffer: prices.iter().copied().collect(),
                                     jito_tip_lamports: eval_cfg.risk.jito_tip_lamports,
                                     execution_priority: "STANDARD_ROUTINE".to_string(),
                                 });
@@ -1574,10 +1583,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if idx < guard.active_positions.len() {
                         let pos = &mut guard.active_positions[idx];
                         pos.current_price_sol = snap.price_sol;
-                        pos.price_buffer.push(snap.price_sol);
-                        if pos.price_buffer.len() > 30 {
-                            pos.price_buffer.remove(0);
-                        }
+                        pos.record_price_tick(snap.price_sol, eval_cfg.dynamic_exits.vol_window_size);
                         if pos.current_price_sol > pos.peak_price_sol {
                             pos.peak_price_sol = pos.current_price_sol;
                         }

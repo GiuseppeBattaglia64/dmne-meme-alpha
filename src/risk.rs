@@ -2,8 +2,11 @@
 // DMNE QUANT // RISK MANAGEMENT & EXIT ARBITRATION SUBSYSTEM
 // Multi-Tiered Convex Exit Engine, Uncapped Breakeven Floor Guard & Moonbag Trailing Runner
 
+use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
 use crate::config::{DynamicExitsConfig, RiskConfig};
+
+pub const DEFAULT_PRICE_BUFFER_CAPACITY: usize = 30;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivePosition {
@@ -23,7 +26,16 @@ pub struct ActivePosition {
     #[serde(default = "default_position_execution_priority")]
     pub execution_priority: String,
     #[serde(default)]
-    pub price_buffer: Vec<f64>,
+    pub price_buffer: VecDeque<f64>,
+}
+
+impl ActivePosition {
+    pub fn record_price_tick(&mut self, price: f64, window_size: usize) {
+        if self.price_buffer.len() >= window_size && window_size > 0 {
+            self.price_buffer.pop_front();
+        }
+        self.price_buffer.push_back(price);
+    }
 }
 
 fn default_position_tip_lamports() -> u64 { 10_000 }
@@ -522,24 +534,65 @@ pub struct VolatilityScaledExitBand {
 }
 
 /// Computes realized micro-volatility in percentage points from recent price buffer ticks
-pub fn compute_rolling_tick_volatility(ticks: &[f64]) -> f64 {
+/// using logarithmic returns directly across contiguous or dual VecDeque slices without allocations.
+pub fn compute_rolling_tick_volatility(ticks: &VecDeque<f64>) -> f64 {
     if ticks.len() < 2 {
         return 6.0; // Default empirical baseline tick volatility in %
     }
-    let mut returns = Vec::with_capacity(ticks.len() - 1);
-    for i in 1..ticks.len() {
-        let p0 = ticks[i - 1];
-        let p1 = ticks[i];
+
+    let (s1, s2) = ticks.as_slices();
+
+    let mut count = 0.0;
+    let mut sum = 0.0;
+
+    let process_pair = |p0: f64, p1: f64, count: &mut f64, sum: &mut f64| {
         if p0 > 0.0 && p1 > 0.0 {
-            returns.push(((p1 - p0) / p0) * 100.0);
+            let r = (p1 / p0).ln() * 100.0;
+            *sum += r;
+            *count += 1.0;
         }
+    };
+
+    // First slice contiguous pairs
+    for w in s1.windows(2) {
+        process_pair(w[0], w[1], &mut count, &mut sum);
     }
-    if returns.len() < 2 {
+
+    // Boundary pair bridging s1 and s2
+    if let (Some(&last1), Some(&first2)) = (s1.last(), s2.first()) {
+        process_pair(last1, first2, &mut count, &mut sum);
+    }
+
+    // Second slice contiguous pairs
+    for w in s2.windows(2) {
+        process_pair(w[0], w[1], &mut count, &mut sum);
+    }
+
+    if count < 2.0 {
         return 6.0;
     }
-    let n = returns.len() as f64;
-    let mean = returns.iter().sum::<f64>() / n;
-    let variance = returns.iter().map(|&r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
+
+    let mean = sum / count;
+    let mut sum_sq_diff = 0.0;
+
+    let process_diff = |p0: f64, p1: f64, sum_sq_diff: &mut f64| {
+        if p0 > 0.0 && p1 > 0.0 {
+            let r = (p1 / p0).ln() * 100.0;
+            *sum_sq_diff += (r - mean).powi(2);
+        }
+    };
+
+    for w in s1.windows(2) {
+        process_diff(w[0], w[1], &mut sum_sq_diff);
+    }
+    if let (Some(&last1), Some(&first2)) = (s1.last(), s2.first()) {
+        process_diff(last1, first2, &mut sum_sq_diff);
+    }
+    for w in s2.windows(2) {
+        process_diff(w[0], w[1], &mut sum_sq_diff);
+    }
+
+    let variance = sum_sq_diff / (count - 1.0);
     let s_tick = variance.sqrt();
     if s_tick.is_finite() && s_tick > 0.0 {
         s_tick
@@ -550,7 +603,7 @@ pub fn compute_rolling_tick_volatility(ticks: &[f64]) -> f64 {
 
 /// Evaluates dynamic trailing delta and ratcheted profit floor from tick volatility and MFE
 pub fn compute_volatility_scaled_exit_band(
-    ticks: &[f64],
+    ticks: &VecDeque<f64>,
     peak_mfe: f64,
     cfg: &DynamicExitsConfig,
 ) -> VolatilityScaledExitBand {
@@ -589,7 +642,7 @@ mod tests {
             opened_at_epoch: 1000,
             jito_tip_lamports: 10_000,
             execution_priority: "STANDARD_ROUTINE".to_string(),
-            price_buffer: Vec::new(),
+            price_buffer: VecDeque::new(),
         }
     }
 
@@ -709,7 +762,7 @@ mod tests {
         assert!(cfg.dynamic_exits.enabled);
 
         // Feed some realistic ticks with ~8% volatility
-        pos.price_buffer = vec![1.00, 1.08, 1.02, 1.10, 1.05, 1.15, 1.25, 1.35];
+        pos.price_buffer = vec![1.00, 1.08, 1.02, 1.10, 1.05, 1.15, 1.25, 1.35].into();
         let sigma = compute_rolling_tick_volatility(&pos.price_buffer);
         assert!(sigma > 0.0);
 
@@ -735,7 +788,7 @@ mod tests {
 
         // 2. Dynamic Trailing Runner test after TP1 (+60%)
         let mut pos2 = setup_test_position();
-        pos2.price_buffer = vec![1.00, 1.10, 1.20, 1.35, 1.50, 1.60];
+        pos2.price_buffer = vec![1.00, 1.10, 1.20, 1.35, 1.50, 1.60].into();
         let _ = evaluate_position_exit(&mut pos2, 1.60, 1050, &cfg);
         assert!(pos2.tp1_executed);
 
@@ -749,6 +802,30 @@ mod tests {
             }
             _ => panic!("Expected Dynamic Trailing Runner exit"),
         }
+    }
+
+    #[test]
+    fn test_price_buffer_bounded_capacity() {
+        let mut pos = setup_test_position();
+        assert_eq!(pos.price_buffer.len(), 0);
+
+        for i in 1..=100 {
+            pos.record_price_tick(i as f64, DEFAULT_PRICE_BUFFER_CAPACITY);
+        }
+
+        assert_eq!(pos.price_buffer.len(), DEFAULT_PRICE_BUFFER_CAPACITY);
+        assert_eq!(pos.price_buffer.len(), 30);
+
+        // Verify the 30 most recent ticks (71 to 100) are preserved in chronological order
+        let expected: Vec<f64> = (71..=100).map(|v| v as f64).collect();
+        let actual: Vec<f64> = pos.price_buffer.iter().copied().collect();
+        assert_eq!(actual, expected);
+        assert_eq!(*pos.price_buffer.front().unwrap(), 71.0);
+        assert_eq!(*pos.price_buffer.back().unwrap(), 100.0);
+
+        // Verify volatility computation over ring buffer wraparound slices without allocation
+        let vol = compute_rolling_tick_volatility(&pos.price_buffer);
+        assert!(vol.is_finite() && vol > 0.0);
     }
 
     #[test]
