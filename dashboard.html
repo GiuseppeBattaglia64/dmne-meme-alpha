@@ -955,6 +955,7 @@
             <a href="#" onclick="openManualChapter('ch3'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">3. AI Cruise Agent (In-Flight)</a>
             <a href="#" onclick="openManualChapter('ch4'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">4. AI Launch Agent (Forensics)</a>
             <a href="#" onclick="openManualChapter('ch5'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">5. Admin PR Gate &amp; Runbook</a>
+            <a href="#" onclick="openManualChapter('ch6'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; border-top: 1px solid var(--border-subtle); transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">6. Controls &amp; Emergency (Pause, Panic, Capital)</a>
           </div>
         </div>
         <div class="header-divider"></div>
@@ -1541,6 +1542,9 @@
             <a href="#ch5" id="link-manual-ch5" class="manual-sidebar-link" onclick="openManualChapter('ch5'); return false;" style="padding: 10px 16px; font-family: monospace; font-size: 11px; color: #cbd5e1; text-decoration: none; border-left: 2px solid transparent; display: flex; align-items: center; gap: 8px;">
               <span style="color: var(--text-dim); font-weight: 800;">05.</span> Admin PR Gate &amp; Runbook
             </a>
+            <a href="#ch6" id="link-manual-ch6" class="manual-sidebar-link" onclick="openManualChapter('ch6'); return false;" style="padding: 10px 16px; font-family: monospace; font-size: 11px; color: #cbd5e1; text-decoration: none; border-left: 2px solid transparent; display: flex; align-items: center; gap: 8px;">
+              <span style="color: var(--text-dim); font-weight: 800;">06.</span> Operational Controls
+            </a>
           </nav>
           <div style="margin-top: auto; padding: 14px 16px; border-top: 1px solid var(--border-subtle); font-size: 10px; color: var(--text-dim); line-height: 1.5;">
             DMNE MEME ALPHA ENGINE<br>
@@ -1689,7 +1693,7 @@
           </section>
 
           <!-- CHAPTER 5 -->
-          <section id="ch5" style="display: flex; flex-direction: column; gap: 14px;">
+          <section id="ch5" style="display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 28px;">
             <div style="display: flex; align-items: center; gap: 10px;">
               <span class="badge" style="background: rgba(56,189,248,0.2); color: var(--cyan); font-size: 11px; font-weight: 800;">CHAPTER 05</span>
               <h2 style="font-size: 18px; font-weight: 800; color: #fff; margin: 0;">Admin PR Gate, Safety Invariants &amp; CLI Runbook</h2>
@@ -1721,6 +1725,125 @@ curl -s http://localhost:8090/api/state | jq '.active_positions'
 
 # 5. Safely reload live execution engine
 sudo systemctl restart dmne-alpha.service</code></pre>
+            </div>
+          </section>
+
+          <!-- CHAPTER 6 -->
+          <section id="ch6" style="display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="badge" style="background: rgba(56,189,248,0.2); color: var(--cyan); font-size: 11px; font-weight: 800;">CHAPTER 06</span>
+              <h2 style="font-size: 18px; font-weight: 800; color: #fff; margin: 0;">Operational Command Center &amp; Dashboard Functions</h2>
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0;">
+              The DMNE command console provides real-time supervisory controls, emergency circuit tripping, non-custodial capital vaulting, multi-slot concurrency management, and quantitative reporting:
+            </p>
+
+            <!-- Core Controls Matrix -->
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: var(--amber);">⏸ PAUSE SCANNER</span>
+                  <span class="badge" style="background: rgba(245,158,11,0.15); color: var(--amber); font-size: 9px;">ADMISSION FREEZE</span>
+                </div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Toggles <code style="color:var(--cyan);">state.is_scanner_paused</code>. Halts candidate queue admissions and prevents opening new positions. <b>In-flight positions in slots 1–4 remain 100% supervised</b> by the DCS Cruise Control and exit strictly according to their exit ladders.
+                </div>
+              </div>
+
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: #f87171;">🛑 PANIC DUMP</span>
+                  <span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171; font-size: 9px;">CIRCUIT FLUSH</span>
+                </div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Immediate priority liquidation across all active slots. Dispatches maximum urgency Jito bundles with <code style="color:#f87171;">75,000 lamports (0.000075 SOL)</code> bribe tips to outrun pool drainers. Permanently marks closed tokens with toxic quarantine tags.
+                </div>
+              </div>
+
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: var(--cyan);">💳 DEPOSIT &amp; 💸 WITHDRAW</span>
+                  <span class="badge" style="background: rgba(56,189,248,0.15); color: var(--cyan); font-size: 9px;">NON-CUSTODIAL VAULT</span>
+                </div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Non-custodial capital adjustments reconciling live on-chain balance with PostgreSQL settled PnL. Enforces a non-negotiable <code style="color:var(--cyan);">0.0300 SOL Gas Reserve Floor</code> to prevent wallet rent exhaustion. Capital locked in active slots cannot be withdrawn.
+                </div>
+              </div>
+
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: var(--green);">🔍 FILTER TABS &amp; RADAR</span>
+                  <span class="badge" style="background: rgba(16,185,129,0.15); color: var(--green); font-size: 9px;">PRIORITY ROUTING</span>
+                </div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Segments pre-trade candidates: <code style="color:#fff;">ALL</code>, <code style="color:var(--cyan);">HIGH CONVICTION</code> (Score &ge; 80), <code style="color:#fff;">PUMP.FUN</code>, <code style="color:#fff;">RAYDIUM</code>, and <code style="color:var(--green);">GRADUATING</code> (&ge; 95% curve). Graduated pools are automatically given queue priority routing.
+                </div>
+              </div>
+
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: #fff;">📊 ACTIVE SLOTS (1 - 4)</span>
+                  <span class="badge" style="background: rgba(100,116,139,0.2); color: #cbd5e1; font-size: 9px;">4-SLOT CONCURRENCY</span>
+                </div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Real-time microstructure cards tracking spot vs entry price, floating PnL, Peak MFE, rolling volatility &sigma;, ratcheted trailing floor, and CVD taker pressure meter. Supports individual slot telemetry inspection and manual single-position liquidation.
+                </div>
+              </div>
+
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: var(--cyan);">📥 CSV EXPORT (LEDGER)</span>
+                  <span class="badge" style="background: rgba(56,189,248,0.15); color: var(--cyan); font-size: 9px;">RFC-4180 COMPLIANT</span>
+                </div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  One-click client-side export generating <code style="color:var(--cyan);">dmne_forensic_trades_&lt;timestamp&gt;.csv</code> containing all 25 institutional telemetry columns (hold times, MFE/MAE excursions, realized PnL, exit rules, Jito tips, and toxic flags) for Python/Jupyter analysis.
+                </div>
+              </div>
+            </div>
+
+            <!-- ASCII Architecture & Flow Diagrams -->
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+              <div style="font-size: 12px; font-weight: 700; color: #fff;">STATE TRANSITION &amp; QUEUE ADMISSION FLOW:</div>
+              <pre class="mono" style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 14px; font-size: 11px; line-height: 1.5; overflow-x: auto; color: #cbd5e1; margin: 0;"><code>+-----------------------------------------------------------------------------------------------+
+|                            STATE TRANSITIONS &amp; CONCURRENCY FLOW                               |
++-----------------------------------------------------------------------------------------------+
+|  [ WebSocket Ingest ] ---&gt; [ Hawkes / Genesis / CVD Gates ]                                   |
+|                                       |                                                       |
+|                                (Passes All Gates)                                             |
+|                                       v                                                       |
+|                           [ Candidate FIFO Queue ]                                            |
+|                                       |                                                       |
+|                  +--------------------+--------------------+                                  |
+|                  | If PAUSED          | If ACTIVE          |                                  |
+|                  v                    v                    v                                  |
+|            [ HOLD IN QUEUE ]    [ Vacant Slot? ]   [ 4/4 Slots Full? ]                        |
+|            (No New Entries)           |                    |                                  |
+|                                       | Yes                v                                  |
+|                                       +------------&gt; [ ADMIT &amp; POP ]                          |
+|                                                            |                                  |
+|                                                            v                                  |
+|                                                [ SLOT #1 - #4 IN-FLIGHT ]                     |
+|                                                            |                                  |
+|                                                [ Cruise Supervisor Active ]                   |
++-----------------------------------------------------------------------------------------------+</code></pre>
+            </div>
+
+            <!-- ASCII Emergency Tip Escalation Matrix -->
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 700; color: #fff;">EMERGENCY TIP ESCALATION &amp; JITO EXECUTION DEFENSE:</div>
+              <pre class="mono" style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 14px; font-size: 11px; line-height: 1.5; overflow-x: auto; color: #cbd5e1; margin: 0;"><code>+-----------------------------------------------------------------------------------------------+
+|                         EMERGENCY TIP ESCALATION &amp; LIQUIDATION MATRIX                         |
++-----------------------------------------------------------------------------------------------+
+| Routine State:                                                                                |
+|   Standard Execution Priority:  10,000 lamports (0.000010 SOL) Jito Bundle Tip                |
+|                                                                                               |
+| Emergency Escalations:                                                                        |
+|   1. Early Abort (-10.0%)       ---&gt; 10,000 lamports  (Standard Stagnation Cull)              |
+|   2. Flash Dump (-15.0% 1-tick) ---&gt; 75,000 lamports  (HIGH_URGENCY_EMERGENCY Priority Bribe) |
+|   3. Hard Stop-Loss (-20.0%)    ---&gt; 75,000 lamports  (HIGH_URGENCY_EMERGENCY Priority Bribe) |
+|   4. Max Slippage (-25.0%)      ---&gt; 75,000 lamports  (HIGH_URGENCY_EMERGENCY Priority Bribe) |
+|   5. Manual Panic Dump Button   ---&gt; 75,000 lamports  (Immediate All-Slot High-Urgency Flush) |
++-----------------------------------------------------------------------------------------------+</code></pre>
             </div>
           </section>
 
