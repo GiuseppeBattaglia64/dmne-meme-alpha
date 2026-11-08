@@ -444,8 +444,14 @@
     .col-right {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 12px;
       min-height: 0;
+    }
+    #security-gate-container {
+      height: 110px;
+      min-height: 110px;
+      max-height: 110px;
+      overflow: hidden;
     }
     .table-container {
       flex: 1;
@@ -472,6 +478,42 @@
     th { text-align: left; padding: 4px 6px; background: var(--bg-subtle); color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 2; }
     td { padding: 4px 6px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); }
     tr:hover td { background: rgba(255,255,255,0.02); color: var(--text-main); }
+
+    /* UTILITY AND TAILWIND COMPATIBILITY CLASSES */
+    .flex { display: flex; }
+    .inline-flex { display: inline-flex; }
+    .flex-col { flex-direction: column; }
+    .flex-1 { flex: 1 1 0%; }
+    .min-h-0 { min-height: 0; }
+    .items-center { align-items: center; }
+    .justify-center { justify-content: center; }
+    .justify-end { justify-content: flex-end; }
+    .overflow-hidden { overflow: hidden; }
+    .overflow-y-auto { overflow-y: auto; }
+    .whitespace-nowrap { white-space: nowrap; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .font-bold { font-weight: 700; }
+    .tracking-tight { letter-spacing: -0.025em; }
+    .rounded { border-radius: 4px; }
+    .leading-none { line-height: 1; }
+    .gap-3 { gap: 12px; }
+    .py-1 { padding-top: 4px; padding-bottom: 4px; }
+    .h-\[18px\], [class*="h-[18px]"] { height: 18px; }
+    .min-w-\[54px\], [class*="min-w-[54px]"] { min-width: 54px; }
+    .px-1\.5, [class*="px-1.5"] { padding-left: 6px; padding-right: 6px; }
+    .text-\[8\.5px\], [class*="text-[8.5px]"] { font-size: 8.5px; }
+    .max-w-\[130px\], [class*="max-w-[130px]"] { max-width: 130px; }
+    .h-\[110px\], [class*="h-[110px]"] { height: 110px; }
+    .min-h-\[110px\], [class*="min-h-[110px]"] { min-height: 110px; }
+    .max-h-\[110px\], [class*="max-h-[110px]"] { max-height: 110px; }
+    .h-\[30px\], [class*="h-[30px]"], .h-7\.5 { height: 30px; }
+    .border-cyan-500\/40, [class*="border-cyan-500/40"] { border: 1px solid rgba(6, 182, 212, 0.4); }
+    .bg-cyan-950\/40, [class*="bg-cyan-950/40"] { background-color: rgba(8, 51, 68, 0.4); }
+    .text-cyan-300, [class*="text-cyan-300"] { color: #67e8f9; }
+    .border-rose-500\/50, [class*="border-rose-500/50"] { border: 1px solid rgba(244, 63, 94, 0.5); }
+    .bg-rose-950\/40, [class*="bg-rose-950/40"] { background-color: rgba(76, 5, 25, 0.4); }
+    .text-rose-300, [class*="text-rose-300"] { color: #fda4af; }
 
     .btn-action {
       background: var(--bg-subtle);
@@ -1189,8 +1231,8 @@
     </div>
 
     <!-- COLUMN 3: SETTLED LEDGER & TERMINAL -->
-    <div class="col-right col-ledger">
-      <div class="panel" style="flex: 1.2;">
+    <div class="col-right col-ledger flex flex-col gap-3">
+      <div class="panel flex-1 min-h-0 flex flex-col" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
         <div class="panel-header">
           <div class="panel-title">FORENSIC SETTLED TRADES</div>
           <div style="display:flex; gap:4px;">
@@ -1198,25 +1240,26 @@
             <button class="btn-action" onclick="exportLedgerCSV()">CSV</button>
           </div>
         </div>
-        <div class="table-container">
+        <div class="table-container flex-1 overflow-y-auto min-h-0" style="flex: 1; overflow-y: auto; min-height: 0;">
           <table>
             <thead>
-              <tr>
-                <th>TOKEN</th>
-                <th>SIZE</th>
-                <th>EXIT %</th>
-                <th>REALIZED</th>
-                <th>RULE</th>
+              <tr class="h-[28px]" style="height: 28px;">
+                <th class="py-1">TOKEN</th>
+                <th class="py-1">SIZE</th>
+                <th class="py-1">EXIT %</th>
+                <th class="py-1">REALIZED</th>
+                <th class="py-1">RULE</th>
+                <th class="py-1" style="text-align: right;">TIP</th>
               </tr>
             </thead>
             <tbody id="settled-tbody">
-              <tr><td colspan="5" style="text-align: center; color: var(--text-dim);">Scanning for closed exits...</td></tr>
+              <tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 20px 0;">Scanning for closed exits...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <div class="panel" style="flex: 1;">
+      <div class="panel h-[110px] min-h-[110px] max-h-[110px] overflow-hidden" id="security-gate-container" style="height: 110px; min-height: 110px; max-height: 110px; overflow: hidden; display: flex; flex-direction: column;">
         <div class="panel-header">
           <div class="panel-title">SECURITY GATE & JITO STREAM</div>
           <span class="mono" style="font-size: 8px; color: var(--text-dim);">LIVE GEYSER</span>
@@ -2076,7 +2119,7 @@ sudo systemctl restart dmne-alpha.service</code></pre>
           if (ledgerBody) {
             ledgerBody.innerHTML = `
               <tr>
-                <td colspan="5" style="text-align: center; color: #64748b; padding: 30px 10px; font-size: 11px;">
+                <td colspan="6" style="text-align: center; color: #64748b; padding: 30px 10px; font-size: 11px;">
                   No settled trades yet. Click "Start Paper Trading" to begin capturing radar signals.
                 </td>
               </tr>`;
@@ -2473,7 +2516,7 @@ sudo systemctl restart dmne-alpha.service</code></pre>
     // --- FORENSIC SETTLED TRADES ---
     function renderSettledTable(trades) {
       const tbody = document.getElementById("settled-tbody");
-      if (!trades || trades.length === 0) return;
+      if (!tbody || !trades || trades.length === 0) return;
       const sorted = trades.slice().sort((a, b) => {
         const epochA = a.closed_at_epoch || a.exit_epoch || 0;
         const epochB = b.closed_at_epoch || b.exit_epoch || 0;
@@ -2498,36 +2541,58 @@ sudo systemctl restart dmne-alpha.service</code></pre>
           else if (pnl >= 20.0) rawRule = "Cruise Trail Exit";
           else rawRule = "Stagnation TTL Exit";
         }
+
+        // Clean up verbose exit rule strings
+        let cleanedRule = rawRule;
+        if (cleanedRule.startsWith("Trailing Runner")) {
+          cleanedRule = "Trailing Runner";
+        } else if (cleanedRule.startsWith("TP1 Scale-Out") || cleanedRule.startsWith("TP1 Scale Out")) {
+          cleanedRule = "TP1 Scale-Out";
+        } else if (cleanedRule.startsWith("Flash Dump Breaker") || cleanedRule.startsWith("Flash Dump")) {
+          cleanedRule = "Flash Dump (-15%)";
+        } else if (cleanedRule.startsWith("Max Slippage Loss") || cleanedRule.startsWith("Max Slippage")) {
+          cleanedRule = "Max Slippage (-25%)";
+        }
+
         const mint = t.token_mint || "";
         const epoch = t.closed_at_epoch || t.exit_epoch || 0;
         const tipLamports = parseInt(t.jito_tip_lamports || 0);
         const priorityTag = t.execution_priority || "";
         const rc = window.activeRiskConfig || {};
         const emerTip = rc.emergency_jito_tip_lamports || 75000;
-        const stdTip = rc.jito_tip_lamports || 10000;
         const ruleLower = rawRule.toLowerCase();
-        const isEmerExit = (tipLamports >= emerTip) || (ruleLower.includes("stop-loss") || ruleLower.includes("stop loss") || ruleLower.includes("flash dump") || ruleLower.includes("slippage") || ruleLower.includes("early abort"));
-        const tipDisplay = isEmerExit ? `${(emerTip/1000).toFixed(0)}k EMERG` : `${(stdTip/1000).toFixed(0)}k TIP`;
-        const tipBadge = isEmerExit
-          ? `<span class="badge" style="font-size:7px; background:rgba(236,72,153,0.18); border:1px solid #ec4899; color:#f472b6; padding:1px 4px; margin-left:4px;">${tipDisplay}</span>`
-          : `<span class="badge badge-jito" style="font-size:7px; padding:1px 4px; margin-left:4px;">${tipDisplay}</span>`;
+        const isEmerExit = (tipLamports >= emerTip) || (ruleLower.includes("stop-loss") || ruleLower.includes("stop loss") || ruleLower.includes("flash dump") || ruleLower.includes("slippage") || ruleLower.includes("early abort") || ruleLower.includes("panic"));
+        
+        const tipDisplay = isEmerExit ? "75k TIP" : "10k TIP";
+        const badgeClass = isEmerExit
+          ? "inline-flex items-center justify-center h-[18px] min-w-[54px] px-1.5 text-[8.5px] font-mono font-bold tracking-tight rounded leading-none whitespace-nowrap border border-rose-500/50 bg-rose-950/40 text-rose-300"
+          : "inline-flex items-center justify-center h-[18px] min-w-[54px] px-1.5 text-[8.5px] font-mono font-bold tracking-tight rounded leading-none whitespace-nowrap border border-cyan-500/40 bg-cyan-950/40 text-cyan-300";
+
+        const badgeStyle = isEmerExit
+          ? "height: 18px; min-width: 54px; padding: 0 6px; font-size: 8.5px; font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: -0.025em; border-radius: 4px; line-height: 1; white-space: nowrap; border: 1px solid rgba(244, 63, 94, 0.5); background-color: rgba(76, 5, 25, 0.4); color: #fda4af;"
+          : "height: 18px; min-width: 54px; padding: 0 6px; font-size: 8.5px; font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: -0.025em; border-radius: 4px; line-height: 1; white-space: nowrap; border: 1px solid rgba(6, 182, 212, 0.4); background-color: rgba(8, 51, 68, 0.4); color: #67e8f9;";
 
         return `
-          <tr onclick="openTokenDetailModal('${mint}', '${escapeAttr(sym)}', ${pnl}, ${realized}, ${sizeSol}, '${escapeAttr(rawRule)}', ${epoch}, ${tipLamports}, '${escapeAttr(priorityTag)}')"
-              style="cursor: pointer; transition: background 0.15s ease;"
+          <tr class="h-[30px] py-1"
+              onclick="openTokenDetailModal('${mint}', '${escapeAttr(sym)}', ${pnl}, ${realized}, ${sizeSol}, '${escapeAttr(rawRule)}', ${epoch}, ${tipLamports}, '${escapeAttr(priorityTag)}')"
+              style="height: 30px; cursor: pointer; transition: background 0.15s ease;"
               title="Click to inspect DexScreener chart & Solscan"
               onmouseover="this.style.background='rgba(6, 182, 212, 0.08)'"
               onmouseout="this.style.background='transparent'">
-            <td style="font-weight:700; color:#fff; display:flex; align-items:center; gap:4px;">
-              <span>${sym}</span>
-              <span style="font-size:8px; color:var(--cyan); opacity:0.75;">↗</span>
+            <td class="py-1 whitespace-nowrap" style="font-weight:700; color:#fff;">
+              <div style="display:inline-flex; align-items:center; gap:4px;">
+                <span>${sym}</span>
+                <span style="font-size:8px; color:var(--cyan); opacity:0.75;">↗</span>
+              </div>
             </td>
-            <td>${sizeSol.toFixed(4)} SOL</td>
-            <td style="color:${pnlColor}; font-weight:600;">${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%</td>
-            <td style="color:${pnlColor}; font-weight:600;">${realized >= 0 ? "+" : ""}${realized.toFixed(5)} SOL</td>
-            <td style="color:var(--text-dim); display:flex; align-items:center; justify-content:space-between; gap:4px;">
-              <span>${rawRule}</span>
-              ${tipBadge}
+            <td class="py-1 whitespace-nowrap">${sizeSol.toFixed(4)} SOL</td>
+            <td class="py-1 whitespace-nowrap" style="color:${pnlColor}; font-weight:600;">${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%</td>
+            <td class="py-1 whitespace-nowrap" style="color:${pnlColor}; font-weight:600;">${realized >= 0 ? "+" : ""}${realized.toFixed(5)} SOL</td>
+            <td class="max-w-[130px] truncate whitespace-nowrap py-1" style="max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color:var(--text-dim);" title="${escapeAttr(rawRule)}">${escapeHtml(cleanedRule)}</td>
+            <td class="py-1" style="text-align: right;">
+              <div class="flex items-center justify-end" style="display: flex; align-items: center; justify-content: flex-end;">
+                <span class="${badgeClass}" style="${badgeStyle}">${tipDisplay}</span>
+              </div>
             </td>
           </tr>
         `;
