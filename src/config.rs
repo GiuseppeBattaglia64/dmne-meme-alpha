@@ -57,6 +57,9 @@ pub struct EngineConfig {
     // Volatility-Scaled Dynamic Exit Bands
     pub dynamic_exits: DynamicExitsConfig,
 
+    // Real-Time Cumulative Volume Delta (CVD) & Orderflow Pressure
+    pub orderflow: OrderflowConfig,
+
     // Sandbox & Replay Configuration
     pub sandbox: SandboxConfig,
 }
@@ -166,6 +169,8 @@ pub struct RiskConfig {
     pub min_gas_reserve_sol: f64,
     #[serde(default)]
     pub dynamic_exits: DynamicExitsConfig,
+    #[serde(default)]
+    pub orderflow: OrderflowConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,6 +209,38 @@ impl Default for DynamicExitsConfig {
             mfe_activation_pct: default_mfe_activation_pct(),
             min_locked_floor_pct: default_min_locked_floor_pct(),
             vol_window_size: default_vol_window_size(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrderflowConfig {
+    #[serde(default = "default_orderflow_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_cvd_window_secs")]
+    pub cvd_window_secs: f64,
+    #[serde(default = "default_min_entry_cvd_ratio")]
+    pub min_entry_cvd_ratio: f64,
+    #[serde(default = "default_bearish_absorption_threshold")]
+    pub bearish_absorption_threshold: f64,
+    #[serde(default = "default_tighten_exit_on_absorption")]
+    pub tighten_exit_on_absorption: bool,
+}
+
+fn default_orderflow_enabled() -> bool { true }
+fn default_cvd_window_secs() -> f64 { 60.0 }
+fn default_min_entry_cvd_ratio() -> f64 { 0.15 }
+fn default_bearish_absorption_threshold() -> f64 { -0.30 }
+fn default_tighten_exit_on_absorption() -> bool { true }
+
+impl Default for OrderflowConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_orderflow_enabled(),
+            cvd_window_secs: default_cvd_window_secs(),
+            min_entry_cvd_ratio: default_min_entry_cvd_ratio(),
+            bearish_absorption_threshold: default_bearish_absorption_threshold(),
+            tighten_exit_on_absorption: default_tighten_exit_on_absorption(),
         }
     }
 }
@@ -307,6 +344,7 @@ impl Default for RiskConfig {
             max_entry_sol: 0.045,
             min_gas_reserve_sol: 0.030,
             dynamic_exits: DynamicExitsConfig::default(),
+            orderflow: OrderflowConfig::default(),
         }
     }
 }
@@ -438,6 +476,7 @@ struct TomlConfigFile {
     pub sandbox: Option<SandboxConfig>,
     pub hawkes: Option<crate::hawkes::HawkesConfig>,
     pub dynamic_exits: Option<DynamicExitsConfig>,
+    pub orderflow: Option<OrderflowConfig>,
 }
 
 impl Default for EngineConfig {
@@ -477,6 +516,7 @@ impl Default for EngineConfig {
             risk: RiskConfig::default(),
             hawkes: crate::hawkes::HawkesConfig::default(),
             dynamic_exits: DynamicExitsConfig::default(),
+            orderflow: OrderflowConfig::default(),
             sandbox: SandboxConfig::default(),
         }
     }
@@ -508,6 +548,11 @@ impl EngineConfig {
                     println!("[CONFIG] Loaded institutional [dynamic_exits] envelope from config.toml");
                     cfg.risk.dynamic_exits = de.clone();
                     cfg.dynamic_exits = de;
+                }
+                if let Some(of) = toml_file.orderflow {
+                    println!("[CONFIG] Loaded institutional [orderflow] envelope from config.toml");
+                    cfg.risk.orderflow = of.clone();
+                    cfg.orderflow = of;
                 }
                 if let Some(sb) = toml_file.sandbox {
                     cfg.sandbox = sb;
@@ -569,5 +614,29 @@ mod tests {
         assert_eq!(cfg.min_entry_sol, 0.010);
         assert_eq!(cfg.max_entry_sol, 0.045);
         assert_eq!(cfg.min_gas_reserve_sol, 0.030);
+    }
+
+    #[test]
+    fn test_orderflow_config_defaults_and_deserialization() {
+        let default_cfg = OrderflowConfig::default();
+        assert!(default_cfg.enabled);
+        assert_eq!(default_cfg.cvd_window_secs, 60.0);
+        assert_eq!(default_cfg.min_entry_cvd_ratio, 0.15);
+        assert_eq!(default_cfg.bearish_absorption_threshold, -0.30);
+        assert!(default_cfg.tighten_exit_on_absorption);
+
+        let toml_str = r#"
+            enabled = true
+            cvd_window_secs = 45.0
+            min_entry_cvd_ratio = 0.20
+            bearish_absorption_threshold = -0.35
+            tighten_exit_on_absorption = false
+        "#;
+        let parsed: OrderflowConfig = toml::from_str(toml_str).expect("Failed to deserialize OrderflowConfig");
+        assert!(parsed.enabled);
+        assert_eq!(parsed.cvd_window_secs, 45.0);
+        assert_eq!(parsed.min_entry_cvd_ratio, 0.20);
+        assert_eq!(parsed.bearish_absorption_threshold, -0.35);
+        assert!(!parsed.tighten_exit_on_absorption);
     }
 }

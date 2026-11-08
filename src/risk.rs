@@ -31,6 +31,8 @@ pub struct ActivePosition {
     pub execution_priority: String,
     #[serde(default)]
     pub price_buffer: VecDeque<f64>,
+    #[serde(default)]
+    pub cvd_tracker: crate::orderflow::RollingCvdTracker,
 }
 
 impl ActivePosition {
@@ -39,6 +41,10 @@ impl ActivePosition {
             self.price_buffer.pop_front();
         }
         self.price_buffer.push_back(price);
+    }
+
+    pub fn record_trade_tick(&mut self, timestamp: f64, volume_sol: f64, is_buy: bool) {
+        self.cvd_tracker.record_trade(timestamp, volume_sol, is_buy);
     }
 }
 
@@ -204,33 +210,83 @@ pub fn evaluate_position_exit(
         0.0
     };
 
+    // Orderflow CVD Bearish Absorption Divergence Floor Ratchet
+    let is_bearish_absorption = if cfg.orderflow.enabled && cfg.orderflow.tighten_exit_on_absorption {
+        let reference_pnl = pnl_pct.max(pos.peak_pnl_pct);
+        pos.cvd_tracker.evaluate_divergence(
+            reference_pnl,
+            cfg.orderflow.bearish_absorption_threshold,
+        ) == crate::orderflow::CvdDivergence::BearishAbsorption
+    } else {
+        false
+    };
+
     if pos.tp1_executed {
         if let Some(ref band) = dyn_band {
-            if peak_drawdown_pct >= band.delta_trail || pnl_pct <= band.dynamic_floor {
+            let effective_floor = if is_bearish_absorption {
+                band.dynamic_floor.max(pos.peak_pnl_pct - (band.delta_trail * 0.5)).max(cfg.breakeven_floor_pct)
+            } else {
+                band.dynamic_floor
+            };
+            let effective_delta = if is_bearish_absorption {
+                band.delta_trail * 0.5
+            } else {
+                band.delta_trail
+            };
+            if peak_drawdown_pct >= effective_delta || pnl_pct <= effective_floor {
+                let rule_prefix = if is_bearish_absorption {
+                    "CVD Absorption Ratchet Runner"
+                } else {
+                    "Dynamic Trailing Runner"
+                };
                 return ExitAction::FullExit {
                     rule_label: format!(
-                        "Dynamic Trailing Runner (-{:.1}% from +{:.1}% Peak | Floor +{:.1}%)",
-                        band.delta_trail, pos.peak_pnl_pct, band.dynamic_floor
+                        "{} (-{:.1}% from +{:.1}% Peak | Floor +{:.1}%)",
+                        rule_prefix, effective_delta, pos.peak_pnl_pct, effective_floor
                     ),
                     is_toxic: false,
                     tip_lamports: cfg.jito_tip_lamports,
                 };
             }
-        } else if peak_drawdown_pct >= cfg.runner_trailing_drop_pct {
-            return ExitAction::FullExit {
-                rule_label: format!(
-                    "Trailing Runner (-{:.0}% from +{:.1}% Peak)",
-                    cfg.runner_trailing_drop_pct, pos.peak_pnl_pct
-                ),
-                is_toxic: false,
-                tip_lamports: cfg.jito_tip_lamports,
+        } else {
+            let effective_trail = if is_bearish_absorption {
+                cfg.runner_trailing_drop_pct * 0.5
+            } else {
+                cfg.runner_trailing_drop_pct
             };
+            if peak_drawdown_pct >= effective_trail {
+                let rule_prefix = if is_bearish_absorption {
+                    "CVD Absorption Trailing Runner"
+                } else {
+                    "Trailing Runner"
+                };
+                return ExitAction::FullExit {
+                    rule_label: format!(
+                        "{} (-{:.0}% from +{:.1}% Peak)",
+                        rule_prefix, effective_trail, pos.peak_pnl_pct
+                    ),
+                    is_toxic: false,
+                    tip_lamports: cfg.jito_tip_lamports,
+                };
+            }
         }
     }
 
-    // 6b. Dynamic Ratchet Floor for Pre-TP1 Runups (MFE >= mfe_activation_pct)
+    // 6b. Dynamic Ratchet Floor for Pre-TP1 Runups (MFE >= mfe_activation_pct or CVD Absorption)
     if !pos.tp1_executed {
-        if let Some(ref band) = dyn_band {
+        if is_bearish_absorption && pos.peak_pnl_pct >= cfg.breakeven_floor_pct {
+            let absorption_floor = (pos.peak_pnl_pct * 0.80).max(cfg.breakeven_floor_pct);
+            if pnl_pct <= absorption_floor {
+                return ExitAction::FullExit {
+                    rule_label: format!(
+                        "CVD Absorption Ratchet Floor (+{:.1}% from +{:.1}% Peak)",
+                        absorption_floor, pos.peak_pnl_pct
+                    ),
+                    is_toxic: false,
+                    tip_lamports: cfg.jito_tip_lamports,
+                };
+            }
+        } else if let Some(ref band) = dyn_band {
             if band.is_ratchet_active && pnl_pct <= band.dynamic_floor {
                 return ExitAction::FullExit {
                     rule_label: format!(
@@ -548,6 +604,7 @@ mod tests {
             jito_tip_lamports: 10_000,
             execution_priority: "STANDARD_ROUTINE".to_string(),
             price_buffer: VecDeque::new(),
+            cvd_tracker: crate::orderflow::RollingCvdTracker::default(),
         }
     }
 
@@ -731,6 +788,34 @@ mod tests {
         // Verify volatility computation over ring buffer wraparound slices without allocation
         let vol = compute_rolling_tick_volatility(&pos.price_buffer);
         assert!(vol.is_finite() && vol > 0.0);
+    }
+
+    #[test]
+    fn test_cvd_bearish_absorption_tightens_runner_exit() {
+        let mut pos = setup_test_position();
+        let cfg = RiskConfig::default();
+
+        // 1. Position reached +50% peak gain
+        let _ = evaluate_position_exit(&mut pos, 1.50, 1050, &cfg);
+        assert!(pos.tp1_executed);
+        assert_eq!(pos.peak_pnl_pct, 50.0);
+
+        // 2. Heavy sell pressure arrives: 20 buy vs 80 sell -> pressure ratio = -0.60
+        pos.record_trade_tick(1060.0, 20.0, true);
+        pos.record_trade_tick(1061.0, 80.0, false);
+        assert_eq!(pos.cvd_tracker.pressure_ratio(), -0.60);
+
+        // 3. Price slightly pulls back from 1.50 to 1.35 (+35% PnL)
+        // With absorption, floor is ratcheted up and triggers protective exit.
+        let action = evaluate_position_exit(&mut pos, 1.35, 1065, &cfg);
+        match action {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
+                assert!(rule_label.contains("CVD Absorption Ratchet Runner"));
+                assert!(!is_toxic);
+                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+            }
+            _ => panic!("Expected CVD Absorption Ratchet Runner exit, got {:?}", action),
+        }
     }
 
     #[test]
