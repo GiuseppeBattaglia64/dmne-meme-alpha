@@ -8,7 +8,7 @@ use std::collections::HashMap;
 pub const MIN_LIQUIDITY_LOWER_BOUND_USD: f64 = 20_000.0;
 pub const MIN_LIQUIDITY_UPPER_BOUND_USD: f64 = 100_000.0;
 
-pub const KELLY_BASE_LOWER_BOUND_PCT: f64 = 3.0;
+pub const KELLY_BASE_LOWER_BOUND_PCT: f64 = 2.0;
 pub const KELLY_BASE_UPPER_BOUND_PCT: f64 = 10.0;
 
 pub const MAX_PERMISSIBLE_STOP_LOSS_PCT: f64 = -25.0; // Stop loss cannot widen beyond -25.0% (e.g. -30.0% fails)
@@ -16,9 +16,9 @@ pub const MAX_PERMISSIBLE_STOP_LOSS_PCT: f64 = -25.0; // Stop loss cannot widen 
 pub const MIN_POSITION_SIZE_SOL: f64 = 0.010;
 pub const MAX_POSITION_SIZE_SOL: f64 = 0.10;
 
-pub const MIN_BASE_POSITION_PCT_NAV: f64 = 0.02;
+pub const MIN_BASE_POSITION_PCT_NAV: f64 = 0.015;
 pub const MAX_BASE_POSITION_PCT_NAV: f64 = 0.07;
-pub const MIN_MAX_POSITION_PCT_NAV: f64 = 0.04;
+pub const MIN_MAX_POSITION_PCT_NAV: f64 = 0.025;
 pub const MAX_MAX_POSITION_PCT_NAV: f64 = 0.12;
 pub const HARD_CEILING_MAX_COMMITTED_SOL: f64 = 0.10;
 
@@ -496,7 +496,23 @@ impl HarnessEngine {
             max_stop_loss_pct: -20.0,
             hawkes_eta_ceiling: 1.25,
         };
-        let (passed_checks, violations) = Self::check_guardrails(&invariants);
+        let (mut passed_checks, mut violations) = Self::check_guardrails(&invariants);
+
+        // Bi-Directional Alpha & Significance Gate: net_alpha_delta_sol > 0.0150 SOL && sample_size >= 30
+        if counterfactual_delta_sol <= 0.0150 {
+            passed_checks = false;
+            violations.push(format!(
+                "Net alpha delta ({:+.6} SOL) fails threshold: requires > +0.0150 SOL net rescued alpha",
+                counterfactual_delta_sol
+            ));
+        }
+        if records.len() < 30 {
+            passed_checks = false;
+            violations.push(format!(
+                "Sample size ({} records) fails threshold: requires >= 30 historical settled trade records",
+                records.len()
+            ));
+        }
 
         // 4. Generate config diff
         let target_line = "min_entry_liquidity_usd = 20000.0";
@@ -652,9 +668,9 @@ mod tests {
         assert!(res_nav_high.is_err());
         assert!(res_nav_high.unwrap_err()[0].contains("base_position_pct_nav"));
 
-        // Reset and test invalid max_position_pct_nav (< 0.04 or > 0.12)
-        cfg.risk.as_mut().unwrap().base_position_pct_nav = 0.045;
-        cfg.risk.as_mut().unwrap().max_position_pct_nav = 0.03;
+        // Reset and test invalid max_position_pct_nav (< 0.025 or > 0.12)
+        cfg.risk.as_mut().unwrap().base_position_pct_nav = 0.025;
+        cfg.risk.as_mut().unwrap().max_position_pct_nav = 0.020;
         let res_max_low = validate_safety_invariants_on_toml(&cfg);
         assert!(res_max_low.is_err());
         assert!(res_max_low.unwrap_err()[0].contains("max_position_pct_nav"));

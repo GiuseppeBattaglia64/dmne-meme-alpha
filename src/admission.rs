@@ -157,16 +157,15 @@ pub fn evaluate_candidate_admission(
 
     // 3. Hawkes Point Process Wash-Trading Filter Gate
     if cfg.hawkes.enabled {
-        let now_epoch_f64 = chrono::Utc::now().timestamp() as f64;
-        let mut arrivals = candidate.arrival_timestamps.clone();
-        if arrivals.len() < cfg.hawkes.min_sample_size && (candidate.m5_buys + candidate.m5_sells) >= cfg.hawkes.min_sample_size as u64 {
-            let total_txns = (candidate.m5_buys + candidate.m5_sells).min(100) as usize;
-            let step = 300.0 / (total_txns as f64);
-            arrivals = (0..total_txns).map(|i| now_epoch_f64 - 300.0 + (i as f64 * step)).collect();
+        if candidate.arrival_timestamps.len() < 5 {
+            return Err(RejectionReason::HawkesWash {
+                branching_ratio: 0.0,
+                detail: "BUFFER_COLD_UNDER_5_EVENTS".to_string(),
+            });
         }
-
+        let now_epoch_f64 = chrono::Utc::now().timestamp() as f64;
         let hawkes_metrics = HawkesEvaluator::evaluate(
-            &arrivals,
+            &candidate.arrival_timestamps,
             now_epoch_f64,
             candidate.m5_volume_usd,
             candidate.buy_sell_ratio,
@@ -219,24 +218,39 @@ pub fn evaluate_candidate_admission(
 
     // 5. Dev Sybil Cluster & Deep Funder Graph HHI Gate
     if cfg.funder_graph.enabled {
-        let funder_metrics: FunderGraphMetrics = match funder_evaluator {
-            Some(fe) => {
-                if let Some(ref holders) = candidate.holder_records {
-                    fe.evaluate_holders(&candidate.token_mint, holders)
-                } else {
-                    fe.evaluate_token(&candidate.token_mint)
-                }
+        let candidate_holders = candidate.holder_records.as_deref();
+        let cached_holders = funder_evaluator.and_then(|fe| fe.cache.get(&candidate.token_mint).map(|v| v.as_slice()));
+        let holders = match (candidate_holders, cached_holders) {
+            (Some(h), _) if h.len() >= 5 => h,
+            (_, Some(h)) if h.len() >= 5 => h,
+            _ => {
+                return Err(RejectionReason::DevCluster {
+                    reason: "RPC_HOLDER_DATA_UNAVAILABLE".to_string(),
+                    metric_label: "Holders: <5".to_string(),
+                });
             }
+        };
+
+        // Sniper Profit Overhang Ceiling Check
+        let price_multiple = (1.0 + (candidate.m5_price_change_pct / 100.0))
+            .max(1.0 + (candidate.h1_price_change_pct / 100.0))
+            .max(1.0);
+        let (is_overhang, top5_pct) = crate::funder_graph::evaluate_sniper_overhang(holders, price_multiple);
+        if is_overhang {
+            return Err(RejectionReason::DevCluster {
+                reason: "SNIPER_OVERHANG_UNREALIZED_PROFIT_EXCESS".to_string(),
+                metric_label: format!("Overhang: {:.1}% (>18% @ {:.1}x)", top5_pct, price_multiple),
+            });
+        }
+
+        let funder_metrics: FunderGraphMetrics = match funder_evaluator {
+            Some(fe) => fe.evaluate_holders(&candidate.token_mint, holders),
             None => {
                 let default_evaluator = FunderGraphEvaluator::new(
                     cfg.funder_graph.clone(),
                     std::collections::HashMap::new(),
                 );
-                if let Some(ref holders) = candidate.holder_records {
-                    default_evaluator.evaluate_holders(&candidate.token_mint, holders)
-                } else {
-                    default_evaluator.evaluate_token(&candidate.token_mint)
-                }
+                default_evaluator.evaluate_holders(&candidate.token_mint, holders)
             }
         };
 
@@ -277,6 +291,7 @@ mod tests {
     use crate::funder_graph::HolderFundingSource;
 
     fn make_test_candidate() -> CandidateTelemetry {
+        let now = chrono::Utc::now().timestamp() as f64;
         CandidateTelemetry {
             symbol: "TEST".to_string(),
             token_mint: "TestTokenMintAddress1111111111111111111111111".to_string(),
@@ -291,7 +306,7 @@ mod tests {
             m5_volume_usd: 15000.0,
             m5_buys: 40,
             m5_sells: 10,
-            arrival_timestamps: vec![10.0, 22.0, 35.0, 48.0, 61.0, 75.0, 90.0, 105.0],
+            arrival_timestamps: vec![now - 70.0, now - 55.0, now - 40.0, now - 25.0, now - 10.0],
             genesis_profile: Some(GenesisBundleProfile {
                 mint: "TestTokenMintAddress1111111111111111111111111".to_string(),
                 pool_creation_slot: 1000,
@@ -300,7 +315,38 @@ mod tests {
                 shared_tip_detected: false,
                 common_funding_source: None,
             }),
-            holder_records: None,
+            holder_records: Some(vec![
+                TokenHolderRecord {
+                    holder_address: "Holder1".to_string(),
+                    supply_pct: 3.0,
+                    is_liquidity_pool: false,
+                    funding_source: None,
+                },
+                TokenHolderRecord {
+                    holder_address: "Holder2".to_string(),
+                    supply_pct: 2.5,
+                    is_liquidity_pool: false,
+                    funding_source: None,
+                },
+                TokenHolderRecord {
+                    holder_address: "Holder3".to_string(),
+                    supply_pct: 2.0,
+                    is_liquidity_pool: false,
+                    funding_source: None,
+                },
+                TokenHolderRecord {
+                    holder_address: "Holder4".to_string(),
+                    supply_pct: 1.5,
+                    is_liquidity_pool: false,
+                    funding_source: None,
+                },
+                TokenHolderRecord {
+                    holder_address: "Holder5".to_string(),
+                    supply_pct: 1.0,
+                    is_liquidity_pool: false,
+                    funding_source: None,
+                },
+            ]),
         }
     }
 
@@ -418,6 +464,24 @@ mod tests {
                     hop_depth: 1,
                 }),
             },
+            TokenHolderRecord {
+                holder_address: "Holder3".to_string(),
+                supply_pct: 1.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "Holder4".to_string(),
+                supply_pct: 1.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "Holder5".to_string(),
+                supply_pct: 1.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
         ]);
         let cfg = EngineConfig::default();
         let funder_evaluator = FunderGraphEvaluator::new(cfg.funder_graph.clone(), HashMap::new());
@@ -426,8 +490,113 @@ mod tests {
         let err = res.unwrap_err();
         assert_eq!(err.category(), RejectionCategory::DevCluster);
         match err {
-            RejectionReason::DevCluster { .. } => {}
+            RejectionReason::DevCluster { reason, .. } => {
+                assert!(reason.contains("SYBIL_DEV_CLUSTER"));
+            }
             _ => panic!("Expected DevCluster error"),
+        }
+    }
+
+    #[test]
+    fn test_admission_hawkes_cold_buffer_rejection() {
+        let mut candidate = make_test_candidate();
+        candidate.arrival_timestamps = vec![1.0, 2.0, 3.0]; // < 5 events
+        let cfg = EngineConfig::default();
+        let res = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        match err {
+            RejectionReason::HawkesWash { detail, .. } => {
+                assert_eq!(detail, "BUFFER_COLD_UNDER_5_EVENTS");
+            }
+            _ => panic!("Expected HawkesWash BUFFER_COLD_UNDER_5_EVENTS, got: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_admission_rpc_holder_data_unavailable_rejection() {
+        let mut candidate = make_test_candidate();
+        candidate.holder_records = None; // Missing holder records
+        let cfg = EngineConfig::default();
+        let res = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        match err {
+            RejectionReason::DevCluster { reason, metric_label } => {
+                assert_eq!(reason, "RPC_HOLDER_DATA_UNAVAILABLE");
+                assert_eq!(metric_label, "Holders: <5");
+            }
+            _ => panic!("Expected DevCluster RPC_HOLDER_DATA_UNAVAILABLE, got: {:?}", err),
+        }
+
+        // Also test < 5 holders
+        candidate.holder_records = Some(vec![
+            TokenHolderRecord {
+                holder_address: "H1".to_string(),
+                supply_pct: 1.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+        ]);
+        let res2 = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res2.is_err());
+        match res2.unwrap_err() {
+            RejectionReason::DevCluster { reason, metric_label } => {
+                assert_eq!(reason, "RPC_HOLDER_DATA_UNAVAILABLE");
+                assert_eq!(metric_label, "Holders: <5");
+            }
+            _ => panic!("Expected RPC_HOLDER_DATA_UNAVAILABLE"),
+        }
+    }
+
+    #[test]
+    fn test_admission_sniper_overhang_rejection() {
+        let mut candidate = make_test_candidate();
+        // Top 5 non-pool holders hold 20.0% (> 18.0%)
+        candidate.holder_records = Some(vec![
+            TokenHolderRecord {
+                holder_address: "H1".to_string(),
+                supply_pct: 5.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "H2".to_string(),
+                supply_pct: 5.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "H3".to_string(),
+                supply_pct: 4.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "H4".to_string(),
+                supply_pct: 3.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "H5".to_string(),
+                supply_pct: 3.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+        ]);
+        // Price surge of +260% (price_multiple = 3.60 >= 3.50)
+        candidate.m5_price_change_pct = 260.0;
+        let cfg = EngineConfig::default();
+        let res = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        match err {
+            RejectionReason::DevCluster { reason, metric_label } => {
+                assert_eq!(reason, "SNIPER_OVERHANG_UNREALIZED_PROFIT_EXCESS");
+                assert!(metric_label.contains("Overhang: 20.0%"));
+            }
+            _ => panic!("Expected DevCluster SNIPER_OVERHANG_UNREALIZED_PROFIT_EXCESS, got: {:?}", err),
         }
     }
 }

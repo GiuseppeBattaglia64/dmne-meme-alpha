@@ -98,6 +98,20 @@ pub struct CounterfactualResult {
     pub recommendation: String,
 }
 
+/// Results of a bi-directional forensic replay across all historical trades (winners & losers)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BidirectionalReplayMetrics {
+    pub total_trades_evaluated: usize,
+    pub total_losses_evaluated: usize,
+    pub total_wins_evaluated: usize,
+    pub gross_losses_rescued_sol: f64,
+    pub gross_wins_sacrificed_sol: f64,
+    pub net_alpha_delta_sol: f64,
+    pub rescued_losses_count: usize,
+    pub sacrificed_wins_count: usize,
+    pub is_pr_eligible: bool,
+}
+
 /// Comprehensive post-trade forensic autopsy report
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeAutopsyReport {
@@ -171,18 +185,8 @@ impl ColdPathAuditor {
         }
     }
 
-    /// Evaluates whether stricter counterfactual gate thresholds would have averted the loss
-    pub fn run_counterfactual_simulation(&self, trade: &SettledTradeRecord) -> CounterfactualResult {
-        if trade.realized_pnl_sol >= 0.0 {
-            return CounterfactualResult {
-                would_avoid_trade: false,
-                avoided_loss_sol: 0.0,
-                avoided_loss_pct: 0.0,
-                blocking_gates: Vec::new(),
-                recommendation: "Trade was profitable; no gate tightening required.".to_string(),
-            };
-        }
-
+    /// Evaluates whether counterfactual gates would have blocked this candidate/trade
+    pub fn evaluate_counterfactual_admission(&self, trade: &SettledTradeRecord) -> (bool, Vec<String>) {
         let mut blocking_gates = Vec::new();
 
         // 1. Counterfactual Liquidity Gate ($35,000 floor)
@@ -213,7 +217,69 @@ impl ColdPathAuditor {
             }
         }
 
-        if !blocking_gates.is_empty() {
+        let would_block = !blocking_gates.is_empty();
+        (would_block, blocking_gates)
+    }
+
+    /// Evaluates all settled trades bi-directionally to measure true net alpha delta
+    pub fn run_bidirectional_replay(&self, trades: &[SettledTradeRecord]) -> BidirectionalReplayMetrics {
+        let mut gross_losses_rescued_sol = 0.0;
+        let mut gross_wins_sacrificed_sol = 0.0;
+        let mut rescued_losses_count = 0;
+        let mut sacrificed_wins_count = 0;
+        let mut total_losses = 0;
+        let mut total_wins = 0;
+
+        for trade in trades {
+            if trade.realized_pnl_sol < 0.0 || trade.realized_pnl_pct < 0.0 {
+                total_losses += 1;
+            } else if trade.realized_pnl_sol > 0.0 || trade.realized_pnl_pct > 0.0 {
+                total_wins += 1;
+            }
+
+            let (would_block, _) = self.evaluate_counterfactual_admission(trade);
+            if would_block {
+                if trade.realized_pnl_sol < 0.0 {
+                    gross_losses_rescued_sol += trade.realized_pnl_sol.abs();
+                    rescued_losses_count += 1;
+                } else if trade.realized_pnl_sol > 0.0 {
+                    gross_wins_sacrificed_sol += trade.realized_pnl_sol;
+                    sacrificed_wins_count += 1;
+                }
+            }
+        }
+
+        let net_alpha_delta_sol = gross_losses_rescued_sol - gross_wins_sacrificed_sol;
+        let is_pr_eligible = net_alpha_delta_sol > 0.0150 && trades.len() >= 30;
+
+        BidirectionalReplayMetrics {
+            total_trades_evaluated: trades.len(),
+            total_losses_evaluated: total_losses,
+            total_wins_evaluated: total_wins,
+            gross_losses_rescued_sol,
+            gross_wins_sacrificed_sol,
+            net_alpha_delta_sol,
+            rescued_losses_count,
+            sacrificed_wins_count,
+            is_pr_eligible,
+        }
+    }
+
+    /// Evaluates whether stricter counterfactual gate thresholds would have averted the loss
+    pub fn run_counterfactual_simulation(&self, trade: &SettledTradeRecord) -> CounterfactualResult {
+        if trade.realized_pnl_sol >= 0.0 {
+            return CounterfactualResult {
+                would_avoid_trade: false,
+                avoided_loss_sol: 0.0,
+                avoided_loss_pct: 0.0,
+                blocking_gates: Vec::new(),
+                recommendation: "Trade was profitable; no gate tightening required.".to_string(),
+            };
+        }
+
+        let (would_avoid, blocking_gates) = self.evaluate_counterfactual_admission(trade);
+
+        if would_avoid {
             let avoided_sol = trade.realized_pnl_sol.abs();
             let avoided_pct = trade.realized_pnl_pct.abs();
             CounterfactualResult {
@@ -384,6 +450,37 @@ mod tests {
         profitable.realized_pnl_pct = 45.0;
         let cf_prof = auditor.run_counterfactual_simulation(&profitable);
         assert!(!cf_prof.would_avoid_trade);
+    }
+
+    #[test]
+    fn test_bidirectional_replay_metrics() {
+        let auditor = ColdPathAuditor::default();
+
+        // 1. Losing trade that would be blocked (Liq $20k < $35k) -> loss rescued
+        let loss_blocked = create_test_record(1, "LOSS1", 100.0, -25.0, -0.020, "Stop-Loss", 20000.0, Some(0.30), Some(0.80));
+
+        // 2. Losing trade that cleared gates (Liq $40k, CVD 0.30, Hawkes 0.80) -> unrescued
+        let loss_cleared = create_test_record(2, "LOSS2", 100.0, -10.0, -0.005, "Stop-Loss", 40000.0, Some(0.30), Some(0.80));
+
+        // 3. Winning trade that would be blocked (Liq $25k < $35k) -> win sacrificed
+        let win_blocked = create_test_record(3, "WIN1", 100.0, 45.0, 0.010, "TP1", 25000.0, Some(0.30), Some(0.80));
+
+        // 4. Winning trade that cleared gates (Liq $50k, CVD 0.30, Hawkes 0.80) -> retained
+        let win_cleared = create_test_record(4, "WIN2", 100.0, 50.0, 0.020, "TP1", 50000.0, Some(0.30), Some(0.80));
+
+        let trades = vec![loss_blocked, loss_cleared, win_blocked, win_cleared];
+        let replay = auditor.run_bidirectional_replay(&trades);
+
+        assert_eq!(replay.total_trades_evaluated, 4);
+        assert_eq!(replay.total_losses_evaluated, 2);
+        assert_eq!(replay.total_wins_evaluated, 2);
+        assert_eq!(replay.rescued_losses_count, 1);
+        assert_eq!(replay.sacrificed_wins_count, 1);
+        assert!((replay.gross_losses_rescued_sol - 0.020).abs() < 1e-6);
+        assert!((replay.gross_wins_sacrificed_sol - 0.010).abs() < 1e-6);
+        assert!((replay.net_alpha_delta_sol - 0.010).abs() < 1e-6);
+        // Not PR eligible because sample size 4 < 30 and net alpha 0.010 <= 0.0150
+        assert!(!replay.is_pr_eligible);
     }
 }
 

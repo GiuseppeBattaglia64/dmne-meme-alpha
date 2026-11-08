@@ -348,11 +348,11 @@ fn default_dex_roundtrip_fee_pct() -> f64 { 0.60 }
 fn default_jito_tip_lamports() -> u64 { 10000 }
 fn default_emergency_jito_tip_lamports() -> u64 { 75000 }
 fn default_min_entry_sol() -> f64 { 0.010 }
-fn default_max_entry_sol() -> f64 { 0.045 }
+fn default_max_entry_sol() -> f64 { 0.018 }
 fn default_min_gas_reserve_sol() -> f64 { 0.030 }
-fn default_base_position_size_sol() -> f64 { 0.0225 }
-fn default_base_position_pct_nav() -> f64 { 0.045 }
-fn default_max_position_pct_nav() -> f64 { 0.085 }
+fn default_base_position_size_sol() -> f64 { 0.018 }
+fn default_base_position_pct_nav() -> f64 { 0.025 }
+fn default_max_position_pct_nav() -> f64 { 0.030 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -408,7 +408,7 @@ impl Default for RiskConfig {
             jito_tip_lamports: 10000,
             emergency_jito_tip_lamports: 75000,
             min_entry_sol: 0.010,
-            max_entry_sol: 0.045,
+            max_entry_sol: default_max_entry_sol(),
             min_gas_reserve_sol: 0.030,
             base_position_size_sol: default_base_position_size_sol(),
             base_position_pct_nav: default_base_position_pct_nav(),
@@ -567,8 +567,8 @@ impl Default for EngineConfig {
             max_top10_concentration_pct: 18.0,
             min_symbol_entropy: 1.8,          // Reject repetitive ticker spam
             kelly_nav_fraction: 0.075,            // 7.5% NAV Half-Kelly risk allocation
-            min_entry_sol: 0.012,                 // Minimum entry size (covers rent & priority fees)
-            max_entry_sol: 0.045,                 // Maximum entry size cap
+            min_entry_sol: 0.010,                 // Minimum entry size (covers rent & priority fees)
+            max_entry_sol: 0.018,                 // Maximum entry size cap
             sol_reference_price_usd: 180.0,       // Floating SOL USD valuation reference
             rolling_sample_window: 15,            // 15-tick rolling window for volatility calculation
             volatility_trail_multiplier: 2.20,    // Multiplier (k) applied to rolling standard deviation
@@ -677,10 +677,10 @@ mod tests {
         assert_eq!(cfg.high_conviction_buy_ratio_threshold, 2.0);
         assert_eq!(cfg.jito_tip_lamports, 10_000);
         assert_eq!(cfg.min_entry_sol, 0.010);
-        assert_eq!(cfg.max_entry_sol, 0.045);
+        assert_eq!(cfg.max_entry_sol, 0.018);
         assert_eq!(cfg.min_gas_reserve_sol, 0.030);
-        assert_eq!(cfg.base_position_pct_nav, 0.045);
-        assert_eq!(cfg.max_position_pct_nav, 0.085);
+        assert_eq!(cfg.base_position_pct_nav, 0.025);
+        assert_eq!(cfg.max_position_pct_nav, 0.030);
     }
 
     #[test]
@@ -706,10 +706,10 @@ mod tests {
         assert_eq!(cfg.max_kelly_fraction_nav_pct, 8.5);
         assert_eq!(cfg.high_conviction_buy_ratio_threshold, 2.0);
         assert_eq!(cfg.min_entry_sol, 0.010);
-        assert_eq!(cfg.max_entry_sol, 0.045);
+        assert_eq!(cfg.max_entry_sol, 0.018);
         assert_eq!(cfg.min_gas_reserve_sol, 0.030);
-        assert_eq!(cfg.base_position_pct_nav, 0.045);
-        assert_eq!(cfg.max_position_pct_nav, 0.085);
+        assert_eq!(cfg.base_position_pct_nav, 0.025);
+        assert_eq!(cfg.max_position_pct_nav, 0.030);
     }
 
     #[test]

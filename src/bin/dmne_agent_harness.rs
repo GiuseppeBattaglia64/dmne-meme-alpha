@@ -107,6 +107,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 proposed_liquidity_usd,
             );
 
+            if !proposal.guardrail_checks_passed {
+                eprintln!("\n[PR STAGING REJECTED] Proposal failed safety / statistical alpha invariants:");
+                for v in &proposal.guardrail_violations {
+                    eprintln!("  - {}", v);
+                }
+                eprintln!("[ACTION] Staged PR generation blocked due to failed invariant check.\n");
+                return Ok(());
+            }
+
             // Persist the staged task to PostgreSQL agent_audit_tasks
             create_agent_task(
                 &client,

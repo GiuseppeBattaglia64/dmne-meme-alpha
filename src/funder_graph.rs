@@ -138,9 +138,28 @@ pub struct FunderGraphEvaluator {
     pub cache: HashMap<String, Vec<TokenHolderRecord>>,
 }
 
+/// Evaluates sniper profit overhang ceiling.
+/// Returns (is_excess, top5_pct) where is_excess is true if top 5 non-pool wallets hold > 18.0% of supply AND price_multiple >= 3.50.
+pub fn evaluate_sniper_overhang(holders: &[TokenHolderRecord], price_multiple: f64) -> (bool, f64) {
+    let mut non_pool: Vec<f64> = holders
+        .iter()
+        .filter(|h| !h.is_liquidity_pool)
+        .map(|h| h.supply_pct)
+        .collect();
+    non_pool.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    let top5_pct: f64 = non_pool.iter().take(5).sum();
+    let is_excess = top5_pct > 18.0 && price_multiple >= 3.50;
+    (is_excess, top5_pct)
+}
+
 impl FunderGraphEvaluator {
     pub fn new(config: FunderGraphConfig, cache: HashMap<String, Vec<TokenHolderRecord>>) -> Self {
         Self { config, cache }
+    }
+
+    /// Evaluates sniper profit overhang ceiling on provided holders.
+    pub fn evaluate_sniper_overhang(&self, holders: &[TokenHolderRecord], price_multiple: f64) -> (bool, f64) {
+        evaluate_sniper_overhang(holders, price_multiple)
     }
 
     /// Evaluates a candidate token mint using cached holder distributions
@@ -608,6 +627,49 @@ mod tests {
         assert!(metrics.is_sybil_cluster);
         assert!((metrics.max_cluster_supply_pct - 21.0).abs() < 1e-6); // 8 + 7 + 6 = 21.0 >= 18.0
         assert!(metrics.rejection_reason.unwrap().contains("SYBIL_DEV_CLUSTER"));
+    }
+
+    #[test]
+    fn test_evaluate_sniper_overhang() {
+        let make_holder = |addr: &str, pct: f64, is_pool: bool| TokenHolderRecord {
+            holder_address: addr.to_string(),
+            supply_pct: pct,
+            is_liquidity_pool: is_pool,
+            funding_source: None,
+        };
+
+        let holders = vec![
+            make_holder("POOL_RAYDIUM", 40.0, true), // pool ignored
+            make_holder("SNIPER_1", 5.0, false),
+            make_holder("SNIPER_2", 4.5, false),
+            make_holder("SNIPER_3", 4.0, false),
+            make_holder("SNIPER_4", 3.0, false),
+            make_holder("SNIPER_5", 2.5, false), // top 5 non-pool = 5+4.5+4+3+2.5 = 19.0% (> 18.0%)
+            make_holder("SNIPER_6", 2.0, false),
+        ];
+
+        // 1. High overhang (>18%) + High multiple (>=3.5x) => Reject
+        let (excess, pct) = evaluate_sniper_overhang(&holders, 3.50);
+        assert!(excess);
+        assert!((pct - 19.0).abs() < 1e-6);
+
+        // 2. High overhang (>18%) + Low multiple (<3.5x) => Cleared
+        let (excess_low_mult, pct_low_mult) = evaluate_sniper_overhang(&holders, 2.50);
+        assert!(!excess_low_mult);
+        assert!((pct_low_mult - 19.0).abs() < 1e-6);
+
+        // 3. Low overhang (<=18%) + High multiple (>=3.5x) => Cleared
+        let low_overhang_holders = vec![
+            make_holder("POOL_RAYDIUM", 60.0, true),
+            make_holder("SNIPER_1", 3.0, false),
+            make_holder("SNIPER_2", 3.0, false),
+            make_holder("SNIPER_3", 3.0, false),
+            make_holder("SNIPER_4", 3.0, false),
+            make_holder("SNIPER_5", 3.0, false), // top 5 non-pool = 15.0% (<= 18.0%)
+        ];
+        let (excess_low, pct_low) = evaluate_sniper_overhang(&low_overhang_holders, 5.0);
+        assert!(!excess_low);
+        assert!((pct_low - 15.0).abs() < 1e-6);
     }
 }
 

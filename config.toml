@@ -29,7 +29,7 @@ stagnation_band_max_pct = 5.0
 reentry_cooldown_secs = 3600
 toxic_exit_permanent_ban = true
 min_entry_liquidity_usd = 35000.0
-base_position_size_sol = 0.0225
+base_position_size_sol = 0.018
 min_entry_price_change_pct = 1.5
 max_entry_price_change_pct = 85.0
 min_entry_buy_sell_ratio = 1.25
@@ -60,11 +60,11 @@ dex_roundtrip_fee_pct = 0.60
 jito_tip_lamports = 10000
 emergency_jito_tip_lamports = 75000
 min_entry_sol = 0.010
-max_entry_sol = 0.045
+max_entry_sol = 0.018
 min_gas_reserve_sol = 0.030
-base_position_size_sol = 0.0225
-base_position_pct_nav = 0.045
-max_position_pct_nav = 0.085
+base_position_size_sol = 0.018
+base_position_pct_nav = 0.025
+max_position_pct_nav = 0.030
 
 [sandbox]
 hawkes_mu_baseline = 0.05

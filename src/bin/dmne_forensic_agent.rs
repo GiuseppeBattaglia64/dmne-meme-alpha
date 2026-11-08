@@ -183,6 +183,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("    - Gross Sol Saved / Rescued:  +{:.4} SOL / {:.4} SOL ({:.1}% of lost capital)", avoided_loss_sol, total_loss_sol, capital_saved_pct);
     println!("================================================================================\n");
 
+    // 7. Bi-Directional Forensic Replay across Entire Historical Trade Sample (Winners & Losers)
+    let replay = auditor.run_bidirectional_replay(&records);
+
+    println!("================================================================================");
+    println!("  BI-DIRECTIONAL FORENSIC REPLAY & UNBIASED ALPHA RECONCILIATION                ");
+    println!("================================================================================");
+    println!("  Total Settled Trades Replayed:  {} (Losses: {}, Wins: {})", replay.total_trades_evaluated, replay.total_losses_evaluated, replay.total_wins_evaluated);
+    println!("  Gross Losses Rescued:          +{:>8.4} SOL  ({} losing trades averted)", replay.gross_losses_rescued_sol, replay.rescued_losses_count);
+    println!("  Gross Wins Sacrificed:         -{:>8.4} SOL  ({} winning trades blocked)", replay.gross_wins_sacrificed_sol, replay.sacrificed_wins_count);
+    println!("  ------------------------------------------------------------------------------");
+    println!("  Net Alpha Delta:               {:>+8.4} SOL", replay.net_alpha_delta_sol);
+    println!("  Staged PR Eligibility:         {} (Requires Net Delta > +0.0150 SOL & Sample >= 30)", 
+        if replay.is_pr_eligible { "ELIGIBLE (Net Alpha Positive)" } else { "BLOCKED (Net Alpha Delta <= 0.0150 SOL or Sample < 30)" }
+    );
+    println!("================================================================================\n");
+
     Ok(())
 }
 

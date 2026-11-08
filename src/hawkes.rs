@@ -519,8 +519,8 @@ pub fn discretize_arrival_timestamps_to_counts(
     }
 
     let t_start = sorted[0];
-    let total_duration = (eval_time + 0.5 - t_start).max(bin_width_secs);
-    let num_bins = ((total_duration / bin_width_secs).ceil() as usize).max(1);
+    let total_duration = (eval_time + 0.5 - t_start).min(3600.0).max(bin_width_secs);
+    let num_bins = ((total_duration / bin_width_secs).ceil() as usize).min(1000).max(1);
     let mut bins = vec![0u32; num_bins];
 
     for &t in &sorted {
