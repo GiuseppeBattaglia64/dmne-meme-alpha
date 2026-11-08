@@ -207,6 +207,20 @@ pub struct RejectionGaugeSnapshot {
     pub pct_admitted: f64,
 }
 
+impl RejectionGaugeSnapshot {
+    /// Institutional breakdown of rejection counts by category
+    pub fn rejection_breakdown(&self) -> std::collections::HashMap<&'static str, u64> {
+        let mut map = std::collections::HashMap::new();
+        map.insert("low_liquidity", self.low_liquidity);
+        map.insert("low_conviction", self.low_conviction);
+        map.insert("hawkes_wash", self.hawkes_wash);
+        map.insert("low_dispersion", self.low_dispersion);
+        map.insert("dev_cluster", self.dev_cluster);
+        map.insert("admitted", self.admitted);
+        map
+    }
+}
+
 impl Default for RejectionGaugeSnapshot {
     fn default() -> Self {
         Self::new()

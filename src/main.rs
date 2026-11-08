@@ -139,6 +139,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tokio_tungstenite::connect_async;
+#[allow(unused_imports)]
+use crate::admission::{evaluate_candidate_admission, CandidateTelemetry, RejectionReason};
 use crate::radar::{
     truncate_mint_address, RejectionCategory, RollingRejectionTracker, Stage2AuditEntry,
     Stage2AuditRingBuffer, ROLLING_WINDOW_CAPACITY, STAGE2_AUDIT_LOG_CAPACITY,
