@@ -791,15 +791,16 @@ mod tests {
 
         // Baseline sizing
         let base_size = compute_sandbox_dynamic_size(&ctx, bankroll_sol, 0, &risk_cfg);
-        assert!(base_size >= risk_cfg.min_entry_sol && base_size <= risk_cfg.max_entry_sol);
+        assert!(base_size >= risk_cfg.min_entry_sol && base_size <= risk_cfg.base_position_size_sol);
 
-        // High conviction context (FDV / liq >= 2.0 and high bonding curve)
+        // High conviction context (FDV / liq >= 2.0 and high bonding curve) clamped to base_position_size_sol
         ctx.bonding_curve_pct = 90.0;
         ctx.fdv_usd = 80_000.0;
         ctx.liquidity_usd = 35_000.0;
         let high_size = compute_sandbox_dynamic_size(&ctx, bankroll_sol, 0, &risk_cfg);
         assert!(high_size >= base_size);
-        assert!((high_size - 0.0425).abs() < 1e-4);
+        assert_eq!(high_size, risk_cfg.base_position_size_sol);
+        assert!(high_size <= risk_cfg.base_position_size_sol);
 
         // Solvency & headroom bounds
         let full_headroom = compute_sandbox_dynamic_size(&ctx, bankroll_sol, 4, &risk_cfg);
