@@ -1533,7 +1533,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 json_resp
                             );
                             let _ = socket.write_all(res.as_bytes()).await;
-                        } else if (req.starts_with("GET /") || req.starts_with("HEAD /")) && req.split_whitespace().nth(1).map(|p| p.ends_with(".png") && !p.contains("..")).unwrap_or(false) {
+                        } else if (req.starts_with("GET /") || req.starts_with("HEAD /"))
+                            && req.split_whitespace().nth(1).map(|p| {
+                                let path = p.split('?').next().unwrap_or("");
+                                path.ends_with(".png") && !path.contains("..")
+                            }).unwrap_or(false)
+                        {
                             let is_head = req.starts_with("HEAD ");
                             let path = req.split_whitespace().nth(1).unwrap_or("");
                             let clean_name = path.trim_start_matches('/').split('?').next().unwrap_or("");

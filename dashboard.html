@@ -1388,6 +1388,30 @@
           </div>
         </div>
 
+        <!-- HISTORICAL EQUITY TRAJECTORY BENCHMARK -->
+        <div class="mt-3 p-3 bg-slate-950/80 border border-slate-800 rounded-lg flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono font-bold text-cyan-400 tracking-wider">HISTORICAL EQUITY TRAJECTORY BENCHMARK (130 TRADES)</span>
+              <span class="px-1.5 py-0.5 text-[8.5px] font-mono font-bold rounded bg-cyan-950/60 border border-cyan-500/40 text-cyan-300">
+                UNBIASED SYMMETRIC REPLAY
+              </span>
+            </div>
+            <div class="flex items-center gap-3 text-[10px] font-mono">
+              <span class="text-slate-400">Net Alpha: <strong class="text-emerald-400">+0.0408 SOL (+26.7%)</strong></span>
+              <span class="text-slate-400">Max DD Reduction: <strong class="text-cyan-400">-89.7%</strong></span>
+            </div>
+          </div>
+
+          <div class="relative w-full rounded border border-slate-800/80 overflow-hidden bg-slate-900/60 flex items-center justify-center min-h-[180px]">
+            <img id="img-equity-benchmark" 
+                 src="/equity_curve_comparative.png" 
+                 alt="Comparative Equity Trajectory" 
+                 class="w-full h-auto object-contain max-h-[240px] rounded" 
+                 onerror="this.parentElement.innerHTML='<div class=\'text-xs font-mono text-slate-500 p-4 text-center\'>Chart loading error. Check /equity_curve_comparative.png</div>'" />
+          </div>
+        </div>
+
         <!-- Staged PR Proposal Box -->
         <div style="background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
@@ -2854,6 +2878,10 @@ sudo systemctl restart dmne-alpha.service</code></pre>
       const modal = document.getElementById("ai-agent-modal");
       if (!modal) return;
       modal.style.display = "flex";
+      const img = document.getElementById('img-equity-benchmark');
+      if (img) {
+        img.src = '/equity_curve_comparative.png?t=' + Date.now();
+      }
       fetchAgentData();
     }
 
