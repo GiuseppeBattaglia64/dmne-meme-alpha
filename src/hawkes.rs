@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // DMNE QUANT // MODULE 1: HAWKES POINT PROCESS WASH-TRADING FILTER
 // Conditional intensity estimator: lambda(t) = mu + sum(alpha * exp(-beta * (t - t_i)))
 // Zero magic numbers: all parameters configured via strongly typed structs with serde defaults
@@ -26,6 +27,10 @@ pub struct HawkesConfig {
     /// Ceiling threshold on branching ratio (alpha / beta); >= 0.92 signifies supercritical circular wash churn
     #[serde(default = "default_max_branching_ratio", alias = "branching_ratio_threshold")]
     pub max_branching_ratio: f64,
+
+    /// Minimum order arrival events required for Hawkes estimation (cold-start guard)
+    #[serde(default = "default_hawkes_min_sample_size")]
+    pub min_sample_size: usize,
 
     /// Floor cutoff on Coefficient of Variation (CV = std / mean); < 0.20 indicates robotic deterministic clocking
     #[serde(default = "default_min_cv_periodicity_threshold")]
@@ -76,6 +81,7 @@ pub struct HawkesConfig {
     pub override_min_liquidity_usd: f64,
 }
 
+pub fn default_hawkes_min_sample_size() -> usize { 5 }
 fn default_hawkes_enabled() -> bool { true }
 fn default_mu_baseline() -> f64 { 0.10 }
 fn default_alpha_excitation() -> f64 { 0.20 }
@@ -102,6 +108,7 @@ impl Default for HawkesConfig {
             alpha_excitation: default_alpha_excitation(),
             beta_decay: default_beta_decay(),
             max_branching_ratio: default_max_branching_ratio(),
+            min_sample_size: default_hawkes_min_sample_size(),
             min_cv_periodicity_threshold: default_min_cv_periodicity_threshold(),
             min_observations: default_min_observations(),
             max_inter_arrival_gap_secs: default_max_inter_arrival_gap_secs(),
@@ -119,7 +126,7 @@ impl Default for HawkesConfig {
 }
 
 /// Evaluated metrics produced by the Hawkes wash-trading detector
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HawkesMetrics {
     pub observations_count: usize,
     pub mean_delta_t_secs: f64,
@@ -129,6 +136,48 @@ pub struct HawkesMetrics {
     pub branching_ratio: f64,
     pub is_wash_trading: bool,
     pub rejection_reason: Option<String>,
+}
+
+impl HawkesMetrics {
+    pub fn is_rejected(&self) -> bool {
+        self.is_wash_trading
+    }
+}
+
+/// Result of evaluating an arrival stream through the Hawkes wash-trading gate
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum HawkesEvaluation {
+    /// Cold-start or insufficient arrival observations; bypassed without rejecting
+    PassThrough { reason: String },
+    /// Successfully evaluated against point-process & dispersion metrics
+    Evaluated(HawkesMetrics),
+}
+
+impl HawkesEvaluation {
+    pub fn is_rejected(&self) -> bool {
+        match self {
+            HawkesEvaluation::PassThrough { .. } => false,
+            HawkesEvaluation::Evaluated(m) => m.is_wash_trading,
+        }
+    }
+
+    pub fn is_wash_trading(&self) -> bool {
+        self.is_rejected()
+    }
+
+    pub fn branching_ratio(&self) -> f64 {
+        match self {
+            HawkesEvaluation::PassThrough { .. } => 0.0,
+            HawkesEvaluation::Evaluated(m) => m.branching_ratio,
+        }
+    }
+
+    pub fn metrics(&self) -> Option<&HawkesMetrics> {
+        match self {
+            HawkesEvaluation::PassThrough { .. } => None,
+            HawkesEvaluation::Evaluated(m) => Some(m),
+        }
+    }
 }
 
 /// Extracts inter-arrival times (delta_t) from time-ordered sequence of timestamps
@@ -256,6 +305,20 @@ pub fn evaluate_hawkes_filter(
     let (mean_dt, std_dt, cv) = compute_regularity_metrics(&deltas);
     let (alpha_hat, branching) = fit_hawkes_mle_alpha(&sorted_ts, cfg.mu_baseline, cfg.beta_decay);
     let intensity = calculate_conditional_intensity(&sorted_ts, eval_time, cfg.mu_baseline, alpha_hat, cfg.beta_decay);
+
+    // Cold-start guard: If arrival observations count < min_sample_size, bypass wash-trading gate
+    if sorted_ts.len() < cfg.min_sample_size {
+        return HawkesMetrics {
+            observations_count: deltas.len(),
+            mean_delta_t_secs: mean_dt,
+            std_delta_t_secs: std_dt,
+            cv_regularity: cv,
+            intensity_at_entry: intensity,
+            branching_ratio: branching,
+            is_wash_trading: false,
+            rejection_reason: None,
+        };
+    }
 
     let mut is_wash = false;
     let mut reason = None;
@@ -490,9 +553,75 @@ pub fn evaluate_hawkes_filter_with_override(
 }
 
 /// Unified evaluator for Hawkes point process wash-trading filtering
-pub struct HawkesEvaluator;
+#[derive(Debug, Clone)]
+pub struct HawkesEvaluator {
+    pub config: HawkesConfig,
+}
 
 impl HawkesEvaluator {
+    pub fn new(config: HawkesConfig) -> Self {
+        Self { config }
+    }
+
+    /// Evaluates arrival timestamps against the Hawkes wash-trading gate.
+    /// If sample size < min_sample_size, returns PassThrough with descriptive reason.
+    pub fn evaluate_gate(
+        &self,
+        arrival_timestamps: &[f64],
+        eval_time: f64,
+        volume_5m_usd: f64,
+        buy_sell_ratio: f64,
+        liquidity_usd: f64,
+    ) -> HawkesEvaluation {
+        if arrival_timestamps.len() < self.config.min_sample_size {
+            return HawkesEvaluation::PassThrough {
+                reason: format!(
+                    "insufficient_sample_{}_lt_{}",
+                    arrival_timestamps.len(),
+                    self.config.min_sample_size
+                ),
+            };
+        }
+        let metrics = Self::evaluate(
+            arrival_timestamps,
+            eval_time,
+            volume_5m_usd,
+            buy_sell_ratio,
+            liquidity_usd,
+            &self.config,
+        );
+        HawkesEvaluation::Evaluated(metrics)
+    }
+
+    /// Static version of evaluate_gate taking an explicit config reference
+    pub fn evaluate_gate_static(
+        arrival_timestamps: &[f64],
+        eval_time: f64,
+        volume_5m_usd: f64,
+        buy_sell_ratio: f64,
+        liquidity_usd: f64,
+        cfg: &HawkesConfig,
+    ) -> HawkesEvaluation {
+        if arrival_timestamps.len() < cfg.min_sample_size {
+            return HawkesEvaluation::PassThrough {
+                reason: format!(
+                    "insufficient_sample_{}_lt_{}",
+                    arrival_timestamps.len(),
+                    cfg.min_sample_size
+                ),
+            };
+        }
+        let metrics = Self::evaluate(
+            arrival_timestamps,
+            eval_time,
+            volume_5m_usd,
+            buy_sell_ratio,
+            liquidity_usd,
+            cfg,
+        );
+        HawkesEvaluation::Evaluated(metrics)
+    }
+
     pub fn evaluate(
         timestamps: &[f64],
         eval_time: f64,
@@ -533,6 +662,81 @@ mod tests {
         assert_eq!(cfg.max_branching_ratio, 1.25);
         assert_eq!(cfg.min_cv_periodicity_threshold, 0.12);
         assert_eq!(cfg.min_observations, 2);
+        assert_eq!(cfg.min_sample_size, 5);
+    }
+
+    #[test]
+    fn test_hawkes_cold_start_insufficient_sample_bypasses_gate() {
+        let cfg = HawkesConfig::default();
+        assert_eq!(cfg.min_sample_size, 5);
+
+        let evaluator = HawkesEvaluator::new(cfg.clone());
+
+        for n in 0..5 {
+            // Generate n timestamps with ultra-short intervals (0.01s) that would otherwise trigger periodicity
+            let timestamps: Vec<f64> = (0..n).map(|i| 1000.0 + i as f64 * 0.01).collect();
+            let eval = evaluator.evaluate_gate(&timestamps, 1000.0 + n as f64 * 0.01, 10_000.0, 1.0, 20_000.0);
+
+            match &eval {
+                HawkesEvaluation::PassThrough { reason } => {
+                    assert!(reason.contains("insufficient_sample"));
+                    assert_eq!(reason, &format!("insufficient_sample_{}_lt_5", n));
+                    assert!(!eval.is_rejected());
+                    assert!(!eval.is_wash_trading());
+                }
+                _ => panic!("Expected PassThrough for sample size {}", n),
+            }
+
+            // Verify static evaluation helper
+            let eval_static = HawkesEvaluator::evaluate_gate_static(
+                &timestamps,
+                1000.0 + n as f64 * 0.01,
+                10_000.0,
+                1.0,
+                20_000.0,
+                &cfg,
+            );
+            assert!(!eval_static.is_rejected());
+            assert!(matches!(eval_static, HawkesEvaluation::PassThrough { .. }));
+
+            // Verify standard metric evaluation bypasses wash trading
+            let metrics = HawkesEvaluator::evaluate(
+                &timestamps,
+                1000.0 + n as f64 * 0.01,
+                10_000.0,
+                1.0,
+                20_000.0,
+                &cfg,
+            );
+            assert!(!metrics.is_wash_trading);
+            assert!(!metrics.is_rejected());
+            assert!(metrics.rejection_reason.is_none());
+        }
+    }
+
+    #[test]
+    fn test_hawkes_evaluates_normally_with_sufficient_sample() {
+        let cfg = HawkesConfig::default();
+        assert_eq!(cfg.min_sample_size, 5);
+
+        let evaluator = HawkesEvaluator::new(cfg.clone());
+
+        // 5+ timestamps with robotic periodicity
+        let timestamps: Vec<f64> = (0..6).map(|i| 1000.0 + i as f64 * 2.0).collect();
+        let eval = evaluator.evaluate_gate(&timestamps, 1012.0, 10_000.0, 1.0, 20_000.0);
+
+        match eval {
+            HawkesEvaluation::Evaluated(metrics) => {
+                assert!(metrics.observations_count >= 5);
+                assert!(metrics.branching_ratio >= 0.0);
+                assert!(metrics.cv_regularity >= 0.0);
+                assert!(metrics.is_rejected());
+                assert!(metrics.is_wash_trading);
+            }
+            HawkesEvaluation::PassThrough { .. } => {
+                panic!("Expected Evaluated for sample size >= 5");
+            }
+        }
     }
 
     #[test]

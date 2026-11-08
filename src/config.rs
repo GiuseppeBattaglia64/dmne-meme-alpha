@@ -2,6 +2,8 @@
 // Elimination of Magic Numbers via Typed Institutional Config Schema
 
 use serde::{Deserialize, Serialize};
+#[allow(unused_imports)]
+pub use crate::hawkes::{default_hawkes_min_sample_size, HawkesConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineConfig {
