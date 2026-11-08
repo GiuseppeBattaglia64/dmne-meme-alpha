@@ -90,3 +90,18 @@ rpc_backfill_timeout_ms = 2500
 cache_path = "logs/sandbox_onchain_cache.json"
 report_path = "logs/sandbox_ablation_report.csv"
 
+[hawkes]
+enabled = true
+branching_ratio_threshold = 1.25     # eta_hat threshold for supercritical wash self-excitation
+decay_rate = 1.0                     # beta decay in seconds^-1
+min_dispersion_threshold = 0.35      # minimum entropy required for admission
+volume_override_usd = 60000.0        # high-liquidity pass-through ceiling
+
+[dynamic_exits]
+enabled = true
+vol_multiplier = 1.65                # k_vol multiplier on realized tick volatility
+min_trail_pct = 8.0                  # minimum trailing band width (%)
+max_trail_pct = 22.0                 # maximum trailing band width (%)
+mfe_activation_pct = 30.0            # peak MFE threshold to arm dynamic lock-in floor
+min_locked_floor_pct = 12.0          # absolute floor guaranteed once armed
+

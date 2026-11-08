@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 /// Strongly typed configuration envelope for the Hawkes point process wash-trading filter
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HawkesConfig {
+    /// Whether the Hawkes point process wash filter is enabled
+    #[serde(default = "default_hawkes_enabled")]
+    pub enabled: bool,
+
     /// Exogenous baseline Poisson arrival rate (events per second)
     #[serde(default = "default_mu_baseline")]
     pub mu_baseline: f64,
@@ -16,11 +20,11 @@ pub struct HawkesConfig {
     pub alpha_excitation: f64,
 
     /// Exponential memory decay rate (s^-1)
-    #[serde(default = "default_beta_decay")]
+    #[serde(default = "default_beta_decay", alias = "decay_rate")]
     pub beta_decay: f64,
 
     /// Ceiling threshold on branching ratio (alpha / beta); >= 0.92 signifies supercritical circular wash churn
-    #[serde(default = "default_max_branching_ratio")]
+    #[serde(default = "default_max_branching_ratio", alias = "branching_ratio_threshold")]
     pub max_branching_ratio: f64,
 
     /// Floor cutoff on Coefficient of Variation (CV = std / mean); < 0.20 indicates robotic deterministic clocking
@@ -60,7 +64,7 @@ pub struct HawkesConfig {
     pub min_epoch_bins: usize,
 
     /// Minimum 5-minute volume in USD to trigger organic breakout override
-    #[serde(default = "default_override_min_volume_usd")]
+    #[serde(default = "default_override_min_volume_usd", alias = "volume_override_usd")]
     pub override_min_volume_usd: f64,
 
     /// Minimum buy/sell ratio to trigger organic breakout override
@@ -72,6 +76,7 @@ pub struct HawkesConfig {
     pub override_min_liquidity_usd: f64,
 }
 
+fn default_hawkes_enabled() -> bool { true }
 fn default_mu_baseline() -> f64 { 0.10 }
 fn default_alpha_excitation() -> f64 { 0.20 }
 fn default_beta_decay() -> f64 { 0.15 }
@@ -92,6 +97,7 @@ fn default_override_min_liquidity_usd() -> f64 { 25_000.0 }
 impl Default for HawkesConfig {
     fn default() -> Self {
         Self {
+            enabled: default_hawkes_enabled(),
             mu_baseline: default_mu_baseline(),
             alpha_excitation: default_alpha_excitation(),
             beta_decay: default_beta_decay(),
@@ -481,6 +487,37 @@ pub fn evaluate_hawkes_filter_with_override(
         }
     }
     metrics
+}
+
+/// Unified evaluator for Hawkes point process wash-trading filtering
+pub struct HawkesEvaluator;
+
+impl HawkesEvaluator {
+    pub fn evaluate(
+        timestamps: &[f64],
+        eval_time: f64,
+        volume_5m_usd: f64,
+        buy_sell_ratio: f64,
+        liquidity_usd: f64,
+        cfg: &HawkesConfig,
+    ) -> HawkesMetrics {
+        evaluate_hawkes_filter_with_override(
+            timestamps,
+            eval_time,
+            volume_5m_usd,
+            buy_sell_ratio,
+            liquidity_usd,
+            cfg,
+        )
+    }
+
+    /// Evaluates discrete orderflow dispersion directly from arrival counts
+    pub fn evaluate_dispersion(
+        counts: &[u32],
+        cfg: &HawkesConfig,
+    ) -> DiscreteDispersionMetrics {
+        evaluate_discrete_orderflow_dispersion_with_config(counts, cfg)
+    }
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@
 // Multi-Tiered Convex Exit Engine, Uncapped Breakeven Floor Guard & Moonbag Trailing Runner
 
 use serde::{Deserialize, Serialize};
-use crate::config::RiskConfig;
+use crate::config::{DynamicExitsConfig, RiskConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivePosition {
@@ -22,6 +22,8 @@ pub struct ActivePosition {
     pub jito_tip_lamports: u64,
     #[serde(default = "default_position_execution_priority")]
     pub execution_priority: String,
+    #[serde(default)]
+    pub price_buffer: Vec<f64>,
 }
 
 fn default_position_tip_lamports() -> u64 { 10_000 }
@@ -166,7 +168,18 @@ pub fn evaluate_position_exit(
         };
     }
 
-    // 6. Moonbag Trailing Stop (Standard tip)
+    // Volatility-Scaled Dynamic Exit Bands evaluation
+    let dyn_band = if cfg.dynamic_exits.enabled {
+        Some(compute_volatility_scaled_exit_band(
+            &pos.price_buffer,
+            pos.peak_pnl_pct,
+            &cfg.dynamic_exits,
+        ))
+    } else {
+        None
+    };
+
+    // 6. Moonbag Trailing Stop (Dynamic or Static)
     let peak_mult = 1.0 + (pos.peak_pnl_pct / 100.0);
     let curr_mult = 1.0 + (pnl_pct / 100.0);
     let peak_drawdown_pct = if peak_mult > 0.0 {
@@ -175,15 +188,44 @@ pub fn evaluate_position_exit(
         0.0
     };
 
-    if pos.tp1_executed && peak_drawdown_pct >= cfg.runner_trailing_drop_pct {
-        return ExitAction::FullExit {
-            rule_label: format!(
-                "Trailing Runner (-{:.0}% from +{:.1}% Peak)",
-                cfg.runner_trailing_drop_pct, pos.peak_pnl_pct
-            ),
-            is_toxic: false,
-            tip_lamports: cfg.jito_tip_lamports,
-        };
+    if pos.tp1_executed {
+        if let Some(ref band) = dyn_band {
+            if peak_drawdown_pct >= band.delta_trail || pnl_pct <= band.dynamic_floor {
+                return ExitAction::FullExit {
+                    rule_label: format!(
+                        "Dynamic Trailing Runner (-{:.1}% from +{:.1}% Peak | Floor +{:.1}%)",
+                        band.delta_trail, pos.peak_pnl_pct, band.dynamic_floor
+                    ),
+                    is_toxic: false,
+                    tip_lamports: cfg.jito_tip_lamports,
+                };
+            }
+        } else if peak_drawdown_pct >= cfg.runner_trailing_drop_pct {
+            return ExitAction::FullExit {
+                rule_label: format!(
+                    "Trailing Runner (-{:.0}% from +{:.1}% Peak)",
+                    cfg.runner_trailing_drop_pct, pos.peak_pnl_pct
+                ),
+                is_toxic: false,
+                tip_lamports: cfg.jito_tip_lamports,
+            };
+        }
+    }
+
+    // 6b. Dynamic Ratchet Floor for Pre-TP1 Runups (MFE >= mfe_activation_pct)
+    if !pos.tp1_executed {
+        if let Some(ref band) = dyn_band {
+            if band.is_ratchet_active && pnl_pct <= band.dynamic_floor {
+                return ExitAction::FullExit {
+                    rule_label: format!(
+                        "Dynamic Ratchet Floor (+{:.1}% from +{:.1}% Peak)",
+                        band.dynamic_floor, pos.peak_pnl_pct
+                    ),
+                    is_toxic: false,
+                    tip_lamports: cfg.jito_tip_lamports,
+                };
+            }
+        }
     }
 
     // 7. Uncapped Breakeven Guard (Standard tip)
@@ -470,6 +512,64 @@ pub fn format_position_status(pos: &ActivePosition, cfg: &RiskConfig) -> String 
     }
 }
 
+/// Volatility-scaled dynamic exit evaluation envelope
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VolatilityScaledExitBand {
+    pub sigma_realized: f64,
+    pub delta_trail: f64,
+    pub dynamic_floor: f64,
+    pub is_ratchet_active: bool,
+}
+
+/// Computes realized micro-volatility in percentage points from recent price buffer ticks
+pub fn compute_rolling_tick_volatility(ticks: &[f64]) -> f64 {
+    if ticks.len() < 2 {
+        return 6.0; // Default empirical baseline tick volatility in %
+    }
+    let mut returns = Vec::with_capacity(ticks.len() - 1);
+    for i in 1..ticks.len() {
+        let p0 = ticks[i - 1];
+        let p1 = ticks[i];
+        if p0 > 0.0 && p1 > 0.0 {
+            returns.push(((p1 - p0) / p0) * 100.0);
+        }
+    }
+    if returns.len() < 2 {
+        return 6.0;
+    }
+    let n = returns.len() as f64;
+    let mean = returns.iter().sum::<f64>() / n;
+    let variance = returns.iter().map(|&r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    let s_tick = variance.sqrt();
+    if s_tick.is_finite() && s_tick > 0.0 {
+        s_tick
+    } else {
+        6.0
+    }
+}
+
+/// Evaluates dynamic trailing delta and ratcheted profit floor from tick volatility and MFE
+pub fn compute_volatility_scaled_exit_band(
+    ticks: &[f64],
+    peak_mfe: f64,
+    cfg: &DynamicExitsConfig,
+) -> VolatilityScaledExitBand {
+    let sigma_realized = compute_rolling_tick_volatility(ticks);
+    let delta_trail = (cfg.vol_multiplier * sigma_realized).clamp(cfg.min_trail_pct, cfg.max_trail_pct);
+    let is_ratchet_active = peak_mfe >= cfg.mfe_activation_pct;
+    let dynamic_floor = if is_ratchet_active {
+        cfg.min_locked_floor_pct.max(peak_mfe - delta_trail)
+    } else {
+        0.0
+    };
+    VolatilityScaledExitBand {
+        sigma_realized,
+        delta_trail,
+        dynamic_floor,
+        is_ratchet_active,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -489,6 +589,7 @@ mod tests {
             opened_at_epoch: 1000,
             jito_tip_lamports: 10_000,
             execution_priority: "STANDARD_ROUTINE".to_string(),
+            price_buffer: Vec::new(),
         }
     }
 
@@ -558,7 +659,8 @@ mod tests {
     #[test]
     fn test_moonbag_trailing_runner() {
         let mut pos = setup_test_position();
-        let cfg = RiskConfig::default();
+        let mut cfg = RiskConfig::default();
+        cfg.dynamic_exits.enabled = false;
 
         // Reach +60% (triggers TP1)
         let _ = evaluate_position_exit(&mut pos, 1.60, 1050, &cfg);
@@ -580,7 +682,8 @@ mod tests {
     #[test]
     fn test_breakeven_guard() {
         let mut pos = setup_test_position();
-        let cfg = RiskConfig::default();
+        let mut cfg = RiskConfig::default();
+        cfg.dynamic_exits.enabled = false;
 
         // Climb to +36% (arms breakeven guard, peak = 36%)
         let _ = evaluate_position_exit(&mut pos, 1.36, 1050, &cfg);
@@ -596,6 +699,55 @@ mod tests {
                 assert_eq!(tip_lamports, cfg.jito_tip_lamports);
             }
             _ => panic!("Expected Breakeven Guard exit"),
+        }
+    }
+
+    #[test]
+    fn test_volatility_scaled_dynamic_exits() {
+        let mut pos = setup_test_position();
+        let cfg = RiskConfig::default();
+        assert!(cfg.dynamic_exits.enabled);
+
+        // Feed some realistic ticks with ~8% volatility
+        pos.price_buffer = vec![1.00, 1.08, 1.02, 1.10, 1.05, 1.15, 1.25, 1.35];
+        let sigma = compute_rolling_tick_volatility(&pos.price_buffer);
+        assert!(sigma > 0.0);
+
+        // 1. Dynamic Ratchet Floor test (Peak +35% >= 30% MFE activation, but before TP1)
+        let _ = evaluate_position_exit(&mut pos, 1.35, 1050, &cfg);
+        assert!(!pos.tp1_executed);
+        assert!((pos.peak_pnl_pct - 35.0).abs() < 1e-6);
+
+        let band = compute_volatility_scaled_exit_band(&pos.price_buffer, pos.peak_pnl_pct, &cfg.dynamic_exits);
+        assert!(band.is_ratchet_active);
+        assert!(band.dynamic_floor >= cfg.dynamic_exits.min_locked_floor_pct);
+
+        // Retrace to below dynamic_floor (e.g. at price 1.10 = +10% PnL < dynamic_floor >= 12%)
+        let action = evaluate_position_exit(&mut pos, 1.10, 1060, &cfg);
+        match action {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
+                assert!(rule_label.contains("Dynamic Ratchet Floor"));
+                assert!(!is_toxic);
+                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+            }
+            _ => panic!("Expected Dynamic Ratchet Floor exit"),
+        }
+
+        // 2. Dynamic Trailing Runner test after TP1 (+60%)
+        let mut pos2 = setup_test_position();
+        pos2.price_buffer = vec![1.00, 1.10, 1.20, 1.35, 1.50, 1.60];
+        let _ = evaluate_position_exit(&mut pos2, 1.60, 1050, &cfg);
+        assert!(pos2.tp1_executed);
+
+        // Pull down from 1.60 to 1.30 (drawdown = (1.60 - 1.30)/1.60 = 18.75%)
+        let action2 = evaluate_position_exit(&mut pos2, 1.30, 1065, &cfg);
+        match action2 {
+            ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
+                assert!(rule_label.contains("Dynamic Trailing Runner"));
+                assert!(!is_toxic);
+                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+            }
+            _ => panic!("Expected Dynamic Trailing Runner exit"),
         }
     }
 

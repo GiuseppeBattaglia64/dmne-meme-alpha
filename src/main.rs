@@ -46,6 +46,7 @@ mod amm;
 mod ws_ingest;
 mod risk;
 mod sandbox;
+mod hawkes;
 
 pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
 
@@ -1322,6 +1323,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &eval_cfg.risk,
                         );
 
+                        let hawkes_pop_res: Result<(), String> = if eval_cfg.hawkes.enabled {
+                            let arrivals = eval_shadow.get_arrival_timestamps_secs(&candidate.token_mint).await;
+                            let now_f64 = chrono::Utc::now().timestamp() as f64;
+                            let m = hawkes::HawkesEvaluator::evaluate(
+                                &arrivals,
+                                now_f64,
+                                final_snap.m5_volume_usd,
+                                final_snap.buy_sell_ratio,
+                                final_snap.liquidity_usd,
+                                &eval_cfg.hawkes,
+                            );
+                            if m.is_wash_trading {
+                                Err(format!("HAWKES_WASH (eta: {:.2})", m.branching_ratio))
+                            } else {
+                                Ok(())
+                            }
+                        } else {
+                            Ok(())
+                        };
+
                         if let Err(reject_reason) = tick_res {
                             println!("[CONFIRMATION REJECT] Candidate {} ({}) failed live tick gate: {} (Ticks: {:?})", 
                                 candidate.symbol, candidate.token_mint, reject_reason, prices);
@@ -1357,6 +1378,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 final_snap.m5_sells,
                                 false,
                                 Some(reject_reason.to_string()),
+                            );
+                        } else if let Err(reject_reason) = hawkes_pop_res {
+                            println!("[HAWKES WASH REJECT] Candidate {} ({}) triggered supercritical wash: {}", 
+                                candidate.symbol, candidate.token_mint, reject_reason);
+                            let mut state = eval_state.write().await;
+                            let now_epoch = chrono::Utc::now().timestamp() as u64;
+                            state.rejected_candidates.insert(candidate.token_mint.clone(), now_epoch);
+                            if !candidate.symbol.is_empty() {
+                                state.rejected_candidates.insert(candidate.symbol.clone(), now_epoch);
+                            }
+                            state.rejections_count += 1;
+                            state.record_stage2_audit(
+                                &candidate.symbol,
+                                &candidate.token_mint,
+                                final_snap.liquidity_usd,
+                                reject_reason.clone(),
+                                "REJECT: HAWKES_WASH".to_string(),
+                                false,
+                                RejectionCategory::HawkesWash,
+                            );
+                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                            let _ = eval_audit_tx.send(db::AuditLogPayload {
+                                token_mint: candidate.token_mint.clone(),
+                                pair_address: final_snap.pair_address.clone(),
+                                dex_id: candidate.dex_id.clone(),
+                                liquidity_usd: final_snap.liquidity_usd,
+                                hhi_concentration: 0.35,
+                                mint_revoked: false,
+                                freeze_revoked: false,
+                                lp_burned: false,
+                                admitted: false,
+                                rejection_reason: "HAWKES_WASH".to_string(),
+                            });
+                            eval_shadow.log_evaluation(
+                                &candidate.token_mint,
+                                &candidate.symbol,
+                                *prices.last().unwrap_or(&final_snap.price_sol),
+                                final_snap.liquidity_usd,
+                                final_snap.fdv_usd,
+                                final_snap.m5_volume_usd,
+                                final_snap.m5_buys,
+                                final_snap.m5_sells,
+                                false,
+                                Some("HAWKES_WASH".to_string()),
                             );
                         } else if let Err(reject_reason) = snapshot_res {
                             println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated during confirmation: {}", 
@@ -1576,6 +1642,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     opened_at_epoch: pos.entry_timestamp_epoch,
                     jito_tip_lamports: pos.jito_tip_lamports,
                     execution_priority: pos.execution_priority.clone(),
+                    price_buffer: pos.price_buffer.clone(),
                 };
 
                 let action = risk::evaluate_position_exit(
@@ -1963,6 +2030,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let top10_concentration = 15.0; // Default dispersed baseline
 
                                         
+                                        // Module 1: Hawkes Point Process Wash-Trading Filter
+                                        if scanner_cfg.hawkes.enabled {
+                                            let arrival_timestamps = scanner_shadow.get_arrival_timestamps_secs(&mint).await;
+                                            let now_epoch_f64 = chrono::Utc::now().timestamp() as f64;
+                                            let buy_sell_ratio = if snap.m5_sells > 0 {
+                                                snap.m5_buys as f64 / snap.m5_sells as f64
+                                            } else {
+                                                2.0
+                                            };
+                                            let hawkes_metrics = hawkes::HawkesEvaluator::evaluate(
+                                                &arrival_timestamps,
+                                                now_epoch_f64,
+                                                snap.m5_volume_usd,
+                                                buy_sell_ratio,
+                                                liq,
+                                                &scanner_cfg.hawkes,
+                                            );
+
+                                            if hawkes_metrics.is_wash_trading {
+                                                let metric_label = format!("eta: {:.2}", hawkes_metrics.branching_ratio);
+                                                {
+                                                    let mut g = scanner_state.write().await;
+                                                    g.rejections_count += 1;
+                                                    g.record_stage2_audit(
+                                                        &sym,
+                                                        &mint,
+                                                        liq,
+                                                        metric_label,
+                                                        "REJECT: HAWKES_WASH".to_string(),
+                                                        false,
+                                                        RejectionCategory::HawkesWash,
+                                                    );
+                                                }
+                                                let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                    token_mint: mint.clone(),
+                                                    pair_address: pair_addr.clone(),
+                                                    dex_id: dex_id.to_string(),
+                                                    liquidity_usd: liq,
+                                                    hhi_concentration: 0.35,
+                                                    mint_revoked: false,
+                                                    freeze_revoked: false,
+                                                    lp_burned: false,
+                                                    admitted: false,
+                                                    rejection_reason: "HAWKES_WASH".to_string(),
+                                                });
+                                                scanner_shadow.log_evaluation(
+                                                    &mint,
+                                                    &sym,
+                                                    snap.price_sol,
+                                                    liq,
+                                                    fdv,
+                                                    snap.m5_volume_usd,
+                                                    snap.m5_buys,
+                                                    snap.m5_sells,
+                                                    false,
+                                                    Some("HAWKES_WASH".to_string()),
+                                                );
+                                                continue;
+                                            }
+                                        }
+
                                         // Shannon Entropy Filter: Reject degenerate spam tickers (e.g., AAAAAAAAAAAA)
                                         if sym.len() >= 4 && calculate_string_entropy(&sym) < scanner_cfg.min_symbol_entropy {
                                             {

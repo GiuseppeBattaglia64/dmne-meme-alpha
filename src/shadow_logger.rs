@@ -139,6 +139,16 @@ impl HawkesArrivalTracker {
             Vec::new()
         }
     }
+
+    /// Retrieves arrival timestamps in seconds for a token mint
+    pub async fn get_arrival_timestamps_secs(&self, token_mint: &str) -> Vec<f64> {
+        let map = self.arrivals.read().await;
+        if let Some(list) = map.get(token_mint) {
+            list.iter().map(|&ms| ms as f64 / 1000.0).collect()
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 /// Queries Solana JSON-RPC for token largest accounts and total supply, returning top 10 shares and Shannon entropy
@@ -286,6 +296,10 @@ impl ShadowHandle {
     pub fn with_rpc_timeout_secs(mut self, secs: u64) -> Self {
         self.rpc_timeout_secs = secs;
         self
+    }
+
+    pub async fn get_arrival_timestamps_secs(&self, token_mint: &str) -> Vec<f64> {
+        self.hawkes_tracker.get_arrival_timestamps_secs(token_mint).await
     }
 
     /// Non-blocking evaluation logger that records Hawkes deltas, VPIN slices, and RPC holder entropy

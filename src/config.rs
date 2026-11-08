@@ -49,6 +49,12 @@ pub struct EngineConfig {
     // Institutional Risk Envelope
     pub risk: RiskConfig,
 
+    // Point Process Wash-Trading Filter
+    pub hawkes: crate::hawkes::HawkesConfig,
+
+    // Volatility-Scaled Dynamic Exit Bands
+    pub dynamic_exits: DynamicExitsConfig,
+
     // Sandbox & Replay Configuration
     pub sandbox: SandboxConfig,
 }
@@ -156,6 +162,44 @@ pub struct RiskConfig {
     pub max_entry_sol: f64,
     #[serde(default = "default_min_gas_reserve_sol")]
     pub min_gas_reserve_sol: f64,
+    #[serde(default)]
+    pub dynamic_exits: DynamicExitsConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicExitsConfig {
+    #[serde(default = "default_dynamic_exits_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_vol_multiplier")]
+    pub vol_multiplier: f64,
+    #[serde(default = "default_min_trail_pct")]
+    pub min_trail_pct: f64,
+    #[serde(default = "default_max_trail_pct")]
+    pub max_trail_pct: f64,
+    #[serde(default = "default_mfe_activation_pct")]
+    pub mfe_activation_pct: f64,
+    #[serde(default = "default_min_locked_floor_pct")]
+    pub min_locked_floor_pct: f64,
+}
+
+fn default_dynamic_exits_enabled() -> bool { true }
+fn default_vol_multiplier() -> f64 { 1.65 }
+fn default_min_trail_pct() -> f64 { 8.0 }
+fn default_max_trail_pct() -> f64 { 22.0 }
+fn default_mfe_activation_pct() -> f64 { 30.0 }
+fn default_min_locked_floor_pct() -> f64 { 12.0 }
+
+impl Default for DynamicExitsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_dynamic_exits_enabled(),
+            vol_multiplier: default_vol_multiplier(),
+            min_trail_pct: default_min_trail_pct(),
+            max_trail_pct: default_max_trail_pct(),
+            mfe_activation_pct: default_mfe_activation_pct(),
+            min_locked_floor_pct: default_min_locked_floor_pct(),
+        }
+    }
 }
 
 fn default_flash_dump_tick_pct() -> f64 { -15.0 }
@@ -256,6 +300,7 @@ impl Default for RiskConfig {
             min_entry_sol: 0.010,
             max_entry_sol: 0.045,
             min_gas_reserve_sol: 0.030,
+            dynamic_exits: DynamicExitsConfig::default(),
         }
     }
 }
@@ -385,6 +430,8 @@ impl SandboxConfig {
 struct TomlConfigFile {
     pub risk: Option<RiskConfig>,
     pub sandbox: Option<SandboxConfig>,
+    pub hawkes: Option<crate::hawkes::HawkesConfig>,
+    pub dynamic_exits: Option<DynamicExitsConfig>,
 }
 
 impl Default for EngineConfig {
@@ -422,6 +469,8 @@ impl Default for EngineConfig {
             min_sim_cu_threshold: 15_000,        // Rejection floor for no-op transactions
             default_rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
             risk: RiskConfig::default(),
+            hawkes: crate::hawkes::HawkesConfig::default(),
+            dynamic_exits: DynamicExitsConfig::default(),
             sandbox: SandboxConfig::default(),
         }
     }
@@ -444,6 +493,15 @@ impl EngineConfig {
                     cfg.tranche_2_scale_ratio = r.tp2_sell_fraction;
                     cfg.stagnation_ttl_seconds = r.stagnation_ttl_secs as i64;
                     cfg.risk = r;
+                }
+                if let Some(h) = toml_file.hawkes {
+                    println!("[CONFIG] Loaded institutional [hawkes] envelope from config.toml");
+                    cfg.hawkes = h;
+                }
+                if let Some(de) = toml_file.dynamic_exits {
+                    println!("[CONFIG] Loaded institutional [dynamic_exits] envelope from config.toml");
+                    cfg.risk.dynamic_exits = de.clone();
+                    cfg.dynamic_exits = de;
                 }
                 if let Some(sb) = toml_file.sandbox {
                     cfg.sandbox = sb;
