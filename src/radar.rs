@@ -11,10 +11,15 @@
 //!
 //! Language: English only | Zero magic numbers | Institutional Type-Safe Schema
 
+use std::collections::VecDeque;
+use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 
 /// Maximum fixed capacity of the Stage 2 Deep Audit Log ring buffer
 pub const STAGE2_AUDIT_LOG_CAPACITY: usize = 8;
+
+/// Fixed capacity for the rolling pre-trade rejection sliding window
+pub const ROLLING_WINDOW_CAPACITY: usize = 1000;
 
 /// Rejection classification categories for the Pre-Trade Rejection Gauge
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,6 +49,142 @@ impl RejectionCategory {
             RejectionCategory::Admitted => "ADMITTED",
         }
     }
+
+    pub fn index(&self) -> usize {
+        match self {
+            RejectionCategory::LowLiquidity => 0,
+            RejectionCategory::LowConviction => 1,
+            RejectionCategory::HawkesWash => 2,
+            RejectionCategory::LowDispersion => 3,
+            RejectionCategory::DevCluster => 4,
+            RejectionCategory::Admitted => 5,
+        }
+    }
+}
+
+/// O(1) sliding window tracker maintaining rolling category counts over the last 1,000 evaluations
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RollingRejectionTracker {
+    window: VecDeque<RejectionCategory>,
+    counts: [u32; 6], // [LowLiquidity, LowConviction, HawkesWash, LowDispersion, DevCluster, Admitted]
+    capacity: usize,
+}
+
+impl Default for RollingRejectionTracker {
+    fn default() -> Self {
+        Self::new(ROLLING_WINDOW_CAPACITY)
+    }
+}
+
+impl RollingRejectionTracker {
+    pub fn new(capacity: usize) -> Self {
+        let cap = capacity.max(1);
+        Self {
+            window: VecDeque::with_capacity(cap),
+            counts: [0; 6],
+            capacity: cap,
+        }
+    }
+
+    /// Records an evaluation category into the sliding window in O(1) time
+    pub fn record(&mut self, category: RejectionCategory) {
+        if self.window.len() >= self.capacity {
+            if let Some(old) = self.window.pop_front() {
+                let idx = old.index();
+                if self.counts[idx] > 0 {
+                    self.counts[idx] -= 1;
+                }
+            }
+        }
+        self.counts[category.index()] += 1;
+        self.window.push_back(category);
+    }
+
+    pub fn len(&self) -> usize {
+        self.window.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.window.is_empty()
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub fn counts(&self) -> [u32; 6] {
+        self.counts
+    }
+
+    /// Produces a normalized telemetry snapshot over the active rolling window
+    pub fn snapshot(&self) -> RejectionGaugeTelemetry {
+        let total = self.window.len() as f64;
+        let count_liq = self.counts[0] as u64;
+        let count_conv = self.counts[1] as u64;
+        let count_wash = self.counts[2] as u64;
+        let count_disp = self.counts[3] as u64;
+        let count_dev = self.counts[4] as u64;
+        let count_admitted = self.counts[5] as u64;
+
+        let pct = |count: u64| -> f64 {
+            if total > 0.0 {
+                ((count as f64 / total) * 100.0 * 10.0).round() / 10.0
+            } else {
+                0.0
+            }
+        };
+
+        RejectionGaugeTelemetry {
+            low_liquidity: count_liq,
+            count_low_conviction: count_conv,
+            hawkes_wash: count_wash,
+            low_dispersion: count_disp,
+            dev_cluster: count_dev,
+            admitted: count_admitted,
+            total_evaluated: self.window.len() as u64,
+            pct_low_liquidity: pct(count_liq),
+            pct_low_conviction: pct(count_conv),
+            pct_hawkes_wash: pct(count_wash),
+            pct_low_dispersion: pct(count_disp),
+            pct_dev_cluster: pct(count_dev),
+            pct_admitted: pct(count_admitted),
+            tracker: None,
+        }
+    }
+}
+
+/// Thread-safe concurrent wrapper around RollingRejectionTracker
+#[derive(Debug)]
+pub struct ConcurrentRollingRejectionTracker {
+    inner: RwLock<RollingRejectionTracker>,
+}
+
+impl Default for ConcurrentRollingRejectionTracker {
+    fn default() -> Self {
+        Self::new(ROLLING_WINDOW_CAPACITY)
+    }
+}
+
+impl ConcurrentRollingRejectionTracker {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            inner: RwLock::new(RollingRejectionTracker::new(capacity)),
+        }
+    }
+
+    pub fn record(&self, category: RejectionCategory) {
+        if let Ok(mut guard) = self.inner.write() {
+            guard.record(category);
+        }
+    }
+
+    pub fn snapshot(&self) -> RejectionGaugeTelemetry {
+        if let Ok(guard) = self.inner.read() {
+            guard.snapshot()
+        } else {
+            RejectionGaugeTelemetry::default()
+        }
+    }
 }
 
 /// Telemetry tracking rolling pre-trade rejection vectors and relative distributions
@@ -64,6 +205,8 @@ pub struct RejectionGaugeTelemetry {
     pub pct_dev_cluster: f64,
     #[serde(default)]
     pub pct_admitted: f64,
+    #[serde(skip)]
+    tracker: Option<RollingRejectionTracker>,
 }
 
 impl Default for RejectionGaugeTelemetry {
@@ -88,21 +231,29 @@ impl RejectionGaugeTelemetry {
             pct_low_dispersion: 0.0,
             pct_dev_cluster: 0.0,
             pct_admitted: 0.0,
+            tracker: Some(RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY)),
         }
     }
 
-    /// Records an evaluation decision and re-calculates normalized percentages
+    /// Records an evaluation decision in the rolling sliding window and re-calculates normalized percentages
     pub fn record(&mut self, category: RejectionCategory) {
-        self.total_evaluated += 1;
-        match category {
-            RejectionCategory::LowLiquidity => self.low_liquidity += 1,
-            RejectionCategory::LowConviction => self.count_low_conviction += 1,
-            RejectionCategory::HawkesWash => self.hawkes_wash += 1,
-            RejectionCategory::LowDispersion => self.low_dispersion += 1,
-            RejectionCategory::DevCluster => self.dev_cluster += 1,
-            RejectionCategory::Admitted => self.admitted += 1,
-        }
-        self.compute_percentages();
+        let tracker = self.tracker.get_or_insert_with(|| RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY));
+        tracker.record(category);
+        let snap = tracker.snapshot();
+
+        self.low_liquidity = snap.low_liquidity;
+        self.count_low_conviction = snap.count_low_conviction;
+        self.hawkes_wash = snap.hawkes_wash;
+        self.low_dispersion = snap.low_dispersion;
+        self.dev_cluster = snap.dev_cluster;
+        self.admitted = snap.admitted;
+        self.total_evaluated = snap.total_evaluated;
+        self.pct_low_liquidity = snap.pct_low_liquidity;
+        self.pct_low_conviction = snap.pct_low_conviction;
+        self.pct_hawkes_wash = snap.pct_hawkes_wash;
+        self.pct_low_dispersion = snap.pct_low_dispersion;
+        self.pct_dev_cluster = snap.pct_dev_cluster;
+        self.pct_admitted = snap.pct_admitted;
     }
 
     /// Calculates percentages across all categories reconciling against the total evaluation count
@@ -334,6 +485,76 @@ mod tests {
 
         let short_mint = "SOL";
         assert_eq!(truncate_mint_address(short_mint), "SOL");
+    }
+
+    #[test]
+    fn test_rolling_rejection_window_caps_at_1000() {
+        let mut tracker = RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY);
+        assert_eq!(tracker.len(), 0);
+
+        for _ in 0..2500 {
+            tracker.record(RejectionCategory::LowLiquidity);
+        }
+
+        assert_eq!(tracker.len(), ROLLING_WINDOW_CAPACITY);
+        let snap = tracker.snapshot();
+        assert_eq!(snap.total_evaluated, 1000);
+        assert_eq!(snap.low_liquidity, 1000);
+        assert_eq!(snap.pct_low_liquidity, 100.0);
+    }
+
+    #[test]
+    fn test_rolling_rejection_window_evicts_oldest_category() {
+        let mut tracker = RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY);
+
+        // Fill with 1,000 LowLiquidity
+        for _ in 0..1000 {
+            tracker.record(RejectionCategory::LowLiquidity);
+        }
+        assert_eq!(tracker.len(), 1000);
+        let snap1 = tracker.snapshot();
+        assert_eq!(snap1.low_liquidity, 1000);
+        assert_eq!(snap1.hawkes_wash, 0);
+        assert_eq!(snap1.pct_low_liquidity, 100.0);
+
+        // Push 500 HawkesWash entries (should evict 500 LowLiquidity from the front)
+        for _ in 0..500 {
+            tracker.record(RejectionCategory::HawkesWash);
+        }
+        assert_eq!(tracker.len(), 1000);
+
+        let snap2 = tracker.snapshot();
+        assert_eq!(snap2.total_evaluated, 1000);
+        assert_eq!(snap2.low_liquidity, 500);
+        assert_eq!(snap2.hawkes_wash, 500);
+        assert_eq!(snap2.pct_low_liquidity, 50.0);
+        assert_eq!(snap2.pct_hawkes_wash, 50.0);
+        assert_eq!(snap2.pct_low_dispersion, 0.0);
+        assert_eq!(snap2.pct_dev_cluster, 0.0);
+        assert_eq!(snap2.pct_low_conviction, 0.0);
+        assert_eq!(snap2.pct_admitted, 0.0);
+    }
+
+    #[test]
+    fn test_rejection_gauge_telemetry_sliding_window() {
+        let mut gauge = RejectionGaugeTelemetry::new();
+        for _ in 0..1200 {
+            gauge.record(RejectionCategory::DevCluster);
+        }
+        assert_eq!(gauge.total_evaluated, 1000);
+        assert_eq!(gauge.dev_cluster, 1000);
+        assert_eq!(gauge.pct_dev_cluster, 100.0);
+    }
+
+    #[test]
+    fn test_concurrent_rolling_rejection_tracker() {
+        let tracker = ConcurrentRollingRejectionTracker::default();
+        tracker.record(RejectionCategory::LowLiquidity);
+        tracker.record(RejectionCategory::LowConviction);
+        let snap = tracker.snapshot();
+        assert_eq!(snap.total_evaluated, 2);
+        assert_eq!(snap.low_liquidity, 1);
+        assert_eq!(snap.count_low_conviction, 1);
     }
 }
 
