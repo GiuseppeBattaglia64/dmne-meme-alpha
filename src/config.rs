@@ -170,6 +170,8 @@ pub struct RiskConfig {
     pub max_entry_sol: f64,
     #[serde(default = "default_min_gas_reserve_sol")]
     pub min_gas_reserve_sol: f64,
+    #[serde(default = "default_base_position_size_sol")]
+    pub base_position_size_sol: f64,
     #[serde(default)]
     pub dynamic_exits: DynamicExitsConfig,
     #[serde(default)]
@@ -318,6 +320,7 @@ fn default_emergency_jito_tip_lamports() -> u64 { 75000 }
 fn default_min_entry_sol() -> f64 { 0.010 }
 fn default_max_entry_sol() -> f64 { 0.045 }
 fn default_min_gas_reserve_sol() -> f64 { 0.030 }
+fn default_base_position_size_sol() -> f64 { 0.0225 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -375,6 +378,7 @@ impl Default for RiskConfig {
             min_entry_sol: 0.010,
             max_entry_sol: 0.045,
             min_gas_reserve_sol: 0.030,
+            base_position_size_sol: default_base_position_size_sol(),
             dynamic_exits: DynamicExitsConfig::default(),
             orderflow: OrderflowConfig::default(),
         }

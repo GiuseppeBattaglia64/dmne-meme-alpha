@@ -28,7 +28,8 @@ stagnation_band_max_pct = 5.0
 
 reentry_cooldown_secs = 3600
 toxic_exit_permanent_ban = true
-min_entry_liquidity_usd = 20000.0
+min_entry_liquidity_usd = 35000.0
+base_position_size_sol = 0.0225
 min_entry_price_change_pct = 1.5
 max_entry_price_change_pct = 85.0
 min_entry_buy_sell_ratio = 1.25
@@ -103,8 +104,8 @@ enabled = true
 vol_multiplier = 1.65                # k_vol multiplier on realized tick volatility
 min_trail_pct = 8.0                  # minimum trailing band width (%)
 max_trail_pct = 22.0                 # maximum trailing band width (%)
-mfe_activation_pct = 30.0            # peak MFE threshold to arm dynamic lock-in floor
-min_locked_floor_pct = 12.0          # absolute floor guaranteed once armed
+mfe_activation_pct = 15.0            # peak MFE threshold to arm dynamic lock-in floor
+min_locked_floor_pct = 4.0           # absolute floor guaranteed once armed
 
 [orderflow]
 enabled = true
