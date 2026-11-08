@@ -51,6 +51,7 @@ mod adaptive_exits;
 mod orderflow;
 mod genesis_guard;
 mod cold_path;
+mod harness;
 
 pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
 
@@ -883,7 +884,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Ok((mut socket, _)) = listener.accept().await {
                 let st = Arc::clone(&server_state);
                 tokio::spawn(async move {
-                    let mut buf = [0u8; 2048];
+                    let mut buf = [0u8; 8192];
                     if let Ok(n) = socket.read(&mut buf).await {
                         let req = String::from_utf8_lossy(&buf[..n]);
                         if req.starts_with("GET /events") {
@@ -1123,11 +1124,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else if req.starts_with("GET /api/agent/tasks") {
                             let mut tasks: Vec<serde_json::Value> = Vec::new();
                             if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                if let Ok(t) = db::list_pending_tasks(&pg_client).await {
-                                    tasks = t.into_iter().map(|(task_id, task_type, anomaly_summary, counterfactual_delta_sol, proposed_diff, guardrail_checks_passed)| {
+                                if let Ok(t) = db::list_recent_agent_tasks(&pg_client, 10).await {
+                                    tasks = t.into_iter().map(|(task_id, task_type, status, anomaly_summary, counterfactual_delta_sol, proposed_diff, guardrail_checks_passed)| {
                                         serde_json::json!({
                                             "task_id": task_id,
                                             "task_type": task_type,
+                                            "status": status,
                                             "anomaly_summary": anomaly_summary,
                                             "counterfactual_delta_sol": counterfactual_delta_sol,
                                             "proposed_diff": proposed_diff,
@@ -1141,6 +1143,164 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                                 json_resp.len(),
                                 json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("OPTIONS /api/agent/apply") {
+                            let res = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("POST /api/agent/apply") {
+                            let body = if let Some(idx) = req.find("\r\n\r\n") {
+                                &req[idx + 4..]
+                            } else if let Some(idx) = req.find("\n\n") {
+                                &req[idx + 2..]
+                            } else {
+                                ""
+                            };
+
+                            let (status_code, status_text, json_resp) = match serde_json::from_str::<serde_json::Value>(body.trim()) {
+                                Err(_) => {
+                                    (400, "Bad Request", serde_json::json!({ "success": false, "error": "Invalid JSON body" }))
+                                }
+                                Ok(json_body) => {
+                                    let task_id = json_body.get("task_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                                    let passphrase = json_body.get("passphrase").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+
+                                    let expected_passphrase = {
+                                        let g = st.read().await;
+                                        g.effective_risk_cfg.admin_passphrase.clone()
+                                            .unwrap_or_else(|| config::default_admin_passphrase().unwrap_or_else(|| "dmne-alpha-desk-2026".to_string()))
+                                    };
+
+                                    if passphrase != expected_passphrase {
+                                        (401, "Unauthorized", serde_json::json!({
+                                            "success": false,
+                                            "error": "UNAUTHORIZED: Invalid Admin Desk Passphrase"
+                                        }))
+                                    } else if task_id.is_empty() {
+                                        (400, "Bad Request", serde_json::json!({
+                                            "success": false,
+                                            "error": "task_id is required"
+                                        }))
+                                    } else {
+                                        match db::establish_connection(db::DEFAULT_DB_URL).await {
+                                            Err(e) => {
+                                                (500, "Internal Server Error", serde_json::json!({
+                                                    "success": false,
+                                                    "error": format!("Database connection error: {}", e)
+                                                }))
+                                            }
+                                            Ok(pg_client) => {
+                                                match db::fetch_agent_task_by_id(&pg_client, &task_id).await {
+                                                    Err(e) => {
+                                                        (500, "Internal Server Error", serde_json::json!({
+                                                            "success": false,
+                                                            "error": format!("Database query error: {}", e)
+                                                        }))
+                                                    }
+                                                    Ok(None) => {
+                                                        (404, "Not Found", serde_json::json!({
+                                                            "success": false,
+                                                            "error": format!("Task '{}' not found", task_id)
+                                                        }))
+                                                    }
+                                                    Ok(Some((_, _task_type, status, _summary, _delta, proposed_diff, guardrail_passed))) => {
+                                                        let upper_status = status.to_uppercase();
+                                                        if upper_status != "PENDING" && upper_status != "STAGED" {
+                                                            (400, "Bad Request", serde_json::json!({
+                                                                "success": false,
+                                                                "error": format!("Task '{}' is in '{}' state; only PENDING or STAGED proposals can be applied", task_id, status)
+                                                            }))
+                                                        } else if !guardrail_passed {
+                                                            (400, "Bad Request", serde_json::json!({
+                                                                "success": false,
+                                                                "error": format!("Task '{}' has failing guardrails. Unsafe to apply.", task_id)
+                                                            }))
+                                                        } else {
+                                                            let config_path = "config.toml";
+                                                            match std::fs::read_to_string(config_path) {
+                                                                Err(e) => {
+                                                                    (500, "Internal Server Error", serde_json::json!({
+                                                                        "success": false,
+                                                                        "error": format!("Failed to read {}: {}", config_path, e)
+                                                                    }))
+                                                                }
+                                                                Ok(orig_text) => {
+                                                                    match harness::apply_patch_to_text(&orig_text, &proposed_diff) {
+                                                                        Err(e) => {
+                                                                            (400, "Bad Request", serde_json::json!({
+                                                                                "success": false,
+                                                                                "error": format!("Unified diff failed to apply: {}", e)
+                                                                            }))
+                                                                        }
+                                                                        Ok(modified_text) => {
+                                                                            match toml::from_str::<config::TomlConfigFile>(&modified_text) {
+                                                                                Err(e) => {
+                                                                                    (400, "Bad Request", serde_json::json!({
+                                                                                        "success": false,
+                                                                                        "error": format!("Patched config failed TOML syntax validation: {}", e)
+                                                                                    }))
+                                                                                }
+                                                                                Ok(parsed_toml) => {
+                                                                                    match harness::validate_safety_invariants_on_toml(&parsed_toml) {
+                                                                                        Err(violations) => {
+                                                                                            (400, "Bad Request", serde_json::json!({
+                                                                                                "success": false,
+                                                                                                "error": format!("SAFETY INVARIANT VIOLATION: {}", violations.join("; "))
+                                                                                            }))
+                                                                                        }
+                                                                                        Ok(()) => {
+                                                                                            match harness::apply_patch_to_file_safe(config_path, &proposed_diff) {
+                                                                                                Err(e) => {
+                                                                                                    (500, "Internal Server Error", serde_json::json!({
+                                                                                                        "success": false,
+                                                                                                        "error": format!("Failed writing patched config: {}", e)
+                                                                                                    }))
+                                                                                                }
+                                                                                                Ok(_) => {
+                                                                                                    let _ = db::resolve_agent_task(&pg_client, &task_id, "APPLIED").await;
+                                                                                                    let active_count = st.read().await.active_positions.len();
+                                                                                                    if active_count == 0 {
+                                                                                                        let new_cfg = config::EngineConfig::load();
+                                                                                                        let mut g = st.write().await;
+                                                                                                        g.effective_risk_cfg = new_cfg.risk;
+                                                                                                        (200, "OK", serde_json::json!({
+                                                                                                            "success": true,
+                                                                                                            "message": "PATCH APPLIED // Config reloaded cleanly",
+                                                                                                            "slots_idle": true
+                                                                                                        }))
+                                                                                                    } else {
+                                                                                                        (200, "OK", serde_json::json!({
+                                                                                                            "success": true,
+                                                                                                            "message": "PATCH SAVED // Active positions detected. Reload deferred until 0/4 slots idle",
+                                                                                                            "slots_idle": false
+                                                                                                        }))
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            };
+
+                            let resp_body = json_resp.to_string();
+                            let res = format!(
+                                "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                status_code,
+                                status_text,
+                                resp_body.len(),
+                                resp_body
                             );
                             let _ = socket.write_all(res.as_bytes()).await;
                         } else if req.starts_with("GET /api/agent/autopsies") {

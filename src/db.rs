@@ -609,8 +609,10 @@ pub async fn init_agent_harness_tables(client: &Client) -> Result<(), Error> {
             proposed_diff TEXT NOT NULL,
             guardrail_checks_passed BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMPTZ DEFAULT NOW(),
-            resolved_at TIMESTAMPTZ
+            resolved_at TIMESTAMPTZ,
+            applied_at TIMESTAMPTZ
         );
+        ALTER TABLE agent_audit_tasks ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
     ";
     client.execute(stmt, &[]).await?;
     Ok(())
@@ -679,10 +681,37 @@ pub async fn resolve_agent_task(
 ) -> Result<u64, Error> {
     let stmt = "
         UPDATE agent_audit_tasks
-        SET status = $2, resolved_at = NOW()
+        SET status = $2, resolved_at = NOW(), applied_at = NOW()
         WHERE task_id = $1;
     ";
     client.execute(stmt, &[&task_id, &new_status]).await
+}
+
+/// Lists recent agent audit tasks (prioritizing PENDING/STAGED proposals)
+pub async fn list_recent_agent_tasks(
+    client: &Client,
+    limit: i64,
+) -> Result<Vec<(String, String, String, String, f64, String, bool)>, Error> {
+    let stmt = "
+        SELECT task_id, task_type, status, anomaly_summary, counterfactual_delta_sol, proposed_diff, guardrail_checks_passed
+        FROM agent_audit_tasks
+        ORDER BY CASE WHEN status IN ('PENDING', 'STAGED') THEN 0 ELSE 1 END, created_at DESC
+        LIMIT $1;
+    ";
+    let rows = client.query(stmt, &[&limit]).await?;
+    let mut tasks = Vec::new();
+    for row in rows {
+        tasks.push((
+            row.get("task_id"),
+            row.get("task_type"),
+            row.get("status"),
+            row.get("anomaly_summary"),
+            row.get("counterfactual_delta_sol"),
+            row.get("proposed_diff"),
+            row.get("guardrail_checks_passed"),
+        ));
+    }
+    Ok(tasks)
 }
 
 /// Fetches a single agent audit task by task_id

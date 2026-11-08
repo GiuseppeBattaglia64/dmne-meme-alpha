@@ -65,6 +65,9 @@ pub struct EngineConfig {
 
     // Sandbox & Replay Configuration
     pub sandbox: SandboxConfig,
+
+    // Admin Authorization Config
+    pub admin: AdminConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,10 +175,30 @@ pub struct RiskConfig {
     pub min_gas_reserve_sol: f64,
     #[serde(default = "default_base_position_size_sol")]
     pub base_position_size_sol: f64,
+    #[serde(default = "default_admin_passphrase")]
+    pub admin_passphrase: Option<String>,
     #[serde(default)]
     pub dynamic_exits: DynamicExitsConfig,
     #[serde(default)]
     pub orderflow: OrderflowConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminConfig {
+    #[serde(default = "default_admin_passphrase")]
+    pub admin_passphrase: Option<String>,
+}
+
+pub fn default_admin_passphrase() -> Option<String> {
+    Some("dmne-alpha-desk-2026".to_string())
+}
+
+impl Default for AdminConfig {
+    fn default() -> Self {
+        Self {
+            admin_passphrase: default_admin_passphrase(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,6 +402,7 @@ impl Default for RiskConfig {
             max_entry_sol: 0.045,
             min_gas_reserve_sol: 0.030,
             base_position_size_sol: default_base_position_size_sol(),
+            admin_passphrase: default_admin_passphrase(),
             dynamic_exits: DynamicExitsConfig::default(),
             orderflow: OrderflowConfig::default(),
         }
@@ -507,13 +531,14 @@ impl SandboxConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TomlConfigFile {
+pub struct TomlConfigFile {
     pub risk: Option<RiskConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub hawkes: Option<crate::hawkes::HawkesConfig>,
     pub dynamic_exits: Option<DynamicExitsConfig>,
     pub orderflow: Option<OrderflowConfig>,
     pub genesis_guard: Option<GenesisGuardConfig>,
+    pub admin: Option<AdminConfig>,
 }
 
 impl Default for EngineConfig {
@@ -556,6 +581,7 @@ impl Default for EngineConfig {
             orderflow: OrderflowConfig::default(),
             genesis_guard: GenesisGuardConfig::default(),
             sandbox: SandboxConfig::default(),
+            admin: AdminConfig::default(),
         }
     }
 }
@@ -576,6 +602,9 @@ impl EngineConfig {
                     cfg.tranche_2_target_pct = r.tp2_trigger_pct;
                     cfg.tranche_2_scale_ratio = r.tp2_sell_fraction;
                     cfg.stagnation_ttl_seconds = r.stagnation_ttl_secs as i64;
+                    if let Some(ref pass) = r.admin_passphrase {
+                        cfg.admin.admin_passphrase = Some(pass.clone());
+                    }
                     cfg.risk = r;
                 }
                 if let Some(h) = toml_file.hawkes {
@@ -598,6 +627,10 @@ impl EngineConfig {
                 }
                 if let Some(sb) = toml_file.sandbox {
                     cfg.sandbox = sb;
+                }
+                if let Some(adm) = toml_file.admin {
+                    println!("[CONFIG] Loaded institutional [admin] envelope from config.toml");
+                    cfg.admin = adm;
                 }
             }
         }
@@ -701,6 +734,22 @@ mod tests {
         assert_eq!(parsed.max_genesis_supply_pct, 20.0);
         assert_eq!(parsed.max_slot0_bundled_txs, 2);
         assert!(!parsed.reject_shared_tip_accounts);
+    }
+
+    #[test]
+    fn test_admin_config_defaults_and_deserialization() {
+        let default_admin = AdminConfig::default();
+        assert_eq!(default_admin.admin_passphrase.as_deref(), Some("dmne-alpha-desk-2026"));
+
+        let toml_str = r#"
+            admin_passphrase = "custom-secret-key-999"
+        "#;
+        let parsed: AdminConfig = toml::from_str(toml_str).expect("Failed to deserialize AdminConfig");
+        assert_eq!(parsed.admin_passphrase.as_deref(), Some("custom-secret-key-999"));
+
+        let empty_toml = "";
+        let parsed_empty: AdminConfig = toml::from_str(empty_toml).expect("Failed to deserialize empty AdminConfig");
+        assert_eq!(parsed_empty.admin_passphrase.as_deref(), Some("dmne-alpha-desk-2026"));
     }
 }
 

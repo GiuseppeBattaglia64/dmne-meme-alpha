@@ -120,4 +120,8 @@ max_genesis_supply_pct = 25.0        # max aggregate supply sniped in slot 0 (%)
 max_slot0_bundled_txs = 3           # max coordinated buys in block 0
 reject_shared_tip_accounts = true   # reject if multi-wallet bundle shares tip account
 
+[admin]
+admin_passphrase = "dmne-alpha-desk-2026"
+
+
 

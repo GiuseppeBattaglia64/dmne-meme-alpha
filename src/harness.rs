@@ -13,6 +13,12 @@ pub const KELLY_BASE_UPPER_BOUND_PCT: f64 = 10.0;
 
 pub const MAX_PERMISSIBLE_STOP_LOSS_PCT: f64 = -25.0; // Stop loss cannot widen beyond -25.0% (e.g. -30.0% fails)
 
+pub const MIN_POSITION_SIZE_SOL: f64 = 0.010;
+pub const MAX_POSITION_SIZE_SOL: f64 = 0.10;
+
+pub const MIN_MFE_ACTIVATION_PCT: f64 = 10.0;
+pub const MAX_MFE_ACTIVATION_PCT: f64 = 50.0;
+
 pub const HAWKES_ETA_LOWER_BOUND: f64 = 1.00;
 pub const HAWKES_ETA_UPPER_BOUND: f64 = 1.40;
 
@@ -101,6 +107,65 @@ impl SafetyInvariants {
         } else {
             Err(violations)
         }
+    }
+}
+
+/// Validates safety invariants on a deserialized TomlConfigFile before patch application
+pub fn validate_safety_invariants_on_toml(cfg: &crate::config::TomlConfigFile) -> Result<(), Vec<String>> {
+    let mut violations = Vec::new();
+
+    if let Some(r) = &cfg.risk {
+        if r.min_entry_liquidity_usd < MIN_LIQUIDITY_LOWER_BOUND_USD
+            || r.min_entry_liquidity_usd > MIN_LIQUIDITY_UPPER_BOUND_USD
+        {
+            violations.push(format!(
+                "min_entry_liquidity_usd (${:.0}) violates permissible bounds [${:.0}, ${:.0}]",
+                r.min_entry_liquidity_usd, MIN_LIQUIDITY_LOWER_BOUND_USD, MIN_LIQUIDITY_UPPER_BOUND_USD
+            ));
+        }
+
+        if r.base_position_size_sol < MIN_POSITION_SIZE_SOL
+            || r.base_position_size_sol > MAX_POSITION_SIZE_SOL
+        {
+            violations.push(format!(
+                "base_position_size_sol ({:.4} SOL) violates permissible bounds [{:.4} SOL, {:.4} SOL]",
+                r.base_position_size_sol, MIN_POSITION_SIZE_SOL, MAX_POSITION_SIZE_SOL
+            ));
+        }
+
+        if r.stop_loss_pct < MAX_PERMISSIBLE_STOP_LOSS_PCT {
+            violations.push(format!(
+                "stop_loss_pct ({:.1}%) widens beyond safety floor ({:.1}%)",
+                r.stop_loss_pct, MAX_PERMISSIBLE_STOP_LOSS_PCT
+            ));
+        }
+
+        if r.max_slippage_loss_pct < MAX_PERMISSIBLE_STOP_LOSS_PCT {
+            violations.push(format!(
+                "max_slippage_loss_pct ({:.1}%) widens beyond safety floor ({:.1}%)",
+                r.max_slippage_loss_pct, MAX_PERMISSIBLE_STOP_LOSS_PCT
+            ));
+        }
+    }
+
+    let mfe_val = cfg
+        .dynamic_exits
+        .as_ref()
+        .map(|d| d.mfe_activation_pct)
+        .or_else(|| cfg.risk.as_ref().map(|r| r.dynamic_exits.mfe_activation_pct));
+    if let Some(mfe) = mfe_val {
+        if mfe < MIN_MFE_ACTIVATION_PCT || mfe > MAX_MFE_ACTIVATION_PCT {
+            violations.push(format!(
+                "mfe_activation_pct ({:.1}%) violates permissible bounds [{:.1}%, {:.1}%]",
+                mfe, MIN_MFE_ACTIVATION_PCT, MAX_MFE_ACTIVATION_PCT
+            ));
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
     }
 }
 
@@ -500,6 +565,48 @@ mod tests {
 
         let _ = std::fs::remove_file(target_file);
         let _ = std::fs::remove_file(backup_file);
+    }
+
+    #[test]
+    fn test_validate_safety_invariants_on_toml() {
+        let mut cfg = crate::config::TomlConfigFile {
+            risk: Some(crate::config::RiskConfig::default()),
+            sandbox: None,
+            hawkes: None,
+            dynamic_exits: Some(crate::config::DynamicExitsConfig::default()),
+            orderflow: None,
+            genesis_guard: None,
+            admin: None,
+        };
+
+        assert!(validate_safety_invariants_on_toml(&cfg).is_ok());
+
+        // Test invalid min_entry_liquidity_usd (< 20000)
+        cfg.risk.as_mut().unwrap().min_entry_liquidity_usd = 15000.0;
+        let res = validate_safety_invariants_on_toml(&cfg);
+        assert!(res.is_err());
+        assert!(res.unwrap_err()[0].contains("min_entry_liquidity_usd"));
+
+        // Reset and test invalid base_position_size_sol (> 0.10)
+        cfg.risk.as_mut().unwrap().min_entry_liquidity_usd = 35000.0;
+        cfg.risk.as_mut().unwrap().base_position_size_sol = 0.1500;
+        let res_size = validate_safety_invariants_on_toml(&cfg);
+        assert!(res_size.is_err());
+        assert!(res_size.unwrap_err()[0].contains("base_position_size_sol"));
+
+        // Reset and test invalid stop loss widening beyond -25%
+        cfg.risk.as_mut().unwrap().base_position_size_sol = 0.0225;
+        cfg.risk.as_mut().unwrap().stop_loss_pct = -30.0;
+        let res_sl = validate_safety_invariants_on_toml(&cfg);
+        assert!(res_sl.is_err());
+        assert!(res_sl.unwrap_err()[0].contains("stop_loss_pct"));
+
+        // Reset and test invalid mfe_activation_pct (< 10.0)
+        cfg.risk.as_mut().unwrap().stop_loss_pct = -20.0;
+        cfg.dynamic_exits.as_mut().unwrap().mfe_activation_pct = 5.0;
+        let res_mfe = validate_safety_invariants_on_toml(&cfg);
+        assert!(res_mfe.is_err());
+        assert!(res_mfe.unwrap_err()[0].contains("mfe_activation_pct"));
     }
 }
 

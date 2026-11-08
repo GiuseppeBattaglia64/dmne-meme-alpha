@@ -1397,10 +1397,17 @@
               <span class="badge" id="agent-task-status" style="background: rgba(245,158,11,0.2); color: var(--amber); font-size: 10px; font-weight: 700;">PENDING</span>
               <span style="font-size: 11px; color: var(--text-muted);">Target: <b style="color:#fff;">config.toml</b></span>
             </div>
-            <button id="btn-copy-apply-cmd" class="btn-action" style="padding: 6px 14px; font-size: 11px; background: var(--cyan); color: #000; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="copyApplyCommand()">
-              <span>📋</span> <span id="copy-btn-text">COPY APPLY COMMAND</span>
-            </button>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button id="btn-one-click-apply" onclick="promptOneClickApply()" class="px-3 py-1.5 rounded text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition-colors flex items-center gap-1.5" style="cursor: pointer;">
+                <span>⚡ ONE-CLICK APPLY (ADMIN)</span>
+              </button>
+              <button id="btn-copy-apply-cmd" class="btn-action" style="padding: 6px 14px; font-size: 11px; background: var(--cyan); color: #000; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="copyApplyCommand()">
+                <span>📋</span> <span id="copy-btn-text">COPY APPLY COMMAND</span>
+              </button>
+            </div>
           </div>
+          <!-- Alert feedback box for one-click apply -->
+          <div id="apply-feedback-alert" style="display: none; padding: 8px 12px; border-radius: 6px; font-size: 11px; font-family: monospace; font-weight: 700;"></div>
           <div id="agent-diff-box" class="mono" style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; font-size: 12px; line-height: 1.6; overflow-x: auto; max-height: 160px;">
             <div style="color: var(--text-dim);">--- a/config.toml</div>
             <div style="color: var(--text-dim);">+++ b/config.toml</div>
@@ -2860,6 +2867,91 @@ sudo systemctl restart dmne-alpha.service</code></pre>
       copyApplyCommandToClipboard(cmd);
     }
 
+    async function promptOneClickApply() {
+      if (!currentAgentTaskId) {
+        alert("No active staged PR task found.");
+        return;
+      }
+      const pass = prompt(`ENTER ADMIN DESK PASSPHRASE TO APPLY PATCH [${currentAgentTaskId}]:`);
+      if (pass === null) return;
+      if (!pass.trim()) {
+        alert("Passphrase cannot be empty.");
+        return;
+      }
+
+      const btn = document.getElementById('btn-one-click-apply');
+      const alertEl = document.getElementById('apply-feedback-alert');
+      const originalHtml = btn ? btn.innerHTML : '<span>⚡ ONE-CLICK APPLY (ADMIN)</span>';
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="inline-block animate-spin">⏳</span> <span>APPLYING PATCH...</span>`;
+        btn.classList.add('animate-pulse');
+      }
+      if (alertEl) {
+        alertEl.style.display = 'none';
+      }
+
+      try {
+        const res = await fetch('/api/agent/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task_id: currentAgentTaskId, passphrase: pass.trim() })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (btn) {
+            btn.innerHTML = `<span>✓ APPLIED</span>`;
+            btn.className = "px-3 py-1.5 rounded text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1.5 opacity-80 cursor-default";
+            btn.classList.remove('animate-pulse');
+            btn.disabled = true;
+          }
+          if (alertEl) {
+            alertEl.style.display = 'block';
+            alertEl.style.background = 'rgba(16, 185, 129, 0.15)';
+            alertEl.style.color = '#34d399';
+            alertEl.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+            alertEl.textContent = `✓ PATCH APPLIED SUCCESSFULLY (config.toml backed up & synced) — ${data.message || ''}`;
+          }
+          const statusEl = document.getElementById('agent-task-status');
+          if (statusEl) {
+            statusEl.textContent = 'APPLIED';
+            statusEl.style.background = 'rgba(16, 185, 129, 0.2)';
+            statusEl.style.color = '#34d399';
+          }
+          setTimeout(fetchAgentData, 1500);
+        } else {
+          const errMsg = data.error || (data.message ? data.message : 'Unknown rejection');
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('animate-pulse');
+          }
+          if (alertEl) {
+            alertEl.style.display = 'block';
+            alertEl.style.background = 'rgba(239, 68, 68, 0.15)';
+            alertEl.style.color = '#f87171';
+            alertEl.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+            alertEl.textContent = `❌ APPLY FAILED: ${errMsg}`;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to apply agent patch:', err);
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+          btn.classList.remove('animate-pulse');
+        }
+        if (alertEl) {
+          alertEl.style.display = 'block';
+          alertEl.style.background = 'rgba(239, 68, 68, 0.15)';
+          alertEl.style.color = '#f87171';
+          alertEl.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+          alertEl.textContent = `❌ APPLY FAILED: ${err.message || err}`;
+        }
+      }
+    }
+
     function copyApplyCommandToClipboard(text) {
       if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(showCopiedFeedback).catch(() => {
@@ -2920,7 +3012,29 @@ sudo systemctl restart dmne-alpha.service</code></pre>
           const idEl = document.getElementById("agent-task-id");
           if (idEl) idEl.textContent = latestTask.task_id;
           const statusEl = document.getElementById("agent-task-status");
-          if (statusEl) statusEl.textContent = latestTask.status || "PENDING";
+          const isApplied = (latestTask.status === "APPLIED");
+          if (statusEl) {
+            statusEl.textContent = latestTask.status || "PENDING";
+            if (isApplied) {
+              statusEl.style.background = "rgba(16, 185, 129, 0.2)";
+              statusEl.style.color = "#34d399";
+            } else {
+              statusEl.style.background = "rgba(245, 158, 11, 0.2)";
+              statusEl.style.color = "var(--amber)";
+            }
+          }
+          const applyBtn = document.getElementById("btn-one-click-apply");
+          if (applyBtn) {
+            if (isApplied) {
+              applyBtn.innerHTML = `<span>✓ APPLIED</span>`;
+              applyBtn.className = "px-3 py-1.5 rounded text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1.5 opacity-80 cursor-default";
+              applyBtn.disabled = true;
+            } else {
+              applyBtn.innerHTML = `<span>⚡ ONE-CLICK APPLY (ADMIN)</span>`;
+              applyBtn.className = "px-3 py-1.5 rounded text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition-colors flex items-center gap-1.5";
+              applyBtn.disabled = false;
+            }
+          }
 
           const diffBox = document.getElementById("agent-diff-box");
           if (diffBox && latestTask.proposed_diff) {
