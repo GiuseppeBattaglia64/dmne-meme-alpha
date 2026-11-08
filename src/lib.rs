@@ -12,4 +12,5 @@ pub mod adaptive_exits;
 pub mod congestion;
 pub mod radar;
 pub mod orderflow;
+pub mod cold_path;
 

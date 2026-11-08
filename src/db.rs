@@ -501,3 +501,97 @@ pub async fn fetch_recent_rejection_reasons(
     }
     out
 }
+
+/// Ensures the cold-path trade_forensic_autopsies table exists
+pub async fn init_autopsy_tables(client: &Client) -> Result<(), Error> {
+    let stmt = "
+        CREATE TABLE IF NOT EXISTS trade_forensic_autopsies (
+            id SERIAL PRIMARY KEY,
+            trade_id INT NOT NULL,
+            symbol VARCHAR(32) NOT NULL,
+            mint VARCHAR(64) NOT NULL,
+            realized_pnl_pct DOUBLE PRECISION NOT NULL,
+            realized_pnl_sol DOUBLE PRECISION NOT NULL,
+            exit_rule VARCHAR(128) NOT NULL,
+            hold_duration_secs DOUBLE PRECISION NOT NULL,
+            peak_mfe_pct DOUBLE PRECISION NOT NULL,
+            max_mae_pct DOUBLE PRECISION NOT NULL,
+            slippage_drift_pct DOUBLE PRECISION NOT NULL,
+            entry_cvd_ratio DOUBLE PRECISION,
+            entry_hawkes_eta DOUBLE PRECISION,
+            root_cause_category VARCHAR(64) NOT NULL,
+            counterfactual_recommendation JSONB NOT NULL,
+            audited_at TIMESTAMPTZ DEFAULT NOW(),
+            CONSTRAINT unique_audited_trade UNIQUE(trade_id)
+        );
+    ";
+    client.execute(stmt, &[]).await?;
+    Ok(())
+}
+
+/// Inserts a post-trade forensic autopsy record into PostgreSQL
+pub async fn insert_trade_autopsy(
+    client: &Client,
+    trade_id: i32,
+    symbol: &str,
+    mint: &str,
+    realized_pnl_pct: f64,
+    realized_pnl_sol: f64,
+    exit_rule: &str,
+    hold_duration_secs: f64,
+    peak_mfe_pct: f64,
+    max_mae_pct: f64,
+    slippage_drift_pct: f64,
+    entry_cvd_ratio: Option<f64>,
+    entry_hawkes_eta: Option<f64>,
+    root_cause_category: &str,
+    counterfactual_recommendation: &str,
+) -> Result<u64, Error> {
+    let stmt = "
+        INSERT INTO trade_forensic_autopsies (
+            trade_id, symbol, mint, realized_pnl_pct, realized_pnl_sol, exit_rule,
+            hold_duration_secs, peak_mfe_pct, max_mae_pct, slippage_drift_pct,
+            entry_cvd_ratio, entry_hawkes_eta, root_cause_category, counterfactual_recommendation
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::text::jsonb)
+        ON CONFLICT (trade_id) DO UPDATE SET
+            realized_pnl_pct = EXCLUDED.realized_pnl_pct,
+            realized_pnl_sol = EXCLUDED.realized_pnl_sol,
+            slippage_drift_pct = EXCLUDED.slippage_drift_pct,
+            root_cause_category = EXCLUDED.root_cause_category,
+            counterfactual_recommendation = EXCLUDED.counterfactual_recommendation,
+            audited_at = NOW();
+    ";
+    client.execute(
+        stmt,
+        &[
+            &trade_id,
+            &symbol,
+            &mint,
+            &realized_pnl_pct,
+            &realized_pnl_sol,
+            &exit_rule,
+            &hold_duration_secs,
+            &peak_mfe_pct,
+            &max_mae_pct,
+            &slippage_drift_pct,
+            &entry_cvd_ratio,
+            &entry_hawkes_eta,
+            &root_cause_category,
+            &counterfactual_recommendation,
+        ],
+    ).await
+}
+
+/// Queries all already audited trade IDs from PostgreSQL
+pub async fn fetch_audited_trade_ids(
+    client: &Client,
+) -> Result<std::collections::HashSet<i32>, Error> {
+    let stmt = "SELECT trade_id FROM trade_forensic_autopsies;";
+    let rows = client.query(stmt, &[]).await?;
+    let mut ids = std::collections::HashSet::new();
+    for row in rows {
+        let tid: i32 = row.get("trade_id");
+        ids.insert(tid);
+    }
+    Ok(ids)
+}

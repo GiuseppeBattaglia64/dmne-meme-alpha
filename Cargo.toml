@@ -35,6 +35,10 @@ path = "src/bin/congestion_sandbox.rs"
 name = "v071_full_replay"
 path = "src/bin/v071_full_replay.rs"
 
+[[bin]]
+name = "dmne_forensic_agent"
+path = "src/bin/dmne_forensic_agent.rs"
+
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
 tokio-tungstenite = { version = "0.23", features = ["native-tls"] }
