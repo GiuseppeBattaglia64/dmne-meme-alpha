@@ -11,7 +11,7 @@
 
 use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
-use crate::config::DynamicExitsConfig;
+use crate::config::{DynamicExitsConfig, OrderflowConfig};
 
 /// Strongly typed configuration for Volatility-Scaled Dynamic Exit Bands.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -269,6 +269,52 @@ pub fn compute_volatility_scaled_exit_band(
         dynamic_floor,
         is_ratchet_active,
     }
+}
+
+/// In-flight cruise telemetry for a single monitored trading slot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CruisePositionTelemetry {
+    pub symbol: String,
+    pub mint: String,
+    pub entry_price: f64,
+    pub current_price: f64,
+    pub pnl_pct: f64,
+    pub peak_mfe_pct: f64,
+    pub rolling_volatility_pct: f64,
+    pub dynamic_trail_pct: f64,
+    pub locked_floor_pct: f64,
+    pub cvd_net_sol: f64,
+    pub cvd_pressure_ratio: f64,
+    pub cvd_divergence_state: String,
+    pub hold_time_secs: u64,
+    pub ttl_remaining_secs: u64,
+    pub emergency_tip_lamports: u64,
+}
+
+/// Historical protection and circuit breaker execution stats.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CruiseHistoricalProtectionStats {
+    pub total_closed_trades: usize,
+    pub emergency_exits_triggered: usize,
+    pub dynamic_ratchet_exits: usize,
+    pub stop_loss_exits: usize,
+    pub early_abort_exits: usize,
+    pub flash_dump_exits: usize,
+    pub slippage_circuit_exits: usize,
+    pub recent_protected_trades: Vec<serde_json::Value>,
+}
+
+/// High-level in-flight cruise supervisor telemetry payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CruiseSupervisorTelemetry {
+    pub slots_active: usize,
+    pub slots_total: usize,
+    pub dynamic_exits_config: DynamicExitsConfig,
+    pub orderflow_config: OrderflowConfig,
+    pub positions: Vec<CruisePositionTelemetry>,
+    pub supervisor_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub historical_protection_stats: Option<CruiseHistoricalProtectionStats>,
 }
 
 /// Resolves dynamic exit target prices and percentages from entry price and pre-entry micro-volatility.
@@ -532,5 +578,38 @@ mod tests {
         let expected_gross = (0.40 * 27.5) + (0.60 * -33.71);
         assert!((res.gross_pnl_pct - expected_gross).abs() < 1e-4);
         assert!(res.gross_pnl_pct > -33.71); // Substantially reduced loss
+    }
+
+    #[test]
+    fn test_cruise_telemetry_serialization() {
+        let telemetry = CruiseSupervisorTelemetry {
+            slots_active: 1,
+            slots_total: 4,
+            dynamic_exits_config: DynamicExitsConfig::default(),
+            orderflow_config: OrderflowConfig::default(),
+            positions: vec![CruisePositionTelemetry {
+                symbol: "TEST".to_string(),
+                mint: "TestMint1111111111111111111111111111111111".to_string(),
+                entry_price: 0.001,
+                current_price: 0.0012,
+                pnl_pct: 20.0,
+                peak_mfe_pct: 25.0,
+                rolling_volatility_pct: 12.5,
+                dynamic_trail_pct: 14.0,
+                locked_floor_pct: 11.0,
+                cvd_net_sol: 4.5,
+                cvd_pressure_ratio: 0.35,
+                cvd_divergence_state: "BULLISH_EXPANSION".to_string(),
+                hold_time_secs: 45,
+                ttl_remaining_secs: 115,
+                emergency_tip_lamports: 75000,
+            }],
+            supervisor_status: "MONITORING_ACTIVE".to_string(),
+            historical_protection_stats: None,
+        };
+        let json = serde_json::to_string(&telemetry).expect("Failed to serialize telemetry");
+        assert!(json.contains("MONITORING_ACTIVE"));
+        assert!(json.contains("TEST"));
+        assert!(json.contains("BULLISH_EXPANSION"));
     }
 }

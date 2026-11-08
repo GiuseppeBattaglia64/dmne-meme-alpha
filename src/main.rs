@@ -1154,6 +1154,118 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 json_resp
                             );
                             let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /api/agent/cruise") {
+                            let guard = st.read().await;
+                            let dyn_cfg = guard.effective_risk_cfg.dynamic_exits.clone();
+                            let ord_cfg = guard.effective_risk_cfg.orderflow.clone();
+                            let slots_total = if guard.effective_risk_cfg.max_active_slots > 0 {
+                                guard.effective_risk_cfg.max_active_slots
+                            } else {
+                                4
+                            };
+                            let slots_active = guard.active_positions.len();
+                            let now_epoch = chrono::Utc::now().timestamp() as u64;
+
+                            let positions: Vec<adaptive_exits::CruisePositionTelemetry> = guard.active_positions.iter().map(|pos| {
+                                let peak_mfe_pct = if pos.entry_price_sol > 0.0 {
+                                    ((pos.peak_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0
+                                } else {
+                                    0.0
+                                };
+                                let rolling_volatility_pct = adaptive_exits::compute_rolling_tick_volatility(&pos.price_buffer);
+                                let band = adaptive_exits::compute_volatility_scaled_exit_band(
+                                    &pos.price_buffer,
+                                    peak_mfe_pct,
+                                    &dyn_cfg,
+                                );
+                                let cvd_net_sol = pos.cvd_tracker.net_cvd_sol();
+                                let cvd_pressure_ratio = pos.cvd_tracker.pressure_ratio();
+                                let ref_pnl = pos.pnl_pct.max(peak_mfe_pct);
+                                let div = pos.cvd_tracker.evaluate_divergence(
+                                    ref_pnl,
+                                    ord_cfg.bearish_absorption_threshold,
+                                );
+                                let cvd_divergence_state = match div {
+                                    orderflow::CvdDivergence::Neutral => "NEUTRAL",
+                                    orderflow::CvdDivergence::BullishConfirmed => "BULLISH_EXPANSION",
+                                    orderflow::CvdDivergence::BearishAbsorption => "BEARISH_ABSORPTION",
+                                }.to_string();
+
+                                let hold_time_secs = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
+                                let ttl_secs = guard.effective_risk_cfg.stagnation_ttl_secs;
+                                let ttl_remaining_secs = ttl_secs.saturating_sub(hold_time_secs);
+                                let emergency_tip_lamports = guard.effective_risk_cfg.emergency_jito_tip_lamports;
+
+                                adaptive_exits::CruisePositionTelemetry {
+                                    symbol: pos.symbol.clone(),
+                                    mint: pos.token_mint.clone(),
+                                    entry_price: pos.entry_price_sol,
+                                    current_price: pos.current_price_sol,
+                                    pnl_pct: pos.pnl_pct,
+                                    peak_mfe_pct,
+                                    rolling_volatility_pct,
+                                    dynamic_trail_pct: band.delta_trail,
+                                    locked_floor_pct: band.dynamic_floor,
+                                    cvd_net_sol,
+                                    cvd_pressure_ratio,
+                                    cvd_divergence_state,
+                                    hold_time_secs,
+                                    ttl_remaining_secs,
+                                    emergency_tip_lamports,
+                                }
+                            }).collect();
+
+                            let hist_stats = {
+                                let closed = &guard.closed_trades;
+                                let emergency_count = closed.iter().filter(|t| t.is_toxic || t.reason.contains("Breaker") || t.reason.contains("Stop-Loss") || t.reason.contains("Slippage") || t.reason.contains("Abort") || t.reason.contains("Flash Dump")).count();
+                                let ratchet_count = closed.iter().filter(|t| t.reason.contains("Dynamic") || t.reason.contains("Ratchet") || t.reason.contains("CVD")).count();
+                                let stop_loss_count = closed.iter().filter(|t| t.reason.contains("Stop-Loss")).count();
+                                let early_abort_count = closed.iter().filter(|t| t.reason.contains("Early Abort")).count();
+                                let flash_dump_count = closed.iter().filter(|t| t.reason.contains("Flash Dump")).count();
+                                let slippage_count = closed.iter().filter(|t| t.reason.contains("Slippage")).count();
+                                let recent_trades: Vec<serde_json::Value> = closed.iter().rev().take(10).map(|t| {
+                                    serde_json::json!({
+                                        "symbol": t.symbol,
+                                        "mint": t.token_mint,
+                                        "size_sol": t.size_sol,
+                                        "pnl_sol": t.pnl_sol,
+                                        "pnl_pct": t.pnl_pct,
+                                        "reason": t.reason,
+                                        "is_toxic": t.is_toxic,
+                                        "jito_tip_lamports": t.jito_tip_lamports,
+                                        "execution_priority": t.execution_priority
+                                    })
+                                }).collect();
+
+                                Some(adaptive_exits::CruiseHistoricalProtectionStats {
+                                    total_closed_trades: closed.len(),
+                                    emergency_exits_triggered: emergency_count,
+                                    dynamic_ratchet_exits: ratchet_count,
+                                    stop_loss_exits: stop_loss_count,
+                                    early_abort_exits: early_abort_count,
+                                    flash_dump_exits: flash_dump_count,
+                                    slippage_circuit_exits: slippage_count,
+                                    recent_protected_trades: recent_trades,
+                                })
+                            };
+
+                            let telemetry = adaptive_exits::CruiseSupervisorTelemetry {
+                                slots_active,
+                                slots_total,
+                                dynamic_exits_config: dyn_cfg,
+                                orderflow_config: ord_cfg,
+                                positions,
+                                supervisor_status: "MONITORING_ACTIVE".to_string(),
+                                historical_protection_stats: hist_stats,
+                            };
+
+                            let json_resp = serde_json::to_string(&telemetry).unwrap_or_else(|_| "{}".to_string());
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
                         } else if req.starts_with("GET /icon.png") || req.starts_with("HEAD /icon.png") {
                             let icon_bytes = tokio::fs::read("/home/ubuntu/dmne-meme-alpha/icon.png").await.unwrap_or_default();
                             let res_header = format!(

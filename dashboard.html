@@ -941,7 +941,7 @@
       </div>
       <div class="header-telemetry-group">
         <span class="badge badge-live" id="btn-ai-launch-agent" style="cursor:pointer; user-select:none;" onclick="openAiAgentModal()" title="Open Cold-Path AI Agent Forensic HUD &amp; PR Gate">AI LAUNCH AGENT</span>
-        <span class="badge badge-jito">AI CRUISE AGENT</span>
+        <span class="badge badge-jito" id="btn-ai-cruise-agent" style="cursor:pointer; user-select:none;" onclick="openAiCruiseModal()" title="Open In-Flight Microstructure &amp; Dynamic Exit Supervisor">AI CRUISE AGENT</span>
         <div class="header-divider"></div>
         <div class="tele-stat" style="white-space: nowrap;">KELLY: <b id="tele-kelly-tag" style="color:var(--cyan)">4.5% - 8.5% DYNAMIC</b></div>
         <div class="tele-stat" style="white-space: nowrap;">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
@@ -1323,6 +1323,164 @@
               </thead>
               <tbody id="agent-autopsies-tbody">
                 <tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-dim);">Loading autopsy records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI CRUISE AGENT IN-FLIGHT SUPERVISOR HUD MODAL -->
+  <div class="modal-backdrop" id="ai-cruise-modal" onclick="if(event.target===this)closeAiCruiseModal()">
+    <div class="modal-panel token-modal-panel" style="max-width: 1250px; height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-head">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span class="badge badge-jito" style="font-weight: 800; font-size: 11px;">AI CRUISE AGENT</span>
+          <span class="mono" style="font-size: 14px; font-weight: 800; color: #fff;">IN-FLIGHT MICROSTRUCTURE &amp; DYNAMIC EXIT SUPERVISOR</span>
+          <span class="badge badge-live" style="font-size: 10px; background: rgba(16, 185, 129, 0.2); color: var(--green);">LIVE SUPERVISOR</span>
+          <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--cyan); font-size: 10px; font-weight: 700;">VOLATILITY BANDS ACTIVE</span>
+          <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--amber); font-size: 10px; font-weight: 700;">CVD ABSORPTION GUARD ACTIVE</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="close-btn" onclick="closeAiCruiseModal()">CLOSE [ESC]</button>
+        </div>
+      </div>
+
+      <div style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px;">
+        <!-- Top KPI Metric Grid -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Dynamic Vol Multiplier</div>
+            <div class="mono" id="cruise-kpi-vol-mult" style="font-size: 18px; font-weight: 800; color: var(--cyan); margin-top: 4px;">1.65x (σ_realized)</div>
+          </div>
+          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Dynamic Band Range</div>
+            <div class="mono" id="cruise-kpi-band-range" style="font-size: 18px; font-weight: 800; color: #fff; margin-top: 4px;">8.0% - 22.0%</div>
+          </div>
+          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Profit Ratchet Arming</div>
+            <div class="mono" id="cruise-kpi-mfe-arm" style="font-size: 18px; font-weight: 800; color: var(--green); margin-top: 4px;">Peak MFE ≥ +30.0%</div>
+          </div>
+          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Absorption Tripwire</div>
+            <div class="mono" id="cruise-kpi-absorption-trip" style="font-size: 18px; font-weight: 800; color: var(--amber); margin-top: 4px;">CVD Ratio &lt; -30.0%</div>
+          </div>
+        </div>
+
+        <!-- Active Supervisor Slot Deck (4 Slots) -->
+        <div style="background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; font-weight: 800; color: #fff;">SUPERVISOR CONCURRENCY DECK</span>
+              <span id="cruise-slots-badge" class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--cyan); font-size: 10px;">0 / 4 ACTIVE SLOTS</span>
+            </div>
+            <div class="mono" style="font-size: 11px; color: var(--text-dim);">
+              SURVEILLANCE REGIME: <span id="cruise-supervisor-status" style="color: var(--green); font-weight: 700;">MONITORING_ACTIVE</span>
+            </div>
+          </div>
+
+          <div id="cruise-slots-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+            <!-- Rendered dynamically by JS: Slots 1 to 4 -->
+          </div>
+        </div>
+
+        <!-- Emergency Risk Circuit Matrix -->
+        <div style="background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+          <div style="padding: 10px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 12px; font-weight: 700; color: #fff;">EMERGENCY RISK CIRCUIT MATRIX &amp; JITO EXECUTION DEFENSE</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Zero-Phantom-Liquidity Protection</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--border-subtle);">
+            <div style="background: var(--bg-card); padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="mono" style="font-size: 11px; font-weight: 800; color: #fff;">EARLY ABORT</span>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--green); font-size: 9px;">ARMED</span>
+              </div>
+              <div class="mono" style="font-size: 16px; font-weight: 800; color: var(--amber); margin-top: 6px;">-10.0%</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Bribe: 10,000 lamports</div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Stagnation cull on immediate lack of orderflow buy pressure.</div>
+            </div>
+            <div style="background: var(--bg-card); padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="mono" style="font-size: 11px; font-weight: 800; color: #fff;">FLASH DUMP</span>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--green); font-size: 9px;">ARMED</span>
+              </div>
+              <div class="mono" style="font-size: 16px; font-weight: 800; color: #f87171; margin-top: 6px;">-15.0%</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Bribe: 75,000 lamports</div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">1-tick dump breaker with maximum urgency bundle tip to beat rugs.</div>
+            </div>
+            <div style="background: var(--bg-card); padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="mono" style="font-size: 11px; font-weight: 800; color: #fff;">HARD STOP-LOSS</span>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--green); font-size: 9px;">ARMED</span>
+              </div>
+              <div class="mono" style="font-size: 16px; font-weight: 800; color: #f87171; margin-top: 6px;">-20.0%</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Bribe: 75,000 lamports</div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Non-negotiable catastrophic loss ceiling on unfavorable drift.</div>
+            </div>
+            <div style="background: var(--bg-card); padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="mono" style="font-size: 11px; font-weight: 800; color: #fff;">MAX SLIPPAGE</span>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--green); font-size: 9px;">ARMED</span>
+              </div>
+              <div class="mono" style="font-size: 16px; font-weight: 800; color: #f87171; margin-top: 6px;">-25.0%</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Bribe: 75,000 lamports</div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Guillotine circuit tripping on AMM bonding curve drain.</div>
+            </div>
+            <div style="background: var(--bg-card); padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="mono" style="font-size: 11px; font-weight: 800; color: #fff;">VOL TRAILING</span>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--green); font-size: 9px;">ARMED</span>
+              </div>
+              <div class="mono" style="font-size: 16px; font-weight: 800; color: var(--cyan); margin-top: 6px;">1.65x σ</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">Bribe: 10,000 lamports</div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Ratchet floor locked at Peak - Δ_trail once Peak MFE ≥ +30.0%.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Historical Supervisor Protection Stats -->
+        <div id="cruise-historical-section" style="background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+          <div style="padding: 10px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 12px; font-weight: 700; color: #fff;">SUPERVISOR DEFENSE HISTORY &amp; INTERVENTION RECORD</span>
+            <span id="cruise-hist-total-summary" style="font-size: 11px; color: var(--text-dim);">Historical Executions</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding: 12px; background: var(--bg-card); border-bottom: 1px solid var(--border-subtle);">
+            <div>
+              <div style="font-size: 10px; color: var(--text-dim);">TOTAL DEFENSE CUTS</div>
+              <div class="mono" id="cruise-stat-total-interventions" style="font-size: 16px; font-weight: 800; color: var(--cyan); margin-top: 2px;">0</div>
+            </div>
+            <div>
+              <div style="font-size: 10px; color: var(--text-dim);">STOP-LOSS CUTOFFS</div>
+              <div class="mono" id="cruise-stat-stop-loss" style="font-size: 16px; font-weight: 800; color: #f87171; margin-top: 2px;">0</div>
+            </div>
+            <div>
+              <div style="font-size: 10px; color: var(--text-dim);">DYNAMIC RATCHET RUNNERS</div>
+              <div class="mono" id="cruise-stat-dynamic-ratchets" style="font-size: 16px; font-weight: 800; color: var(--green); margin-top: 2px;">0</div>
+            </div>
+            <div>
+              <div style="font-size: 10px; color: var(--text-dim);">FLASH DUMPS PREVENTED</div>
+              <div class="mono" id="cruise-stat-flash-dumps" style="font-size: 16px; font-weight: 800; color: var(--amber); margin-top: 2px;">0</div>
+            </div>
+            <div>
+              <div style="font-size: 10px; color: var(--text-dim);">SLIPPAGE CIRCUITS TRIPPED</div>
+              <div class="mono" id="cruise-stat-slippage" style="font-size: 16px; font-weight: 800; color: #f87171; margin-top: 2px;">0</div>
+            </div>
+          </div>
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border-subtle); color: var(--text-dim); text-align: left; background: rgba(13,19,34,0.6);">
+                  <th style="padding: 8px 12px;">TOKEN</th>
+                  <th style="padding: 8px 12px;">SIZE</th>
+                  <th style="padding: 8px 12px;">REALIZED PNL</th>
+                  <th style="padding: 8px 12px;">DEFENSE RULE EXECUTED</th>
+                  <th style="padding: 8px 12px;">URGENCY &amp; TIP</th>
+                </tr>
+              </thead>
+              <tbody id="cruise-hist-tbody">
+                <tr><td colspan="5" style="text-align: center; padding: 16px; color: var(--text-dim);">Loading defense history...</td></tr>
               </tbody>
             </table>
           </div>
@@ -2305,6 +2463,226 @@
       });
     }
 
+    // --- AI CRUISE AGENT IN-FLIGHT SUPERVISOR CONTROLLER ---
+    let cruisePollInterval = null;
+
+    function openAiCruiseModal() {
+      const modal = document.getElementById("ai-cruise-modal");
+      if (!modal) return;
+      modal.style.display = "flex";
+      fetchCruiseData();
+      if (cruisePollInterval) clearInterval(cruisePollInterval);
+      cruisePollInterval = setInterval(fetchCruiseData, 1000);
+    }
+
+    function closeAiCruiseModal() {
+      const modal = document.getElementById("ai-cruise-modal");
+      if (modal) modal.style.display = "none";
+      if (cruisePollInterval) {
+        clearInterval(cruisePollInterval);
+        cruisePollInterval = null;
+      }
+    }
+
+    function renderActiveSlotCard(pos, slotIdx) {
+      const pnl = pos.pnl_pct || 0;
+      const pnlColor = pnl >= 0 ? "var(--green)" : "#f87171";
+      const pnlSign = pnl >= 0 ? "+" : "";
+      const cvdRatio = pos.cvd_pressure_ratio || 0;
+      const cvdPercent = cvdRatio * 100;
+      const cvdWidth = Math.min(Math.abs(cvdPercent), 100);
+      const cvdColor = cvdRatio >= 0 ? "var(--green)" : "#f87171";
+
+      let divBadge = `<span class="badge" style="background: rgba(100,116,139,0.2); color: #94a3b8; font-size: 9px;">⚖️ BALANCED ORDERFLOW</span>`;
+      if (pos.cvd_divergence_state === "BEARISH_ABSORPTION") {
+        divBadge = `<span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171; font-size: 9px; border: 1px solid rgba(239,68,68,0.4);">⚠️ BEARISH ABSORPTION TRIPWIRE</span>`;
+      } else if (pos.cvd_divergence_state === "BULLISH_EXPANSION") {
+        divBadge = `<span class="badge" style="background: rgba(16,185,129,0.2); color: var(--green); font-size: 9px; border: 1px solid rgba(16,185,129,0.4);">⚡ BULLISH TAKER SURGE</span>`;
+      }
+
+      const lockedFloor = pos.locked_floor_pct || 0;
+      const floorText = lockedFloor > 0 ? `+${lockedFloor.toFixed(1)}%` : "DISARMED";
+      const floorColor = lockedFloor > 0 ? "var(--green)" : "var(--text-dim)";
+      const peakMfe = pos.peak_mfe_pct || 0;
+      const mfeActivationMet = peakMfe >= 30.0;
+      const mfeColor = mfeActivationMet ? "var(--green)" : "var(--cyan)";
+
+      const entryPx = (pos.entry_price || 0).toExponential(4);
+      const spotPx = (pos.current_price || 0).toExponential(4);
+      const dynTrail = (pos.dynamic_trail_pct || 0).toFixed(1);
+      const rollVol = (pos.rolling_volatility_pct || 0).toFixed(1);
+      const netSol = (pos.cvd_net_sol || 0);
+      const netSolSign = netSol >= 0 ? "+" : "";
+
+      return `
+        <div style="background: var(--bg-card); border: 1px solid var(--border-glow); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge" style="background: rgba(16,185,129,0.2); color: var(--green); font-size: 10px; font-weight: 800;">SLOT #${slotIdx + 1} // ACTIVE</span>
+              <span class="mono" style="font-size: 15px; font-weight: 800; color: #fff;">${escapeHtml(pos.symbol)}</span>
+              <a href="https://dexscreener.com/solana/${escapeHtml(pos.mint)}" target="_blank" class="mono" style="font-size: 10px; color: var(--cyan); text-decoration: none;">${escapeHtml(pos.mint.substring(0, 8))}... ↗</a>
+            </div>
+            <div class="mono" style="font-size: 10px; color: var(--text-dim);">
+              HOLD: <b style="color:#fff;">${pos.hold_time_secs}s</b> | TTL: <b style="color:var(--amber);">${pos.ttl_remaining_secs}s</b>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px;">
+            <div>
+              <div style="font-size: 9px; color: var(--text-dim);">ENTRY PRICE</div>
+              <div class="mono" style="font-size: 12px; color: #fff; margin-top: 2px;">${entryPx} SOL</div>
+            </div>
+            <div>
+              <div style="font-size: 9px; color: var(--text-dim);">SPOT PRICE</div>
+              <div class="mono" style="font-size: 12px; color: #fff; margin-top: 2px;">${spotPx} SOL</div>
+            </div>
+            <div>
+              <div style="font-size: 9px; color: var(--text-dim);">FLOATING PNL</div>
+              <div class="mono" style="font-size: 13px; font-weight: 800; color: ${pnlColor}; margin-top: 2px;">${pnlSign}${pnl.toFixed(2)}%</div>
+            </div>
+          </div>
+
+          <!-- Peak MFE & Volatility Floor -->
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; font-size: 10px; flex-wrap: wrap;">
+              <span style="color: var(--text-dim);">PEAK MFE: <b class="mono" style="color: ${mfeColor};">+${peakMfe.toFixed(1)}%</b></span>
+              <span style="color: var(--text-dim);">DYN TRAIL: <b class="mono" style="color: var(--cyan);">${dynTrail}%</b> (σ: ${rollVol}%)</span>
+              <span style="color: var(--text-dim);">LOCKED FLOOR: <b class="mono" style="color: ${floorColor};">${floorText}</b></span>
+            </div>
+            <div style="height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden;">
+              <div style="width: ${Math.min(Math.max(peakMfe, 0), 100)}%; height: 100%; background: ${mfeColor}; border-radius: 3px;"></div>
+            </div>
+          </div>
+
+          <!-- Real-Time CVD Pressure Meter -->
+          <div style="display: flex; flex-direction: column; gap: 4px; background: rgba(13,19,34,0.4); padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; flex-wrap: wrap; gap: 4px;">
+              <span style="font-weight: 700; color: #fff;">CVD PRESSURE METER</span>
+              <span class="mono" style="color: ${cvdColor}; font-weight: 700;">${cvdRatio >= 0 ? '+' : ''}${cvdPercent.toFixed(1)}% (${netSolSign}${netSol.toFixed(3)} SOL)</span>
+              ${divBadge}
+            </div>
+            <div style="height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden; display: flex;">
+              <div style="width: 50%; display: flex; justify-content: flex-end;">
+                ${cvdRatio < 0 ? `<div style="width: ${cvdWidth}%; height: 100%; background: #f87171;"></div>` : ''}
+              </div>
+              <div style="width: 1px; background: #64748b;"></div>
+              <div style="width: 50%;">
+                ${cvdRatio >= 0 ? `<div style="width: ${cvdWidth}%; height: 100%; background: var(--green);"></div>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderIdleSlotCard(slotIdx) {
+      return `
+        <div style="background: var(--bg-card); border: 1px dashed var(--border-subtle); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 180px; text-align: center; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="badge" style="background: rgba(100,116,139,0.2); color: #94a3b8; font-size: 10px;">SLOT #${slotIdx + 1}</span>
+            <span class="badge" style="background: rgba(14,165,233,0.15); color: var(--cyan); font-size: 9px; font-weight: 700;">STANDBY</span>
+          </div>
+          <div class="mono" style="font-size: 13px; font-weight: 700; color: #e2e8f0; margin-top: 4px;">SLOT IDLE // Awaiting Conviction Queue Pop</div>
+          <div style="font-size: 10px; color: var(--text-dim); max-width: 380px; line-height: 1.5;">
+            Dynamic Half-Kelly Sizing (4.5% - 8.5% NAV) &bull; Jito Bundle Floor (10,000 lamports) &bull; Volatility-Scaled Ratchet Armed
+          </div>
+        </div>
+      `;
+    }
+
+    async function fetchCruiseData() {
+      try {
+        const res = await fetch("/api/agent/cruise");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // 1. Update KPI bar
+        if (data.dynamic_exits_config) {
+          const de = data.dynamic_exits_config;
+          const volEl = document.getElementById("cruise-kpi-vol-mult");
+          if (volEl) volEl.innerText = `${(de.vol_multiplier || 1.65).toFixed(2)}x (σ_realized)`;
+          const bandEl = document.getElementById("cruise-kpi-band-range");
+          if (bandEl) bandEl.innerText = `${(de.min_trail_pct || 8.0).toFixed(1)}% - ${(de.max_trail_pct || 22.0).toFixed(1)}%`;
+          const mfeEl = document.getElementById("cruise-kpi-mfe-arm");
+          if (mfeEl) mfeEl.innerText = `Peak MFE ≥ +${(de.mfe_activation_pct || 30.0).toFixed(1)}%`;
+        }
+        if (data.orderflow_config) {
+          const of = data.orderflow_config;
+          const tripEl = document.getElementById("cruise-kpi-absorption-trip");
+          if (tripEl) tripEl.innerText = `CVD Ratio < ${((of.bearish_absorption_threshold || -0.3) * 100).toFixed(1)}%`;
+        }
+
+        // 2. Concurrency badge & status
+        const badgeEl = document.getElementById("cruise-slots-badge");
+        if (badgeEl) badgeEl.innerText = `${data.slots_active || 0} / ${data.slots_total || 4} ACTIVE SLOTS`;
+        const statusEl = document.getElementById("cruise-supervisor-status");
+        if (statusEl) statusEl.innerText = data.supervisor_status || "MONITORING_ACTIVE";
+
+        // 3. Render slots
+        const totalSlots = data.slots_total || 4;
+        const grid = document.getElementById("cruise-slots-grid");
+        if (grid) {
+          let html = "";
+          for (let i = 0; i < totalSlots; i++) {
+            if (data.positions && data.positions[i]) {
+              html += renderActiveSlotCard(data.positions[i], i);
+            } else {
+              html += renderIdleSlotCard(i);
+            }
+          }
+          grid.innerHTML = html;
+        }
+
+        // 4. Render Historical Protection stats
+        if (data.historical_protection_stats) {
+          const h = data.historical_protection_stats;
+          const elTotal = document.getElementById("cruise-stat-total-interventions");
+          if (elTotal) elTotal.innerText = h.emergency_exits_triggered || 0;
+          const elStop = document.getElementById("cruise-stat-stop-loss");
+          if (elStop) elStop.innerText = h.stop_loss_exits || 0;
+          const elRatchet = document.getElementById("cruise-stat-dynamic-ratchets");
+          if (elRatchet) elRatchet.innerText = h.dynamic_ratchet_exits || 0;
+          const elFlash = document.getElementById("cruise-stat-flash-dumps");
+          if (elFlash) elFlash.innerText = h.flash_dump_exits || 0;
+          const elSlip = document.getElementById("cruise-stat-slippage");
+          if (elSlip) elSlip.innerText = h.slippage_circuit_exits || 0;
+          const sumEl = document.getElementById("cruise-hist-total-summary");
+          if (sumEl) sumEl.innerText = `${h.total_closed_trades || 0} Total Lifetime Settlements`;
+
+          const tbody = document.getElementById("cruise-hist-tbody");
+          if (tbody && h.recent_protected_trades) {
+            if (h.recent_protected_trades.length === 0) {
+              tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:16px; color:var(--text-dim);">No closed trades recorded yet.</td></tr>`;
+            } else {
+              tbody.innerHTML = h.recent_protected_trades.slice(0, 5).map(t => {
+                const pnlVal = t.pnl_pct || 0;
+                const pnlColor = pnlVal >= 0 ? "color: var(--green);" : "color: #f87171;";
+                const pnlSign = pnlVal >= 0 ? "+" : "";
+                const isEmergency = t.is_toxic || (t.jito_tip_lamports >= 75000);
+                const tipBadge = isEmergency
+                  ? `<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171; font-size: 9px;">${(t.jito_tip_lamports || 75000).toLocaleString()} Tip (EMERGENCY)</span>`
+                  : `<span class="badge" style="background: rgba(14,165,233,0.15); color: var(--cyan); font-size: 9px;">${(t.jito_tip_lamports || 10000).toLocaleString()} Tip (STANDARD)</span>`;
+                return `
+                  <tr style="border-bottom: 1px solid rgba(30,41,59,0.5);">
+                    <td style="padding: 8px 12px;" class="mono"><b style="color:#fff;">${escapeHtml(t.symbol)}</b></td>
+                    <td style="padding: 8px 12px;" class="mono">${(t.size_sol || 0).toFixed(3)} SOL</td>
+                    <td style="padding: 8px 12px;" class="mono" style="${pnlColor}">
+                      <span style="${pnlColor} font-weight:700;">${pnlSign}${pnlVal.toFixed(1)}%</span>
+                      <span style="font-size:10px; color:var(--text-dim); margin-left:4px;">(${pnlSign}${(t.pnl_sol || 0).toFixed(4)} SOL)</span>
+                    </td>
+                    <td style="padding: 8px 12px; color:#e2e8f0;">${escapeHtml(t.reason)}</td>
+                    <td style="padding: 8px 12px;">${tipBadge}</td>
+                  </tr>
+                `;
+              }).join("");
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching cruise supervisor telemetry", err);
+      }
+    }
+
     // --- DYNAMIC SVG EQUITY SPARKLINE ---
     function renderNavEquitySparkline(closedTrades, initialBankroll, currentBankroll) {
       const svg = document.getElementById("nav-equity-svg");
@@ -2383,6 +2761,7 @@
         closeHistoricalModal();
         closeTokenDetailModal();
         closeAiAgentModal();
+        closeAiCruiseModal();
       }
     });
 
