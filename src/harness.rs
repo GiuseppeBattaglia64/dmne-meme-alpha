@@ -607,6 +607,7 @@ mod tests {
             dynamic_exits: Some(crate::config::DynamicExitsConfig::default()),
             orderflow: None,
             genesis_guard: None,
+            funder_graph: None,
             admin: None,
         };
 

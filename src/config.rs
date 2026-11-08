@@ -63,6 +63,9 @@ pub struct EngineConfig {
     // Slot 0 Genesis Bundle Protection & Anti-Sniper Cluster Detection
     pub genesis_guard: GenesisGuardConfig,
 
+    // Deep Funder Graph HHI / Sybil Cluster Filter
+    pub funder_graph: crate::funder_graph::FunderGraphConfig,
+
     // Sandbox & Replay Configuration
     pub sandbox: SandboxConfig,
 
@@ -546,6 +549,7 @@ pub struct TomlConfigFile {
     pub dynamic_exits: Option<DynamicExitsConfig>,
     pub orderflow: Option<OrderflowConfig>,
     pub genesis_guard: Option<GenesisGuardConfig>,
+    pub funder_graph: Option<crate::funder_graph::FunderGraphConfig>,
     pub admin: Option<AdminConfig>,
 }
 
@@ -588,6 +592,7 @@ impl Default for EngineConfig {
             dynamic_exits: DynamicExitsConfig::default(),
             orderflow: OrderflowConfig::default(),
             genesis_guard: GenesisGuardConfig::default(),
+            funder_graph: crate::funder_graph::FunderGraphConfig::default(),
             sandbox: SandboxConfig::default(),
             admin: AdminConfig::default(),
         }
@@ -632,6 +637,10 @@ impl EngineConfig {
                 if let Some(gg) = toml_file.genesis_guard {
                     println!("[CONFIG] Loaded institutional [genesis_guard] envelope from config.toml");
                     cfg.genesis_guard = gg;
+                }
+                if let Some(fg) = toml_file.funder_graph {
+                    println!("[CONFIG] Loaded institutional [funder_graph] envelope from config.toml");
+                    cfg.funder_graph = fg;
                 }
                 if let Some(sb) = toml_file.sandbox {
                     cfg.sandbox = sb;

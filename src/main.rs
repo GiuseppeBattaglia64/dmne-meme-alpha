@@ -46,10 +46,14 @@ mod amm;
 mod ws_ingest;
 mod risk;
 mod sandbox;
+mod shadow_logger;
 mod hawkes;
+mod funder_graph;
 mod adaptive_exits;
+mod radar;
 mod orderflow;
 mod genesis_guard;
+mod admission;
 mod cold_path;
 mod harness;
 
@@ -135,8 +139,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tokio_tungstenite::connect_async;
-use dmne_meme_alpha::shadow_logger;
-use dmne_meme_alpha::radar::{
+use crate::radar::{
     truncate_mint_address, RejectionCategory, RollingRejectionTracker, Stage2AuditEntry,
     Stage2AuditRingBuffer, ROLLING_WINDOW_CAPACITY, STAGE2_AUDIT_LOG_CAPACITY,
 };
@@ -664,6 +667,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = Arc::new(RwLock::new(BotState::new()));
     let config = Arc::new(config::EngineConfig::load());
     let db_audit_tx = db::spawn_db_audit_worker(db::DEFAULT_DB_URL);
+    let funder_cache = funder_graph::FunderGraphEvaluator::load_cache(&config.funder_graph.cache_path).unwrap_or_default();
+    let funder_evaluator = Arc::new(funder_graph::FunderGraphEvaluator::new(config.funder_graph.clone(), funder_cache));
     // Reconcile system bankroll and cumulative metrics on startup
     if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
         let (total, wins, net, rejections) = db::fetch_complete_system_stats(&pg).await;
@@ -1581,6 +1586,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let eval_cfg = Arc::clone(&config);
     let eval_audit_tx = db_audit_tx.clone();
     let eval_shadow = shadow_handle.clone();
+    let eval_funder = Arc::clone(&funder_evaluator);
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -1687,52 +1693,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &eval_cfg.risk,
                         );
 
-                        let hawkes_pop_res: Result<(), String> = if eval_cfg.hawkes.enabled {
-                            let arrivals = eval_shadow.get_arrival_timestamps_secs(&candidate.token_mint).await;
-                            let now_f64 = chrono::Utc::now().timestamp() as f64;
-                            let m = hawkes::HawkesEvaluator::evaluate(
-                                &arrivals,
-                                now_f64,
-                                final_snap.m5_volume_usd,
-                                final_snap.buy_sell_ratio,
-                                final_snap.liquidity_usd,
-                                &eval_cfg.hawkes,
-                            );
-                            if m.is_wash_trading {
-                                Err(format!("HAWKES_WASH (eta: {:.2})", m.branching_ratio))
-                            } else {
-                                Ok(())
-                            }
+                        let arrivals = eval_shadow.get_arrival_timestamps_secs(&candidate.token_mint).await;
+                        let genesis_profile = if eval_cfg.genesis_guard.enabled {
+                            Some(genesis_guard::inspect_candidate_genesis(
+                                &eval_client,
+                                &eval_cfg.default_rpc_url,
+                                &candidate.token_mint,
+                                &final_snap.pair_address,
+                            ).await)
                         } else {
-                            Ok(())
+                            None
                         };
 
-                        let orderflow_pop_res: Result<(), (String, String)> = if eval_cfg.orderflow.enabled {
-                            let mut cvd_tracker = orderflow::RollingCvdTracker::new(eval_cfg.orderflow.cvd_window_secs);
-                            let now_f64 = chrono::Utc::now().timestamp() as f64;
-                            let sol_price_usd = eval_cfg.sol_reference_price_usd.max(1.0);
-                            let volume_sol = (final_snap.m5_volume_usd / sol_price_usd).max(0.0);
-                            cvd_tracker.record_snapshot_volume(
-                                now_f64,
-                                volume_sol,
-                                final_snap.m5_buys,
-                                final_snap.m5_sells,
-                            );
-                            let pressure = cvd_tracker.pressure_ratio();
-                            let divergence = cvd_tracker.evaluate_divergence(
-                                final_snap.m5_price_change_pct,
-                                eval_cfg.orderflow.bearish_absorption_threshold,
-                            );
-                            if divergence == orderflow::CvdDivergence::BearishAbsorption {
-                                Err(("CVD_BEARISH_ABSORPTION".to_string(), format!("CVD: {:.0}% (Abs)", pressure * 100.0)))
-                            } else if pressure < eval_cfg.orderflow.min_entry_cvd_ratio {
-                                Err(("CVD_NEGATIVE_PRESSURE".to_string(), format!("CVD: {:.0}% (<{:.0}%)", pressure * 100.0, eval_cfg.orderflow.min_entry_cvd_ratio * 100.0)))
-                            } else {
-                                Ok(())
-                            }
-                        } else {
-                            Ok(())
+                        let telemetry = admission::CandidateTelemetry {
+                            symbol: candidate.symbol.clone(),
+                            token_mint: candidate.token_mint.clone(),
+                            pair_address: final_snap.pair_address.clone(),
+                            dex_id: candidate.dex_id.clone(),
+                            price_sol: final_snap.price_sol,
+                            liquidity_usd: final_snap.liquidity_usd,
+                            fdv_usd: final_snap.fdv_usd,
+                            m5_price_change_pct: final_snap.m5_price_change_pct,
+                            h1_price_change_pct: final_snap.h1_price_change_pct,
+                            buy_sell_ratio: final_snap.buy_sell_ratio,
+                            m5_volume_usd: final_snap.m5_volume_usd,
+                            m5_buys: final_snap.m5_buys,
+                            m5_sells: final_snap.m5_sells,
+                            arrival_timestamps: arrivals,
+                            genesis_profile,
+                            holder_records: None,
                         };
+
+                        let admission_res = admission::evaluate_candidate_admission(
+                            &telemetry,
+                            &eval_cfg,
+                            Some(&eval_funder),
+                        );
 
                         if let Err(reject_reason) = tick_res {
                             println!("[CONFIRMATION REJECT] Candidate {} ({}) failed live tick gate: {} (Ticks: {:?})", 
@@ -1770,96 +1766,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 false,
                                 Some(reject_reason.to_string()),
                             );
-                        } else if let Err(reject_reason) = hawkes_pop_res {
-                            println!("[HAWKES WASH REJECT] Candidate {} ({}) triggered supercritical wash: {}", 
-                                candidate.symbol, candidate.token_mint, reject_reason);
-                            let mut state = eval_state.write().await;
-                            let now_epoch = chrono::Utc::now().timestamp() as u64;
-                            state.rejected_candidates.insert(candidate.token_mint.clone(), now_epoch);
-                            if !candidate.symbol.is_empty() {
-                                state.rejected_candidates.insert(candidate.symbol.clone(), now_epoch);
-                            }
-                            state.rejections_count += 1;
-                            state.record_stage2_audit(
-                                &candidate.symbol,
-                                &candidate.token_mint,
-                                final_snap.liquidity_usd,
-                                reject_reason.clone(),
-                                "REJECT: HAWKES_WASH".to_string(),
-                                false,
-                                RejectionCategory::HawkesWash,
-                            );
-                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
-                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
-                            let _ = eval_audit_tx.send(db::AuditLogPayload {
-                                token_mint: candidate.token_mint.clone(),
-                                pair_address: final_snap.pair_address.clone(),
-                                dex_id: candidate.dex_id.clone(),
-                                liquidity_usd: final_snap.liquidity_usd,
-                                hhi_concentration: 0.35,
-                                mint_revoked: false,
-                                freeze_revoked: false,
-                                lp_burned: false,
-                                admitted: false,
-                                rejection_reason: "HAWKES_WASH".to_string(),
-                            });
-                            eval_shadow.log_evaluation(
-                                &candidate.token_mint,
-                                &candidate.symbol,
-                                *prices.last().unwrap_or(&final_snap.price_sol),
-                                final_snap.liquidity_usd,
-                                final_snap.fdv_usd,
-                                final_snap.m5_volume_usd,
-                                final_snap.m5_buys,
-                                final_snap.m5_sells,
-                                false,
-                                Some("HAWKES_WASH".to_string()),
-                            );
-                        } else if let Err((reject_reason, metric_label)) = orderflow_pop_res {
-                            println!("[ORDERFLOW CVD REJECT] Candidate {} ({}) failed CVD check: {} ({})", 
-                                candidate.symbol, candidate.token_mint, reject_reason, metric_label);
-                            let mut state = eval_state.write().await;
-                            let now_epoch = chrono::Utc::now().timestamp() as u64;
-                            state.rejected_candidates.insert(candidate.token_mint.clone(), now_epoch);
-                            if !candidate.symbol.is_empty() {
-                                state.rejected_candidates.insert(candidate.symbol.clone(), now_epoch);
-                            }
-                            state.rejections_count += 1;
-                            state.record_stage2_audit(
-                                &candidate.symbol,
-                                &candidate.token_mint,
-                                final_snap.liquidity_usd,
-                                metric_label,
-                                format!("REJECT: {}", reject_reason),
-                                false,
-                                RejectionCategory::LowConviction,
-                            );
-                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
-                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
-                            let _ = eval_audit_tx.send(db::AuditLogPayload {
-                                token_mint: candidate.token_mint.clone(),
-                                pair_address: final_snap.pair_address.clone(),
-                                dex_id: candidate.dex_id.clone(),
-                                liquidity_usd: final_snap.liquidity_usd,
-                                hhi_concentration: 0.35,
-                                mint_revoked: false,
-                                freeze_revoked: false,
-                                lp_burned: false,
-                                admitted: false,
-                                rejection_reason: reject_reason.clone(),
-                            });
-                            eval_shadow.log_evaluation(
-                                &candidate.token_mint,
-                                &candidate.symbol,
-                                *prices.last().unwrap_or(&final_snap.price_sol),
-                                final_snap.liquidity_usd,
-                                final_snap.fdv_usd,
-                                final_snap.m5_volume_usd,
-                                final_snap.m5_buys,
-                                final_snap.m5_sells,
-                                false,
-                                Some(reject_reason),
-                            );
                         } else if let Err(reject_reason) = snapshot_res {
                             println!("[QUEUE POP REJECT] Candidate {} ({}) deteriorated during confirmation: {}", 
                                 candidate.symbol, candidate.token_mint, reject_reason);
@@ -1895,6 +1801,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 final_snap.m5_sells,
                                 false,
                                 Some(reject_reason.to_string()),
+                            );
+                        } else if let Err(rejection) = admission_res {
+                            println!("[ADMISSION REJECT] Candidate {} ({}) failed {}: {} ({})", 
+                                candidate.symbol, candidate.token_mint, rejection.category().as_str(), rejection.reason_str(), rejection.metric_label());
+                            let mut state = eval_state.write().await;
+                            let now_epoch = chrono::Utc::now().timestamp() as u64;
+                            state.rejected_candidates.insert(candidate.token_mint.clone(), now_epoch);
+                            if !candidate.symbol.is_empty() {
+                                state.rejected_candidates.insert(candidate.symbol.clone(), now_epoch);
+                            }
+                            state.rejections_count += 1;
+                            state.record_stage2_audit(
+                                &candidate.symbol,
+                                &candidate.token_mint,
+                                final_snap.liquidity_usd,
+                                rejection.metric_label(),
+                                rejection.stage2_verdict(),
+                                false,
+                                rejection.category(),
+                            );
+                            state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                            state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
+                            let _ = eval_audit_tx.send(db::AuditLogPayload {
+                                token_mint: candidate.token_mint.clone(),
+                                pair_address: final_snap.pair_address.clone(),
+                                dex_id: candidate.dex_id.clone(),
+                                liquidity_usd: final_snap.liquidity_usd,
+                                hhi_concentration: 0.35,
+                                mint_revoked: false,
+                                freeze_revoked: false,
+                                lp_burned: false,
+                                admitted: false,
+                                rejection_reason: rejection.reason_str(),
+                            });
+                            eval_shadow.log_evaluation(
+                                &candidate.token_mint,
+                                &candidate.symbol,
+                                *prices.last().unwrap_or(&final_snap.price_sol),
+                                final_snap.liquidity_usd,
+                                final_snap.fdv_usd,
+                                final_snap.m5_volume_usd,
+                                final_snap.m5_buys,
+                                final_snap.m5_sells,
+                                false,
+                                Some(rejection.reason_str()),
                             );
                         } else {
                             let mut state = eval_state.write().await;
@@ -2286,6 +2237,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scanner_shadow = shadow_handle.clone();
     let scanner_client = http_client.clone();
     let scanner_cfg = Arc::clone(&config);
+    let scanner_funder = Arc::clone(&funder_evaluator);
     tokio::spawn(async move {
         loop {
             // Pull newly listed Solana tokens
@@ -2481,224 +2433,77 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             continue;
                                         }
                                         
-                                        // Module: slot_0 Genesis Bundle Protection & Anti-Sniper Cluster Detection
-                                        if scanner_cfg.genesis_guard.enabled {
-                                            let genesis_evaluator = genesis_guard::GenesisGuardEvaluator::new(scanner_cfg.genesis_guard.clone());
-                                            let genesis_profile = genesis_guard::inspect_candidate_genesis(
+                                        // Article 31.28 Canonical Admission Evaluation
+                                        let arrival_timestamps = scanner_shadow.get_arrival_timestamps_secs(&mint).await;
+                                        let genesis_profile = if scanner_cfg.genesis_guard.enabled {
+                                            Some(genesis_guard::inspect_candidate_genesis(
                                                 &scanner_client,
                                                 rpc_endpoint,
                                                 &mint,
                                                 &pair_addr,
-                                            ).await;
-                                            match genesis_evaluator.evaluate(&genesis_profile) {
-                                                genesis_guard::GenesisVerdict::Rejected { reason, metric_str } => {
-                                                    {
-                                                        let mut g = scanner_state.write().await;
-                                                        g.rejections_count += 1;
-                                                        g.record_stage2_audit(
-                                                            &sym,
-                                                            &mint,
-                                                            liq,
-                                                            metric_str,
-                                                            format!("REJECT: {}", reason),
-                                                            false,
-                                                            RejectionCategory::DevCluster,
-                                                        );
-                                                    }
-                                                    let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                        token_mint: mint.clone(),
-                                                        pair_address: pair_addr.clone(),
-                                                        dex_id: dex_id.to_string(),
-                                                        liquidity_usd: liq,
-                                                        hhi_concentration: 0.60,
-                                                        mint_revoked: false,
-                                                        freeze_revoked: false,
-                                                        lp_burned: false,
-                                                        admitted: false,
-                                                        rejection_reason: "GENESIS_BUNDLE_SNIPED".to_string(),
-                                                    });
-                                                    scanner_shadow.log_evaluation(
-                                                        &mint,
-                                                        &sym,
-                                                        snap.price_sol,
-                                                        liq,
-                                                        fdv,
-                                                        snap.m5_volume_usd,
-                                                        snap.m5_buys,
-                                                        snap.m5_sells,
-                                                        false,
-                                                        Some("GENESIS_BUNDLE_SNIPED".to_string()),
-                                                    );
-                                                    continue;
-                                                }
-                                                genesis_guard::GenesisVerdict::Admitted => {}
-                                            }
-                                        }
+                                            ).await)
+                                        } else {
+                                            None
+                                        };
 
-                                        // Notebook Remedy 1 & 2: Deployer supply ceiling (< 1.0%) & Top-10 Dispersion (< 18.0%)
-                                        let dev_holding = 0.0; // Ingested via token account audit
-                                        let top10_concentration = 15.0; // Default dispersed baseline
+                                        let telemetry = admission::CandidateTelemetry {
+                                            symbol: sym.clone(),
+                                            token_mint: mint.clone(),
+                                            pair_address: pair_addr.clone(),
+                                            dex_id: dex_id.to_string(),
+                                            price_sol: snap.price_sol,
+                                            liquidity_usd: liq,
+                                            fdv_usd: fdv,
+                                            m5_price_change_pct: snap.m5_price_change_pct,
+                                            h1_price_change_pct: snap.h1_price_change_pct,
+                                            buy_sell_ratio: if snap.m5_sells > 0 { snap.m5_buys as f64 / snap.m5_sells as f64 } else { 2.0 },
+                                            m5_volume_usd: snap.m5_volume_usd,
+                                            m5_buys: snap.m5_buys,
+                                            m5_sells: snap.m5_sells,
+                                            arrival_timestamps,
+                                            genesis_profile,
+                                            holder_records: None,
+                                        };
 
-                                        
-                                        // Module 1: Hawkes Point Process Wash-Trading Filter
-                                        if scanner_cfg.hawkes.enabled {
-                                            let arrival_timestamps = scanner_shadow.get_arrival_timestamps_secs(&mint).await;
-                                            let now_epoch_f64 = chrono::Utc::now().timestamp() as f64;
-                                            let buy_sell_ratio = if snap.m5_sells > 0 {
-                                                snap.m5_buys as f64 / snap.m5_sells as f64
-                                            } else {
-                                                2.0
-                                            };
-                                            let hawkes_metrics = hawkes::HawkesEvaluator::evaluate(
-                                                &arrival_timestamps,
-                                                now_epoch_f64,
-                                                snap.m5_volume_usd,
-                                                buy_sell_ratio,
-                                                liq,
-                                                &scanner_cfg.hawkes,
-                                            );
-
-                                            if hawkes_metrics.is_wash_trading {
-                                                let metric_label = format!("eta: {:.2}", hawkes_metrics.branching_ratio);
-                                                {
-                                                    let mut g = scanner_state.write().await;
-                                                    g.rejections_count += 1;
-                                                    g.record_stage2_audit(
-                                                        &sym,
-                                                        &mint,
-                                                        liq,
-                                                        metric_label,
-                                                        "REJECT: HAWKES_WASH".to_string(),
-                                                        false,
-                                                        RejectionCategory::HawkesWash,
-                                                    );
-                                                }
-                                                let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                    token_mint: mint.clone(),
-                                                    pair_address: pair_addr.clone(),
-                                                    dex_id: dex_id.to_string(),
-                                                    liquidity_usd: liq,
-                                                    hhi_concentration: 0.35,
-                                                    mint_revoked: false,
-                                                    freeze_revoked: false,
-                                                    lp_burned: false,
-                                                    admitted: false,
-                                                    rejection_reason: "HAWKES_WASH".to_string(),
-                                                });
-                                                scanner_shadow.log_evaluation(
-                                                    &mint,
+                                        if let Err(rejection) = admission::evaluate_candidate_admission(&telemetry, &scanner_cfg, Some(&scanner_funder)) {
+                                            {
+                                                let mut g = scanner_state.write().await;
+                                                g.rejections_count += 1;
+                                                g.record_stage2_audit(
                                                     &sym,
-                                                    snap.price_sol,
+                                                    &mint,
                                                     liq,
-                                                    fdv,
-                                                    snap.m5_volume_usd,
-                                                    snap.m5_buys,
-                                                    snap.m5_sells,
+                                                    rejection.metric_label(),
+                                                    rejection.stage2_verdict(),
                                                     false,
-                                                    Some("HAWKES_WASH".to_string()),
+                                                    rejection.category(),
                                                 );
-                                                continue;
                                             }
-                                        }
-
-                                        // Module: Orderflow Cumulative Volume Delta (CVD) & Divergence Filter
-                                        if scanner_cfg.orderflow.enabled {
-                                            let mut cvd_tracker = orderflow::RollingCvdTracker::new(scanner_cfg.orderflow.cvd_window_secs);
-                                            let now_epoch_f64 = chrono::Utc::now().timestamp() as f64;
-                                            let sol_price_usd = scanner_cfg.sol_reference_price_usd.max(1.0);
-                                            let volume_sol = (snap.m5_volume_usd / sol_price_usd).max(0.0);
-                                            cvd_tracker.record_snapshot_volume(
-                                                now_epoch_f64,
-                                                volume_sol,
+                                            let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                token_mint: mint.clone(),
+                                                pair_address: pair_addr.clone(),
+                                                dex_id: dex_id.to_string(),
+                                                liquidity_usd: liq,
+                                                hhi_concentration: 0.35,
+                                                mint_revoked: false,
+                                                freeze_revoked: false,
+                                                lp_burned: false,
+                                                admitted: false,
+                                                rejection_reason: rejection.reason_str(),
+                                            });
+                                            scanner_shadow.log_evaluation(
+                                                &mint,
+                                                &sym,
+                                                snap.price_sol,
+                                                liq,
+                                                fdv,
+                                                snap.m5_volume_usd,
                                                 snap.m5_buys,
                                                 snap.m5_sells,
+                                                false,
+                                                Some(rejection.reason_str()),
                                             );
-                                            let pressure = cvd_tracker.pressure_ratio();
-                                            let divergence = cvd_tracker.evaluate_divergence(
-                                                snap.m5_price_change_pct,
-                                                scanner_cfg.orderflow.bearish_absorption_threshold,
-                                            );
-                                            if divergence == orderflow::CvdDivergence::BearishAbsorption {
-                                                let metric_label = format!("CVD: {:.0}% (Abs)", pressure * 100.0);
-                                                {
-                                                    let mut g = scanner_state.write().await;
-                                                    g.rejections_count += 1;
-                                                    g.record_stage2_audit(
-                                                        &sym,
-                                                        &mint,
-                                                        liq,
-                                                        metric_label,
-                                                        "REJECT: CVD_BEARISH_ABSORPTION".to_string(),
-                                                        false,
-                                                        RejectionCategory::LowConviction,
-                                                    );
-                                                }
-                                                let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                    token_mint: mint.clone(),
-                                                    pair_address: pair_addr.clone(),
-                                                    dex_id: dex_id.to_string(),
-                                                    liquidity_usd: liq,
-                                                    hhi_concentration: 0.35,
-                                                    mint_revoked: false,
-                                                    freeze_revoked: false,
-                                                    lp_burned: false,
-                                                    admitted: false,
-                                                    rejection_reason: "CVD_BEARISH_ABSORPTION".to_string(),
-                                                });
-                                                scanner_shadow.log_evaluation(
-                                                    &mint,
-                                                    &sym,
-                                                    snap.price_sol,
-                                                    liq,
-                                                    fdv,
-                                                    snap.m5_volume_usd,
-                                                    snap.m5_buys,
-                                                    snap.m5_sells,
-                                                    false,
-                                                    Some("CVD_BEARISH_ABSORPTION".to_string()),
-                                                );
-                                                continue;
-                                            } else if pressure < scanner_cfg.orderflow.min_entry_cvd_ratio {
-                                                let metric_label = format!("CVD: {:.0}% (<{:.0}%)", pressure * 100.0, scanner_cfg.orderflow.min_entry_cvd_ratio * 100.0);
-                                                {
-                                                    let mut g = scanner_state.write().await;
-                                                    g.rejections_count += 1;
-                                                    g.record_stage2_audit(
-                                                        &sym,
-                                                        &mint,
-                                                        liq,
-                                                        metric_label,
-                                                        "REJECT: CVD_NEGATIVE_PRESSURE".to_string(),
-                                                        false,
-                                                        RejectionCategory::LowConviction,
-                                                    );
-                                                }
-                                                let _ = scanner_audit_tx.send(db::AuditLogPayload {
-                                                    token_mint: mint.clone(),
-                                                    pair_address: pair_addr.clone(),
-                                                    dex_id: dex_id.to_string(),
-                                                    liquidity_usd: liq,
-                                                    hhi_concentration: 0.35,
-                                                    mint_revoked: false,
-                                                    freeze_revoked: false,
-                                                    lp_burned: false,
-                                                    admitted: false,
-                                                    rejection_reason: "CVD_NEGATIVE_PRESSURE".to_string(),
-                                                });
-                                                scanner_shadow.log_evaluation(
-                                                    &mint,
-                                                    &sym,
-                                                    snap.price_sol,
-                                                    liq,
-                                                    fdv,
-                                                    snap.m5_volume_usd,
-                                                    snap.m5_buys,
-                                                    snap.m5_sells,
-                                                    false,
-                                                    Some("CVD_NEGATIVE_PRESSURE".to_string()),
-                                                );
-                                                continue;
-                                            }
+                                            continue;
                                         }
 
                                         // Shannon Entropy Filter: Reject degenerate spam tickers (e.g., AAAAAAAAAAAA)
@@ -2734,6 +2539,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             );
                                             continue;
                                         }
+
+                                        // Notebook Remedy 1 & 2: Deployer supply ceiling (< 1.0%) & Top-10 Dispersion (< 18.0%)
+                                        let dev_holding = 0.0; // Ingested via token account audit
+                                        let top10_concentration = 15.0; // Default dispersed baseline
 
                                         if dev_holding >= scanner_cfg.max_dev_holding_pct {
                                             {

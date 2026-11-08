@@ -123,6 +123,15 @@ max_genesis_supply_pct = 25.0        # max aggregate supply sniped in slot 0 (%)
 max_slot0_bundled_txs = 3           # max coordinated buys in block 0
 reject_shared_tip_accounts = true   # reject if multi-wallet bundle shares tip account
 
+[funder_graph]
+enabled = true
+max_hops = 3
+max_sybil_cluster_pct = 18.0
+max_funder_hhi = 0.35
+max_cluster_funding_window_secs = 300
+cex_amount_tolerance_sol = 0.005
+cache_path = "logs/sandbox_onchain_cache.json"
+
 [admin]
 admin_passphrase = "dmne-alpha-desk-2026"
 

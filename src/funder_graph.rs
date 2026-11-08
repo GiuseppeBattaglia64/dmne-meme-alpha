@@ -12,6 +12,10 @@ use serde::{Deserialize, Serialize};
 /// Strongly typed configuration for Deep Funder Graph analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunderGraphConfig {
+    /// Whether the Deep Funder Graph sybil cluster filter is enabled
+    #[serde(default = "default_funder_enabled")]
+    pub enabled: bool,
+
     /// Maximum recursive funding trace hops (default: 3)
     #[serde(default = "default_max_hops")]
     pub max_hops: usize,
@@ -37,6 +41,7 @@ pub struct FunderGraphConfig {
     pub cache_path: String,
 }
 
+fn default_funder_enabled() -> bool { true }
 fn default_max_hops() -> usize { 3 }
 fn default_max_sybil_cluster_pct() -> f64 { 18.0 }
 fn default_max_funder_hhi() -> f64 { 0.35 }
@@ -47,6 +52,7 @@ fn default_cache_path() -> String { "logs/sandbox_onchain_cache.json".to_string(
 impl Default for FunderGraphConfig {
     fn default() -> Self {
         Self {
+            enabled: default_funder_enabled(),
             max_hops: default_max_hops(),
             max_sybil_cluster_pct: default_max_sybil_cluster_pct(),
             max_funder_hhi: default_max_funder_hhi(),
@@ -162,6 +168,23 @@ impl FunderGraphEvaluator {
 
     /// Evaluates a list of token holders according to graph clustering rules
     pub fn evaluate_holders(&self, token_mint: &str, holders: &[TokenHolderRecord]) -> FunderGraphMetrics {
+        if !self.config.enabled {
+            return FunderGraphMetrics {
+                token_mint: token_mint.to_string(),
+                total_evaluated_supply_pct: 0.0,
+                clusters_count: 0,
+                max_cluster_supply_pct: 0.0,
+                max_cluster_funder: "DISABLED".to_string(),
+                max_cluster_size: 0,
+                funder_hhi: 0.0,
+                is_sybil_cluster: false,
+                is_concentrated_hhi: false,
+                is_rejected: false,
+                rejection_reason: None,
+                clusters: Vec::new(),
+            };
+        }
+
         // Filter out liquidity pools / AMM vaults
         let non_pool_holders: Vec<&TokenHolderRecord> = holders
             .iter()
@@ -396,6 +419,7 @@ mod tests {
     #[test]
     fn test_funder_config_defaults() {
         let cfg = FunderGraphConfig::default();
+        assert!(cfg.enabled);
         assert_eq!(cfg.max_hops, 3);
         assert_eq!(cfg.max_sybil_cluster_pct, 18.0);
         assert_eq!(cfg.max_funder_hhi, 0.35);
