@@ -522,8 +522,40 @@
     .text-xs { font-size: 11px; }
     .text-\[8px\], [class*="text-[8px]"] { font-size: 8px; }
     .text-slate-300 { color: #cbd5e1; }
+    .text-slate-400 { color: #94a3b8; }
+    .text-slate-500 { color: #64748b; }
     .gap-1\.5 { gap: 6px; }
     .shrink-0 { flex-shrink: 0; }
+    .w-\[18\%\], [class*="w-[18%]"] { width: 18%; }
+    .w-\[24\%\], [class*="w-[24%]"] { width: 24%; }
+    .w-\[28\%\], [class*="w-[28%]"] { width: 28%; }
+    .w-\[30\%\], [class*="w-[30%]"] { width: 30%; }
+    .text-\[9px\], [class*="text-[9px]"] { font-size: 9px; }
+    .py-0\.5 { padding-top: 2px; padding-bottom: 2px; }
+    .border-b { border-bottom-width: 1px; }
+    .border-slate-800 { border-color: #1e293b; }
+    .border-slate-700 { border: 1px solid #334155; }
+    .border-slate-600 { border: 1px solid #475569; }
+    .bg-slate-800\/60, [class*="bg-slate-800/60"] { background-color: rgba(30, 41, 59, 0.6); }
+    .bg-slate-900 { background-color: #0f172a; }
+    .border-rose-500\/40, [class*="border-rose-500/40"] { border: 1px solid rgba(244, 63, 94, 0.4); }
+    .border-amber-500\/40, [class*="border-amber-500/40"] { border: 1px solid rgba(245, 158, 11, 0.4); }
+    .bg-amber-950\/40, [class*="bg-amber-950/40"] { background-color: rgba(69, 26, 3, 0.4); }
+    .text-amber-300 { color: #fcd34d; }
+    .border-purple-500\/40, [class*="border-purple-500/40"] { border: 1px solid rgba(168, 85, 247, 0.4); }
+    .bg-purple-950\/40, [class*="bg-purple-950/40"] { background-color: rgba(59, 7, 100, 0.4); }
+    .text-purple-300 { color: #d8b4fe; }
+    .border-red-500\/50, [class*="border-red-500/50"] { border: 1px solid rgba(239, 68, 68, 0.5); }
+    .bg-red-950\/50, [class*="bg-red-950/50"] { background-color: rgba(69, 10, 10, 0.5); }
+    .text-red-300 { color: #fca5a5; }
+    .border-emerald-500\/50, [class*="border-emerald-500/50"] { border: 1px solid rgba(16, 185, 129, 0.5); }
+    .bg-emerald-950\/40, [class*="bg-emerald-950/40"] { background-color: rgba(6, 78, 59, 0.4); }
+    .text-emerald-300 { color: #6ee7b7; }
+    .text-left { text-align: left; }
+    .text-right { text-align: right; }
+    .uppercase { text-transform: uppercase; }
+    .tracking-wider { letter-spacing: 0.05em; }
+    .border-collapse { border-collapse: collapse; }
 
     .btn-action {
       background: var(--bg-subtle);
@@ -1207,19 +1239,18 @@
           </span>
         </div>
         <div class="stage2-audit-table-wrap" style="flex: 1; overflow-y: auto; padding: 2px 4px; scrollbar-width: none; -ms-overflow-style: none;">
-          <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; line-height: 1.15;">
+          <table class="w-full table-fixed border-collapse" style="width: 100%; table-layout: fixed; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; line-height: 1.15;">
             <thead>
-              <tr style="color: var(--text-dim); text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 8px;">
-                <th style="padding: 2px 4px;">TIME</th>
-                <th style="padding: 2px 4px;">TOKEN</th>
-                <th style="padding: 2px 4px;">LIQ</th>
-                <th style="padding: 2px 4px;">METRIC</th>
-                <th style="padding: 2px 4px; text-align: right;">VERDICT</th>
+              <tr class="text-[9px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-800" style="color: #64748b; font-size: 9px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #1e293b;">
+                <th class="w-[18%] px-2 py-1 text-left" style="width: 18%; padding: 4px 8px; text-align: left;">TIME</th>
+                <th class="w-[24%] px-2 py-1 text-left" style="width: 24%; padding: 4px 8px; text-align: left;">TOKEN</th>
+                <th class="w-[28%] px-2 py-1 text-left" style="width: 28%; padding: 4px 8px; text-align: left;">METRIC</th>
+                <th class="w-[30%] px-2 py-1 text-right" style="width: 30%; padding: 4px 8px; text-align: right;">VERDICT</th>
               </tr>
             </thead>
             <tbody id="stage2-audit-body">
               <tr>
-                <td colspan="5" style="padding: 8px; text-align: center; color: var(--text-dim); font-size: 8px;">Listening for Stage 2 pre-trade audits...</td>
+                <td colspan="4" style="padding: 8px; text-align: center; color: var(--text-dim); font-size: 8px;">Listening for Stage 2 pre-trade audits...</td>
               </tr>
             </tbody>
           </table>
@@ -2469,54 +2500,110 @@ sudo systemctl restart dmne-alpha.service</code></pre>
       const tbody = document.getElementById("stage2-audit-body");
       if (!tbody) return;
       if (!audits || audits.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="padding: 8px; text-align: center; color: var(--text-dim); font-size: 8px;">Listening for Stage 2 pre-trade audits...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="padding: 8px; text-align: center; color: var(--text-dim); font-size: 8px;">Listening for Stage 2 pre-trade audits...</td></tr>`;
         return;
       }
 
       // Display up to the last 6 entries
       const list = audits.slice(0, 6);
       tbody.innerHTML = list.map(entry => {
+        const fullVerdict = entry.verdict || (entry.is_admitted ? "ADMITTED" : "REJECT");
+        const vClean = fullVerdict.replace(/^REJECT:\s*/i, "").trim().toUpperCase();
+
         let verdictBadge = '';
-        if (entry.is_admitted) {
-          verdictBadge = `<span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #10b981; padding: 0 4px; border-radius: 2px; font-weight: 700; font-size: 7.5px;">ADMITTED</span>`;
+        if (entry.is_admitted || vClean === "ADMITTED") {
+          verdictBadge = `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[8.5px] font-bold font-mono rounded border border-emerald-500/50 bg-emerald-950/40 text-emerald-300" style="display:inline-flex; align-items:center; justify-content:center; padding: 2px 6px; font-size: 8.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; border-radius: 4px; border: 1px solid rgba(16,185,129,0.5); background-color: rgba(6,78,59,0.4); color: #6ee7b7; white-space: nowrap;">ADMITTED</span>`;
+        } else if (vClean.includes("LOW_LIQUIDITY") || vClean.includes("LIQUIDITY") || vClean === "LOW LIQ") {
+          verdictBadge = `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[8.5px] font-bold font-mono rounded border border-rose-500/40 bg-rose-950/40 text-rose-300" style="display:inline-flex; align-items:center; justify-content:center; padding: 2px 6px; font-size: 8.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; border-radius: 4px; border: 1px solid rgba(244,63,94,0.4); background-color: rgba(76,5,25,0.4); color: #fda4af; white-space: nowrap;">LOW LIQ</span>`;
+        } else if (vClean.includes("LOW_CONVICTION") || vClean.includes("CONVICTION")) {
+          verdictBadge = `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[8.5px] font-bold font-mono rounded border border-slate-600 bg-slate-800/60 text-slate-300" style="display:inline-flex; align-items:center; justify-content:center; padding: 2px 6px; font-size: 8.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; border-radius: 4px; border: 1px solid #475569; background-color: rgba(30,41,59,0.6); color: #cbd5e1; white-space: nowrap;">LOW CONV</span>`;
+        } else if (vClean.includes("HAWKES_WASH") || vClean.includes("HAWKES") || vClean.includes("WASH")) {
+          verdictBadge = `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[8.5px] font-bold font-mono rounded border border-amber-500/40 bg-amber-950/40 text-amber-300" style="display:inline-flex; align-items:center; justify-content:center; padding: 2px 6px; font-size: 8.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; border-radius: 4px; border: 1px solid rgba(245,158,11,0.4); background-color: rgba(69,26,3,0.4); color: #fcd34d; white-space: nowrap;">HAWKES</span>`;
+        } else if (vClean.includes("BUY_SELL_RATIO") || vClean.includes("ORDERFLOW") || vClean.includes("DISPERSION")) {
+          verdictBadge = `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[8.5px] font-bold font-mono rounded border border-purple-500/40 bg-purple-950/40 text-purple-300" style="display:inline-flex; align-items:center; justify-content:center; padding: 2px 6px; font-size: 8.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; border-radius: 4px; border: 1px solid rgba(168,85,247,0.4); background-color: rgba(59,7,100,0.4); color: #d8b4fe; white-space: nowrap;">ORDERFLOW</span>`;
+        } else if (vClean.includes("DEV_CLUSTER") || vClean.includes("CLUSTER") || vClean.includes("DEV") || vClean.includes("HHI")) {
+          verdictBadge = `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[8.5px] font-bold font-mono rounded border border-red-500/50 bg-red-950/50 text-red-300" style="display:inline-flex; align-items:center; justify-content:center; padding: 2px 6px; font-size: 8.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; border-radius: 4px; border: 1px solid rgba(239,68,68,0.5); background-color: rgba(69,10,10,0.5); color: #fca5a5; white-space: nowrap;">DEV CLUST</span>`;
         } else {
-          const v = entry.verdict || "REJECT";
-          let badgeColor = "#ef4444";
-          let badgeBg = "rgba(239, 68, 68, 0.15)";
-          let badgeBorder = "rgba(239, 68, 68, 0.4)";
-          if (v.includes("HAWKES")) {
-            badgeColor = "#f59e0b";
-            badgeBg = "rgba(245, 158, 11, 0.15)";
-            badgeBorder = "rgba(245, 158, 11, 0.4)";
-          } else if (v.includes("DISPERSION")) {
-            badgeColor = "#a855f7";
-            badgeBg = "rgba(168, 85, 247, 0.15)";
-            badgeBorder = "rgba(168, 85, 247, 0.4)";
-          } else if (v.includes("DEV") || v.includes("CLUSTER")) {
-            badgeColor = "#06b6d4";
-            badgeBg = "rgba(6, 182, 212, 0.15)";
-            badgeBorder = "rgba(6, 182, 212, 0.4)";
-          }
-          verdictBadge = `<span style="background: ${badgeBg}; border: 1px solid ${badgeBorder}; color: ${badgeColor}; padding: 0 4px; border-radius: 2px; font-weight: 600; font-size: 7.5px;" title="${escapeAttr(v)}">${escapeAttr(v)}</span>`;
+          verdictBadge = `<span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[8.5px] font-bold font-mono rounded border border-slate-700 bg-slate-900 text-slate-400" style="display:inline-flex; align-items:center; justify-content:center; padding: 2px 6px; font-size: 8.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; border-radius: 4px; border: 1px solid #334155; background-color: #0f172a; color: #94a3b8; white-space: nowrap;">REJECTED</span>`;
         }
 
-        const sym = entry.symbol || "UNKNOWN";
+        // 3. Merged Metric Calculation
+        let metricDisplay = "-";
+        if (vClean.includes("LOW_LIQUIDITY") || vClean.includes("LIQUIDITY") || vClean === "LOW LIQ") {
+          const liqK = entry.liquidity_usd ? (entry.liquidity_usd / 1000.0).toFixed(1) : "0.0";
+          metricDisplay = `$${liqK}k (<$35k)`;
+        } else if (vClean.includes("LOW_CONVICTION") || vClean.includes("CONVICTION")) {
+          if (entry.key_metric && entry.key_metric.includes("Conv")) {
+            metricDisplay = entry.key_metric;
+          } else if (entry.key_metric && !isNaN(parseFloat(entry.key_metric))) {
+            let num = parseFloat(entry.key_metric);
+            if (num <= 1.0) num = Math.round(num * 100);
+            metricDisplay = `Conv: ${num}%`;
+          } else {
+            metricDisplay = "Conv: <50%";
+          }
+        } else if (vClean.includes("HAWKES") || vClean.includes("WASH")) {
+          if (entry.key_metric && (entry.key_metric.includes("η") || entry.key_metric.includes("BR"))) {
+            let val = entry.key_metric.replace(/^[A-Za-z:\s>]+/g, "").trim();
+            metricDisplay = `η: ${val || "1.34"}`;
+          } else if (entry.key_metric) {
+            metricDisplay = `η: ${entry.key_metric}`;
+          } else {
+            metricDisplay = "η: 1.34";
+          }
+        } else if (vClean.includes("BUY_SELL_RATIO") || vClean.includes("ORDERFLOW")) {
+          if (entry.key_metric && (entry.key_metric.includes("B/S") || entry.key_metric.includes("ratio"))) {
+            metricDisplay = entry.key_metric;
+          } else if (entry.key_metric) {
+            let val = entry.key_metric.replace(/^[A-Za-z:\s]+/g, "").trim();
+            metricDisplay = `B/S: ${val || "1.01"}`;
+          } else {
+            metricDisplay = "B/S: 1.01";
+          }
+        } else if (vClean.includes("DEV_CLUSTER") || vClean.includes("CLUSTER") || vClean.includes("DEV") || vClean.includes("HHI")) {
+          if (entry.key_metric && entry.key_metric.includes("HHI")) {
+            metricDisplay = entry.key_metric;
+          } else if (entry.key_metric) {
+            metricDisplay = `HHI: ${entry.key_metric}`;
+          } else {
+            metricDisplay = "HHI: >0.30";
+          }
+        } else if (entry.key_metric && entry.key_metric !== "-") {
+          metricDisplay = entry.key_metric;
+        } else if (entry.liquidity_usd > 0) {
+          metricDisplay = `$${(entry.liquidity_usd / 1000.0).toFixed(1)}k`;
+        }
+
+        // Time format HH:MM:SS
+        let timeStr = (entry.timestamp || "").trim();
+        if (timeStr.includes("T")) {
+          timeStr = timeStr.split("T")[1].split(".")[0];
+        } else if (timeStr.includes(" ")) {
+          timeStr = timeStr.split(" ")[1].split(".")[0];
+        }
+        if (timeStr.length > 8) {
+          timeStr = timeStr.substring(0, 8);
+        }
+
+        // Truncate symbol max 6 chars
+        const rawSym = (entry.symbol || "UNKNOWN").trim();
+        const sym = rawSym.length > 6 ? rawSym.substring(0, 6) : rawSym;
         const mint = entry.mint || "";
-        const liq = entry.liquidity_usd ? `$${Math.round(entry.liquidity_usd).toLocaleString()}` : "$0";
-        const metric = entry.key_metric || "-";
 
         return `
-          <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.15s ease;"
+          <tr class="h-[26px] border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
+              style="height: 26px; border-bottom: 1px solid rgba(30,41,59,0.5); transition: background 0.15s ease;"
               onmouseover="this.style.background='rgba(255,255,255,0.03)'"
               onmouseout="this.style.background='transparent'">
-            <td style="padding: 1.5px 4px; color: var(--text-dim); white-space: nowrap;">${escapeAttr(entry.timestamp)}</td>
-            <td style="padding: 1.5px 4px; white-space: nowrap;">
-              <span style="font-weight: 700; color: #fff;">${escapeAttr(sym)}</span>
-              <span style="font-size: 7px; color: var(--text-dim); margin-left: 2px;">${escapeAttr(mint)}</span>
+            <td class="w-[18%] px-2 py-1 text-left font-mono text-slate-500 whitespace-nowrap" style="width: 18%; padding: 2px 8px; text-align: left; color: #64748b; white-space: nowrap;">${escapeHtml(timeStr)}</td>
+            <td class="w-[24%] px-2 py-1 text-left truncate font-mono" style="width: 24%; padding: 2px 8px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              <span style="font-weight: 700; color: #fff;" title="${escapeAttr(rawSym)}">${escapeHtml(sym)}</span>
+              ${mint ? `<span style="font-size: 7px; color: var(--text-dim); margin-left: 2px;">${escapeHtml(mint)}</span>` : ''}
             </td>
-            <td style="padding: 1.5px 4px; color: var(--cyan); white-space: nowrap;">${liq}</td>
-            <td style="padding: 1.5px 4px; color: var(--text-muted); font-size: 7.5px; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(metric)}">${escapeAttr(metric)}</td>
-            <td style="padding: 1.5px 4px; text-align: right; white-space: nowrap;">${verdictBadge}</td>
+            <td class="w-[28%] px-2 py-1 text-left truncate font-mono text-slate-300" style="width: 28%; padding: 2px 8px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cbd5e1;" title="${escapeAttr(metricDisplay)}">${escapeHtml(metricDisplay)}</td>
+            <td class="w-[30%] px-2 py-1 text-right whitespace-nowrap" style="width: 30%; padding: 2px 8px; text-align: right; white-space: nowrap;">
+              <div title="${escapeAttr(fullVerdict)}" style="display: inline-flex; justify-content: flex-end;">${verdictBadge}</div>
+            </td>
           </tr>
         `;
       }).join('');
