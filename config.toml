@@ -113,4 +113,10 @@ min_entry_cvd_ratio = 0.15           # minimum positive taker pressure required 
 bearish_absorption_threshold = -0.30 # negative ratio threshold flagging passive dumping
 tighten_exit_on_absorption = true    # dynamically raise exit floor if CVD divergence triggers
 
+[genesis_guard]
+enabled = true
+max_genesis_supply_pct = 25.0        # max aggregate supply sniped in slot 0 (%)
+max_slot0_bundled_txs = 3           # max coordinated buys in block 0
+reject_shared_tip_accounts = true   # reject if multi-wallet bundle shares tip account
+
 

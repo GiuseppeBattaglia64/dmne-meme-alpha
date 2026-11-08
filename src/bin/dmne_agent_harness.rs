@@ -6,7 +6,7 @@ use dmne_meme_alpha::db::{
     fetch_harness_autopsies, init_agent_harness_tables, list_pending_tasks,
     resolve_agent_task, DEFAULT_DB_URL,
 };
-use dmne_meme_alpha::harness::{apply_patch_to_text, AgentSkill, HarnessEngine};
+use dmne_meme_alpha::harness::{apply_patch_to_file_safe, AgentSkill, HarnessEngine};
 use std::env;
 use std::fs;
 
@@ -207,14 +207,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Expected Delta:  {:+.6} SOL", delta_sol);
 
             let config_path = "config.toml";
-            let current_config = fs::read_to_string(config_path)
-                .map_err(|e| format!("Failed to read {}: {}", config_path, e))?;
-
-            let updated_config = apply_patch_to_text(&current_config, &proposed_diff)
+            apply_patch_to_file_safe(config_path, &proposed_diff)
                 .map_err(|e| format!("Failed to apply patch: {}", e))?;
-
-            fs::write(config_path, &updated_config)
-                .map_err(|e| format!("Failed to write {}: {}", config_path, e))?;
 
             resolve_agent_task(&client, &task_id, "APPLIED").await?;
 
@@ -245,3 +239,4 @@ fn print_usage() {
     println!("  propose               Execute skill pipeline and stage candidate proposal in DB");
     println!("  apply --task-id <ID>  Apply validated proposal to config.toml and mark APPLIED");
 }
+

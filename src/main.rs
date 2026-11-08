@@ -49,6 +49,7 @@ mod sandbox;
 mod hawkes;
 mod adaptive_exits;
 mod orderflow;
+mod genesis_guard;
 
 pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
 
@@ -2140,7 +2141,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             );
                                             continue;
                                         }
-                                                                                
+                                        
+                                        // Module: slot_0 Genesis Bundle Protection & Anti-Sniper Cluster Detection
+                                        if scanner_cfg.genesis_guard.enabled {
+                                            let genesis_evaluator = genesis_guard::GenesisGuardEvaluator::new(scanner_cfg.genesis_guard.clone());
+                                            let genesis_profile = genesis_guard::inspect_candidate_genesis(
+                                                &scanner_client,
+                                                rpc_endpoint,
+                                                &mint,
+                                                &pair_addr,
+                                            ).await;
+                                            match genesis_evaluator.evaluate(&genesis_profile) {
+                                                genesis_guard::GenesisVerdict::Rejected { reason, metric_str } => {
+                                                    {
+                                                        let mut g = scanner_state.write().await;
+                                                        g.rejections_count += 1;
+                                                        g.record_stage2_audit(
+                                                            &sym,
+                                                            &mint,
+                                                            liq,
+                                                            metric_str,
+                                                            format!("REJECT: {}", reason),
+                                                            false,
+                                                            RejectionCategory::DevCluster,
+                                                        );
+                                                    }
+                                                    let _ = scanner_audit_tx.send(db::AuditLogPayload {
+                                                        token_mint: mint.clone(),
+                                                        pair_address: pair_addr.clone(),
+                                                        dex_id: dex_id.to_string(),
+                                                        liquidity_usd: liq,
+                                                        hhi_concentration: 0.60,
+                                                        mint_revoked: false,
+                                                        freeze_revoked: false,
+                                                        lp_burned: false,
+                                                        admitted: false,
+                                                        rejection_reason: "GENESIS_BUNDLE_SNIPED".to_string(),
+                                                    });
+                                                    scanner_shadow.log_evaluation(
+                                                        &mint,
+                                                        &sym,
+                                                        snap.price_sol,
+                                                        liq,
+                                                        fdv,
+                                                        snap.m5_volume_usd,
+                                                        snap.m5_buys,
+                                                        snap.m5_sells,
+                                                        false,
+                                                        Some("GENESIS_BUNDLE_SNIPED".to_string()),
+                                                    );
+                                                    continue;
+                                                }
+                                                genesis_guard::GenesisVerdict::Admitted => {}
+                                            }
+                                        }
+
                                         // Notebook Remedy 1 & 2: Deployer supply ceiling (< 1.0%) & Top-10 Dispersion (< 18.0%)
                                         let dev_holding = 0.0; // Ingested via token account audit
                                         let top10_concentration = 15.0; // Default dispersed baseline

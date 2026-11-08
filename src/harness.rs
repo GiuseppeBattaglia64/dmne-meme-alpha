@@ -225,6 +225,23 @@ pub fn apply_patch_to_text(original: &str, diff: &str) -> Result<String, String>
     Ok(result)
 }
 
+/// Safely applies a unified diff to a configuration file, creating a .bak copy before modifying
+pub fn apply_patch_to_file_safe(file_path: &str, diff: &str) -> Result<String, String> {
+    let original = std::fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read {}: {}", file_path, e))?;
+
+    // Create backup prior to modification
+    let backup_path = format!("{}.bak", file_path);
+    std::fs::copy(file_path, &backup_path)
+        .map_err(|e| format!("Failed to create backup at {}: {}", backup_path, e))?;
+
+    let modified = apply_patch_to_text(&original, diff)?;
+    std::fs::write(file_path, &modified)
+        .map_err(|e| format!("Failed to write {}: {}", file_path, e))?;
+
+    Ok(modified)
+}
+
 fn apply_hunk(
     source: &str,
     removals: &[String],
@@ -459,4 +476,30 @@ mod tests {
         let applied = apply_patch_to_text(original, &diff).expect("Patch application failed");
         assert_eq!(applied, modified);
     }
+
+    #[test]
+    fn test_apply_patch_to_file_creates_backup() {
+        let temp_dir = std::env::temp_dir();
+        let target_file = temp_dir.join("test_config_backup.toml");
+        let backup_file = temp_dir.join("test_config_backup.toml.bak");
+
+        let original = "[risk]\nstop_loss_pct = -20.0\n";
+        let modified = "[risk]\nstop_loss_pct = -18.0\n";
+        std::fs::write(&target_file, original).unwrap();
+
+        let diff = generate_unified_diff("test_config_backup.toml", original, modified);
+        let result = apply_patch_to_file_safe(target_file.to_str().unwrap(), &diff);
+        assert!(result.is_ok());
+
+        assert!(backup_file.exists(), "Expected .bak backup file to be created");
+        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
+        assert_eq!(backup_content, original);
+
+        let final_content = std::fs::read_to_string(&target_file).unwrap();
+        assert_eq!(final_content, modified);
+
+        let _ = std::fs::remove_file(target_file);
+        let _ = std::fs::remove_file(backup_file);
+    }
 }
+

@@ -60,6 +60,9 @@ pub struct EngineConfig {
     // Real-Time Cumulative Volume Delta (CVD) & Orderflow Pressure
     pub orderflow: OrderflowConfig,
 
+    // Slot 0 Genesis Bundle Protection & Anti-Sniper Cluster Detection
+    pub genesis_guard: GenesisGuardConfig,
+
     // Sandbox & Replay Configuration
     pub sandbox: SandboxConfig,
 }
@@ -244,6 +247,35 @@ impl Default for OrderflowConfig {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenesisGuardConfig {
+    #[serde(default = "default_genesis_guard_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_max_genesis_supply_pct")]
+    pub max_genesis_supply_pct: f64,
+    #[serde(default = "default_max_slot0_bundled_txs")]
+    pub max_slot0_bundled_txs: u32,
+    #[serde(default = "default_reject_shared_tip_accounts")]
+    pub reject_shared_tip_accounts: bool,
+}
+
+fn default_genesis_guard_enabled() -> bool { true }
+fn default_max_genesis_supply_pct() -> f64 { 25.0 }
+fn default_max_slot0_bundled_txs() -> u32 { 3 }
+fn default_reject_shared_tip_accounts() -> bool { true }
+
+impl Default for GenesisGuardConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_genesis_guard_enabled(),
+            max_genesis_supply_pct: default_max_genesis_supply_pct(),
+            max_slot0_bundled_txs: default_max_slot0_bundled_txs(),
+            reject_shared_tip_accounts: default_reject_shared_tip_accounts(),
+        }
+    }
+}
+
 
 fn default_flash_dump_tick_pct() -> f64 { -15.0 }
 fn default_flash_dump_max_pnl_pct() -> f64 { 0.0 }
@@ -477,6 +509,7 @@ struct TomlConfigFile {
     pub hawkes: Option<crate::hawkes::HawkesConfig>,
     pub dynamic_exits: Option<DynamicExitsConfig>,
     pub orderflow: Option<OrderflowConfig>,
+    pub genesis_guard: Option<GenesisGuardConfig>,
 }
 
 impl Default for EngineConfig {
@@ -517,6 +550,7 @@ impl Default for EngineConfig {
             hawkes: crate::hawkes::HawkesConfig::default(),
             dynamic_exits: DynamicExitsConfig::default(),
             orderflow: OrderflowConfig::default(),
+            genesis_guard: GenesisGuardConfig::default(),
             sandbox: SandboxConfig::default(),
         }
     }
@@ -553,6 +587,10 @@ impl EngineConfig {
                     println!("[CONFIG] Loaded institutional [orderflow] envelope from config.toml");
                     cfg.risk.orderflow = of.clone();
                     cfg.orderflow = of;
+                }
+                if let Some(gg) = toml_file.genesis_guard {
+                    println!("[CONFIG] Loaded institutional [genesis_guard] envelope from config.toml");
+                    cfg.genesis_guard = gg;
                 }
                 if let Some(sb) = toml_file.sandbox {
                     cfg.sandbox = sb;
@@ -639,4 +677,26 @@ mod tests {
         assert_eq!(parsed.bearish_absorption_threshold, -0.35);
         assert!(!parsed.tighten_exit_on_absorption);
     }
+
+    #[test]
+    fn test_genesis_guard_config_defaults_and_deserialization() {
+        let default_cfg = GenesisGuardConfig::default();
+        assert!(default_cfg.enabled);
+        assert_eq!(default_cfg.max_genesis_supply_pct, 25.0);
+        assert_eq!(default_cfg.max_slot0_bundled_txs, 3);
+        assert!(default_cfg.reject_shared_tip_accounts);
+
+        let toml_str = r#"
+            enabled = true
+            max_genesis_supply_pct = 20.0
+            max_slot0_bundled_txs = 2
+            reject_shared_tip_accounts = false
+        "#;
+        let parsed: GenesisGuardConfig = toml::from_str(toml_str).expect("Failed to deserialize GenesisGuardConfig");
+        assert!(parsed.enabled);
+        assert_eq!(parsed.max_genesis_supply_pct, 20.0);
+        assert_eq!(parsed.max_slot0_bundled_txs, 2);
+        assert!(!parsed.reject_shared_tip_accounts);
+    }
 }
+
