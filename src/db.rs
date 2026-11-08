@@ -595,3 +595,176 @@ pub async fn fetch_audited_trade_ids(
     }
     Ok(ids)
 }
+
+/// Ensures the cold-path agent_audit_tasks table exists
+pub async fn init_agent_harness_tables(client: &Client) -> Result<(), Error> {
+    let stmt = "
+        CREATE TABLE IF NOT EXISTS agent_audit_tasks (
+            task_id VARCHAR(64) PRIMARY KEY,
+            task_type VARCHAR(64) NOT NULL,
+            status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+            anomaly_summary TEXT NOT NULL,
+            counterfactual_delta_sol DOUBLE PRECISION NOT NULL,
+            proposed_diff TEXT NOT NULL,
+            guardrail_checks_passed BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            resolved_at TIMESTAMPTZ
+        );
+    ";
+    client.execute(stmt, &[]).await?;
+    Ok(())
+}
+
+/// Inserts or updates an agent audit task into PostgreSQL
+pub async fn create_agent_task(
+    client: &Client,
+    task_id: &str,
+    task_type: &str,
+    anomaly_summary: &str,
+    delta_sol: f64,
+    proposed_diff: &str,
+    passed_checks: bool,
+) -> Result<u64, Error> {
+    let stmt = "
+        INSERT INTO agent_audit_tasks (
+            task_id, task_type, status, anomaly_summary,
+            counterfactual_delta_sol, proposed_diff, guardrail_checks_passed
+        ) VALUES ($1, $2, 'PENDING', $3, $4, $5, $6)
+        ON CONFLICT (task_id) DO UPDATE SET
+            task_type = EXCLUDED.task_type,
+            status = 'PENDING',
+            anomaly_summary = EXCLUDED.anomaly_summary,
+            counterfactual_delta_sol = EXCLUDED.counterfactual_delta_sol,
+            proposed_diff = EXCLUDED.proposed_diff,
+            guardrail_checks_passed = EXCLUDED.guardrail_checks_passed,
+            resolved_at = NULL;
+    ";
+    client.execute(
+        stmt,
+        &[&task_id, &task_type, &anomaly_summary, &delta_sol, &proposed_diff, &passed_checks],
+    ).await
+}
+
+/// Lists all pending agent audit tasks from PostgreSQL
+pub async fn list_pending_tasks(
+    client: &Client,
+) -> Result<Vec<(String, String, String, f64, String, bool)>, Error> {
+    let stmt = "
+        SELECT task_id, task_type, anomaly_summary, counterfactual_delta_sol, proposed_diff, guardrail_checks_passed
+        FROM agent_audit_tasks
+        WHERE status = 'PENDING'
+        ORDER BY created_at DESC;
+    ";
+    let rows = client.query(stmt, &[]).await?;
+    let mut tasks = Vec::new();
+    for row in rows {
+        tasks.push((
+            row.get("task_id"),
+            row.get("task_type"),
+            row.get("anomaly_summary"),
+            row.get("counterfactual_delta_sol"),
+            row.get("proposed_diff"),
+            row.get("guardrail_checks_passed"),
+        ));
+    }
+    Ok(tasks)
+}
+
+/// Resolves an agent audit task with a new status (e.g. 'APPLIED', 'REJECTED')
+pub async fn resolve_agent_task(
+    client: &Client,
+    task_id: &str,
+    new_status: &str,
+) -> Result<u64, Error> {
+    let stmt = "
+        UPDATE agent_audit_tasks
+        SET status = $2, resolved_at = NOW()
+        WHERE task_id = $1;
+    ";
+    client.execute(stmt, &[&task_id, &new_status]).await
+}
+
+/// Fetches a single agent audit task by task_id
+pub async fn fetch_agent_task_by_id(
+    client: &Client,
+    task_id: &str,
+) -> Result<Option<(String, String, String, String, f64, String, bool)>, Error> {
+    let stmt = "
+        SELECT task_id, task_type, status, anomaly_summary, counterfactual_delta_sol, proposed_diff, guardrail_checks_passed
+        FROM agent_audit_tasks
+        WHERE task_id = $1;
+    ";
+    let rows = client.query(stmt, &[&task_id]).await?;
+    if let Some(row) = rows.into_iter().next() {
+        Ok(Some((
+            row.get("task_id"),
+            row.get("task_type"),
+            row.get("status"),
+            row.get("anomaly_summary"),
+            row.get("counterfactual_delta_sol"),
+            row.get("proposed_diff"),
+            row.get("guardrail_checks_passed"),
+        )))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Autopsy record row representation for cold-path agent harness
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct HarnessAutopsyRecord {
+    pub id: i32,
+    pub trade_id: i32,
+    pub symbol: String,
+    pub mint: String,
+    pub realized_pnl_pct: f64,
+    pub realized_pnl_sol: f64,
+    pub exit_rule: String,
+    pub hold_duration_secs: f64,
+    pub peak_mfe_pct: f64,
+    pub max_mae_pct: f64,
+    pub slippage_drift_pct: f64,
+    pub entry_cvd_ratio: Option<f64>,
+    pub entry_hawkes_eta: Option<f64>,
+    pub root_cause_category: String,
+    pub counterfactual_recommendation_raw: String,
+}
+
+/// Fetches recent trade autopsy records for harness analysis
+pub async fn fetch_harness_autopsies(
+    client: &Client,
+    limit: i64,
+) -> Result<Vec<HarnessAutopsyRecord>, Error> {
+    let stmt = "
+        SELECT 
+            id, trade_id, symbol, mint, realized_pnl_pct, realized_pnl_sol,
+            exit_rule, hold_duration_secs, peak_mfe_pct, max_mae_pct,
+            slippage_drift_pct, entry_cvd_ratio, entry_hawkes_eta,
+            root_cause_category, counterfactual_recommendation::text AS cf_raw
+        FROM trade_forensic_autopsies
+        ORDER BY id DESC
+        LIMIT $1;
+    ";
+    let rows = client.query(stmt, &[&limit]).await?;
+    let mut records = Vec::new();
+    for row in rows {
+        records.push(HarnessAutopsyRecord {
+            id: row.get("id"),
+            trade_id: row.get("trade_id"),
+            symbol: row.get("symbol"),
+            mint: row.get("mint"),
+            realized_pnl_pct: row.get("realized_pnl_pct"),
+            realized_pnl_sol: row.get("realized_pnl_sol"),
+            exit_rule: row.get("exit_rule"),
+            hold_duration_secs: row.get("hold_duration_secs"),
+            peak_mfe_pct: row.get("peak_mfe_pct"),
+            max_mae_pct: row.get("max_mae_pct"),
+            slippage_drift_pct: row.get("slippage_drift_pct"),
+            entry_cvd_ratio: row.get("entry_cvd_ratio"),
+            entry_hawkes_eta: row.get("entry_hawkes_eta"),
+            root_cause_category: row.get("root_cause_category"),
+            counterfactual_recommendation_raw: row.get("cf_raw"),
+        });
+    }
+    Ok(records)
+}

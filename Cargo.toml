@@ -39,6 +39,10 @@ path = "src/bin/v071_full_replay.rs"
 name = "dmne_forensic_agent"
 path = "src/bin/dmne_forensic_agent.rs"
 
+[[bin]]
+name = "dmne_agent_harness"
+path = "src/bin/dmne_agent_harness.rs"
+
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
 tokio-tungstenite = { version = "0.23", features = ["native-tls"] }
