@@ -97,7 +97,7 @@ report_path = "logs/sandbox_ablation_report.csv"
 [hawkes]
 enabled = true
 min_sample_size = 5                  # minimum order arrival events required for Hawkes estimation
-branching_ratio_threshold = 1.25     # eta_hat threshold for supercritical wash self-excitation
+branching_ratio_threshold = 1.15     # eta_hat threshold for supercritical wash self-excitation
 decay_rate = 1.0                     # beta decay in seconds^-1
 min_dispersion_threshold = 0.35      # minimum entropy required for admission
 volume_override_usd = 60000.0        # high-liquidity pass-through ceiling

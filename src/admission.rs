@@ -18,6 +18,8 @@ use crate::genesis_guard::{GenesisBundleProfile, GenesisGuardEvaluator, GenesisV
 use crate::hawkes::HawkesEvaluator;
 use crate::orderflow::{CvdDivergence, RollingCvdTracker};
 use crate::radar::RejectionCategory;
+#[allow(unused_imports)]
+pub use crate::radar::Stage2Rejection;
 
 /// Comprehensive candidate telemetry passed to the canonical admission engine
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,19 +158,26 @@ pub fn evaluate_candidate_admission(
     // 3. Hawkes Point Process Wash-Trading Filter Gate
     if cfg.hawkes.enabled {
         let now_epoch_f64 = chrono::Utc::now().timestamp() as f64;
+        let mut arrivals = candidate.arrival_timestamps.clone();
+        if arrivals.len() < cfg.hawkes.min_sample_size && (candidate.m5_buys + candidate.m5_sells) >= cfg.hawkes.min_sample_size as u64 {
+            let total_txns = (candidate.m5_buys + candidate.m5_sells).min(100) as usize;
+            let step = 300.0 / (total_txns as f64);
+            arrivals = (0..total_txns).map(|i| now_epoch_f64 - 300.0 + (i as f64 * step)).collect();
+        }
+
         let hawkes_metrics = HawkesEvaluator::evaluate(
-            &candidate.arrival_timestamps,
+            &arrivals,
             now_epoch_f64,
             candidate.m5_volume_usd,
             candidate.buy_sell_ratio,
             candidate.liquidity_usd,
             &cfg.hawkes,
         );
-        if hawkes_metrics.is_wash_trading {
+        if hawkes_metrics.is_wash_trading || hawkes_metrics.branching_ratio >= 1.15 {
             return Err(RejectionReason::HawkesWash {
                 branching_ratio: hawkes_metrics.branching_ratio,
                 detail: hawkes_metrics.rejection_reason.unwrap_or_else(|| {
-                    format!("HAWKES_WASH (eta: {:.2})", hawkes_metrics.branching_ratio)
+                    format!("HAWKES_WASH (eta: {:.2} >= 1.15)", hawkes_metrics.branching_ratio)
                 }),
             });
         }
@@ -231,7 +240,7 @@ pub fn evaluate_candidate_admission(
             }
         };
 
-        if funder_metrics.is_rejected {
+        if funder_metrics.is_rejected || funder_metrics.is_sybil_cluster || funder_metrics.is_concentrated_hhi {
             return Err(RejectionReason::DevCluster {
                 reason: funder_metrics.rejection_reason.unwrap_or_else(|| "DEV_CLUSTER_REJECT".to_string()),
                 metric_label: format!("Cluster: {:.1}%", funder_metrics.max_cluster_supply_pct),

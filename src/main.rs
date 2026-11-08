@@ -1707,6 +1707,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             None
                         };
 
+                        let holder_records: Option<Vec<funder_graph::TokenHolderRecord>> = if let Some(cached) = eval_funder.cache.get(&candidate.token_mint) {
+                            Some(cached.clone())
+                        } else {
+                            let (shares, _) = shadow_logger::fetch_rpc_holder_distribution(
+                                &eval_client,
+                                &eval_cfg.default_rpc_url,
+                                &candidate.token_mint,
+                                2,
+                            ).await;
+                            if !shares.is_empty() {
+                                Some(shares.into_iter().enumerate().map(|(i, pct)| {
+                                    funder_graph::TokenHolderRecord {
+                                        holder_address: format!("Holder_{}_{}", &candidate.token_mint[..6.min(candidate.token_mint.len())], i),
+                                        supply_pct: pct,
+                                        is_liquidity_pool: i == 0 && pct > 45.0,
+                                        funding_source: None,
+                                    }
+                                }).collect())
+                            } else {
+                                None
+                            }
+                        };
+
                         let telemetry = admission::CandidateTelemetry {
                             symbol: candidate.symbol.clone(),
                             token_mint: candidate.token_mint.clone(),
@@ -1723,7 +1746,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             m5_sells: final_snap.m5_sells,
                             arrival_timestamps: arrivals,
                             genesis_profile,
-                            holder_records: None,
+                            holder_records,
                         };
 
                         let admission_res = admission::evaluate_candidate_admission(
@@ -2448,6 +2471,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             None
                                         };
 
+                                        let holder_records: Option<Vec<funder_graph::TokenHolderRecord>> = if let Some(cached) = scanner_funder.cache.get(&mint) {
+                                            Some(cached.clone())
+                                        } else {
+                                            let (shares, _) = shadow_logger::fetch_rpc_holder_distribution(
+                                                &scanner_client,
+                                                rpc_endpoint,
+                                                &mint,
+                                                2,
+                                            ).await;
+                                            if !shares.is_empty() {
+                                                Some(shares.into_iter().enumerate().map(|(i, pct)| {
+                                                    funder_graph::TokenHolderRecord {
+                                                        holder_address: format!("Holder_{}_{}", &mint[..6.min(mint.len())], i),
+                                                        supply_pct: pct,
+                                                        is_liquidity_pool: i == 0 && pct > 45.0,
+                                                        funding_source: None,
+                                                    }
+                                                }).collect())
+                                            } else {
+                                                None
+                                            }
+                                        };
+
                                         let telemetry = admission::CandidateTelemetry {
                                             symbol: sym.clone(),
                                             token_mint: mint.clone(),
@@ -2464,7 +2510,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             m5_sells: snap.m5_sells,
                                             arrival_timestamps,
                                             genesis_profile,
-                                            holder_records: None,
+                                            holder_records,
                                         };
 
                                         if let Err(rejection) = admission::evaluate_candidate_admission(&telemetry, &scanner_cfg, Some(&scanner_funder)) {

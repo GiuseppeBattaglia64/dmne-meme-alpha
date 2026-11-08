@@ -38,6 +38,9 @@ pub enum RejectionCategory {
     Admitted,
 }
 
+/// Institutional alias for Stage 2 pre-trade rejection categories
+pub type Stage2Rejection = RejectionCategory;
+
 impl RejectionCategory {
     pub fn as_str(&self) -> &'static str {
         match self {

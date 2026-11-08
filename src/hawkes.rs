@@ -86,7 +86,7 @@ fn default_hawkes_enabled() -> bool { true }
 fn default_mu_baseline() -> f64 { 0.10 }
 fn default_alpha_excitation() -> f64 { 0.20 }
 fn default_beta_decay() -> f64 { 0.15 }
-fn default_max_branching_ratio() -> f64 { 1.25 }
+fn default_max_branching_ratio() -> f64 { 1.15 }
 fn default_min_cv_periodicity_threshold() -> f64 { 0.12 }
 fn default_min_observations() -> usize { 2 }
 fn default_max_inter_arrival_gap_secs() -> f64 { 120.0 }
@@ -664,7 +664,7 @@ mod tests {
         assert_eq!(cfg.mu_baseline, 0.10);
         assert_eq!(cfg.alpha_excitation, 0.20);
         assert_eq!(cfg.beta_decay, 0.15);
-        assert_eq!(cfg.max_branching_ratio, 1.25);
+        assert_eq!(cfg.max_branching_ratio, 1.15);
         assert_eq!(cfg.min_cv_periodicity_threshold, 0.12);
         assert_eq!(cfg.min_observations, 2);
         assert_eq!(cfg.min_sample_size, 5);
