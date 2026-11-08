@@ -1367,53 +1367,57 @@
         </div>
       </div>
 
-      <div style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px;">
+      <div style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px;">
         <!-- KPI Bar -->
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
-          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+          <div class="tdm-stat-box" style="padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
             <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Loss Trades Audited</div>
-            <div class="mono" id="agent-kpi-audited" style="font-size: 18px; font-weight: 800; color: #fff; margin-top: 4px;">60</div>
+            <div class="mono" id="agent-kpi-audited" style="font-size: 17px; font-weight: 800; color: #fff; margin-top: 2px;">60</div>
           </div>
-          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+          <div class="tdm-stat-box" style="padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
             <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Counterfactual Sol Saved</div>
-            <div class="mono" id="agent-kpi-saved" style="font-size: 18px; font-weight: 800; color: var(--green); margin-top: 4px;">+0.4325 SOL (88.9%)</div>
+            <div class="mono" id="agent-kpi-saved" style="font-size: 17px; font-weight: 800; color: var(--green); margin-top: 2px;">+0.4325 SOL (88.9%)</div>
           </div>
-          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+          <div class="tdm-stat-box" style="padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
             <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Active Anomalies</div>
-            <div class="mono" id="agent-kpi-anomalies" style="font-size: 18px; font-weight: 800; color: var(--amber); margin-top: 4px;">12</div>
+            <div class="mono" id="agent-kpi-anomalies" style="font-size: 17px; font-weight: 800; color: var(--amber); margin-top: 2px;">12</div>
           </div>
-          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+          <div class="tdm-stat-box" style="padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
             <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Guardrail Invariants</div>
-            <div class="mono" id="agent-kpi-invariants" style="font-size: 16px; font-weight: 800; color: var(--cyan); margin-top: 4px;">VERIFIED (Passed)</div>
+            <div class="mono" id="agent-kpi-invariants" style="font-size: 15px; font-weight: 800; color: var(--cyan); margin-top: 2px;">VERIFIED (Passed)</div>
           </div>
         </div>
 
-        <!-- HISTORICAL EQUITY TRAJECTORY BENCHMARK -->
-        <div class="mt-3 p-3 bg-slate-950/80 border border-slate-800 rounded-lg flex flex-col gap-2">
-          <div class="flex items-center justify-between">
+        <!-- HISTORICAL EQUITY TRAJECTORY BENCHMARK (COMPACT) -->
+        <div class="mt-2 p-2.5 bg-slate-950/70 border border-slate-800 rounded-lg flex flex-col gap-1.5 shrink-0">
+          <div class="flex items-center justify-between text-xs font-mono">
             <div class="flex items-center gap-2">
-              <span class="text-xs font-mono font-bold text-cyan-400 tracking-wider">HISTORICAL EQUITY TRAJECTORY BENCHMARK (130 TRADES)</span>
-              <span class="px-1.5 py-0.5 text-[8.5px] font-mono font-bold rounded bg-cyan-950/60 border border-cyan-500/40 text-cyan-300">
+              <span class="font-bold text-cyan-400 tracking-wider text-[11px]">EQUITY TRAJECTORY BENCHMARK (130 TRADES)</span>
+              <span class="px-1.5 py-0.2 text-[8px] font-mono font-bold rounded bg-cyan-950/70 border border-cyan-500/40 text-cyan-300">
                 UNBIASED SYMMETRIC REPLAY
               </span>
             </div>
-            <div class="flex items-center gap-3 text-[10px] font-mono">
-              <span class="text-slate-400">Net Alpha: <strong class="text-emerald-400">+0.0408 SOL (+26.7%)</strong></span>
-              <span class="text-slate-400">Max DD Reduction: <strong class="text-cyan-400">-89.7%</strong></span>
+            <div class="flex items-center gap-2 text-[9.5px]">
+              <span class="px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 font-bold">
+                NET ALPHA: +0.0408 SOL (+26.7%)
+              </span>
+              <span class="px-2 py-0.5 rounded bg-cyan-950/50 border border-cyan-500/40 text-cyan-300 font-bold">
+                MAX DD: -89.7%
+              </span>
             </div>
           </div>
 
-          <div class="relative w-full rounded border border-slate-800/80 overflow-hidden bg-slate-900/60 flex items-center justify-center min-h-[180px]">
+          <div class="relative w-full rounded border border-slate-800/80 overflow-hidden bg-slate-900/60 flex items-center justify-center h-[165px] min-h-[165px] max-h-[165px]">
             <img id="img-equity-benchmark" 
                  src="/equity_curve_comparative.png" 
                  alt="Comparative Equity Trajectory" 
-                 class="w-full h-auto object-contain max-h-[240px] rounded" 
-                 onerror="this.parentElement.innerHTML='<div class=\'text-xs font-mono text-slate-500 p-4 text-center\'>Chart loading error. Check /equity_curve_comparative.png</div>'" />
+                 class="w-full h-full object-contain rounded" 
+                 onerror="this.parentElement.innerHTML='<div class=\'text-xs font-mono text-slate-500 p-2 text-center\'>Chart loading...</div>'" />
           </div>
         </div>
 
         <!-- Staged PR Proposal Box -->
-        <div style="background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;" class="mt-2">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <div style="display: flex; align-items: center; gap: 10px;">
               <span style="font-size: 11px; font-weight: 700; color: var(--cyan);">STAGED CONFIG PR PROPOSAL:</span>
@@ -1442,12 +1446,12 @@
         </div>
 
         <!-- Forensic Autopsy Table (last 15 loss settlements) -->
-        <div style="background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+        <div style="background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;" class="mt-2">
           <div style="padding: 10px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 12px; font-weight: 700; color: #fff;">RECENT LOSS FORENSIC AUTOPSIES &amp; COUNTERFACTUAL VERDICTS</span>
             <span style="font-size: 11px; color: var(--text-dim);">Last 15 settled loss trades</span>
           </div>
-          <div style="overflow-x: auto;">
+          <div class="max-h-[180px] overflow-y-auto overflow-x-auto">
             <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
               <thead>
                 <tr style="border-bottom: 1px solid var(--border-subtle); color: var(--text-dim); text-align: left; background: rgba(13,19,34,0.6);">
