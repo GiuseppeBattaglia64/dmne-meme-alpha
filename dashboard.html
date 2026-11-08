@@ -272,12 +272,12 @@
 
     .radar-list {
       flex: 1;
-      max-height: 40%;
       overflow-y: auto;
-      padding: 4px 6px;
+      min-height: 0;
+      padding: 2px 4px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
       scrollbar-width: none;
       -ms-overflow-style: none;
     }
@@ -530,6 +530,9 @@
     .w-\[24\%\], [class*="w-[24%]"] { width: 24%; }
     .w-\[28\%\], [class*="w-[28%]"] { width: 28%; }
     .w-\[30\%\], [class*="w-[30%]"] { width: 30%; }
+    .h-\[165px\], [class*="h-[165px]"] { height: 165px; }
+    .min-h-\[165px\], [class*="min-h-[165px]"] { min-height: 165px; }
+    .max-h-\[165px\], [class*="max-h-[165px]"] { max-height: 165px; }
     .text-\[9px\], [class*="text-[9px]"] { font-size: 9px; }
     .py-0\.5 { padding-top: 2px; padding-bottom: 2px; }
     .border-b { border-bottom-width: 1px; }
@@ -751,21 +754,22 @@
 
     /* RADAR SCANNER EMPTY STATE */
     .radar-empty-state {
-      padding: 10px 12px;
+      padding: 4px 8px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
-      gap: 3px;
+      gap: 2px;
       background: rgba(13, 19, 34, 0.3);
       border: 1px dashed var(--border-subtle);
-      border-radius: 5px;
-      margin: 4px 6px;
+      border-radius: 4px;
+      margin: 2px 4px;
+      flex: 1;
     }
     .radar-pulse-ring {
-      width: 32px;
-      height: 32px;
+      width: 24px;
+      height: 24px;
       border-radius: 50%;
       border: 1px solid var(--cyan);
       position: relative;
@@ -776,11 +780,11 @@
     }
     .radar-pulse-ring::before {
       content: '';
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: var(--cyan);
-      box-shadow: 0 0 8px var(--cyan);
+      box-shadow: 0 0 6px var(--cyan);
     }
     @keyframes radarRingPulse {
       0% { transform: scale(0.8); opacity: 0.8; box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4); }
@@ -1144,42 +1148,46 @@
   <div class="workspace">
     
     <!-- COLUMN 1: MEMESCOPE RADAR -->
-    <div class="panel col-radar" id="memescope-radar">
-      <div class="panel-header" style="flex-wrap: wrap; gap: 4px; padding: 4px 8px;">
-        <div class="panel-title">
-          <span>MEMESCOPE RADAR // DISCOVERY STREAM</span>
+    <div class="panel col-radar flex flex-col" id="memescope-radar" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+      
+      <!-- COMPONENT: DISCOVERY STREAM & RADAR -->
+      <div class="discovery-stream-panel h-[165px] min-h-[165px] max-h-[165px] flex flex-col overflow-hidden" id="discovery-stream-panel" style="height: 165px; min-height: 165px; max-height: 165px; display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 4px; padding: 4px 8px; flex-shrink: 0;">
+          <div class="panel-title">
+            <span>MEMESCOPE RADAR // DISCOVERY STREAM</span>
+          </div>
+          <span class="mono" style="font-size:9px; color:var(--cyan);" id="radar-count">SCANNING</span>
         </div>
-        <span class="mono" style="font-size:9px; color:var(--cyan);" id="radar-count">SCANNING</span>
-      </div>
-      <!-- Radar Rejection & Conviction Filters -->
-      <div class="radar-filter-bar" style="padding: 4px 6px; gap: 3px;">
-        <button class="filter-btn active" data-filter="all" onclick="setRadarFilter('all')">ALL</button>
-        <button class="filter-btn" data-filter="high_conviction" onclick="setRadarFilter('high_conviction')">★ HIGH CONVICTION</button>
-        <button class="filter-btn" data-filter="pump" onclick="setRadarFilter('pump')">PUMP.FUN</button>
-        <button class="filter-btn" data-filter="ray" onclick="setRadarFilter('ray')">RAYDIUM</button>
-        <button class="filter-btn" data-filter="graduating" onclick="setRadarFilter('graduating')">BONDING ≥80%</button>
-      </div>
-      <div class="radar-list" id="radar-container">
-        <!-- Rendered dynamically -->
+        <!-- Radar Rejection & Conviction Filters -->
+        <div class="radar-filter-bar" style="padding: 3px 6px; gap: 3px; flex-shrink: 0;">
+          <button class="filter-btn active" data-filter="all" onclick="setRadarFilter('all')">ALL</button>
+          <button class="filter-btn" data-filter="high_conviction" onclick="setRadarFilter('high_conviction')">★ HIGH CONVICTION</button>
+          <button class="filter-btn" data-filter="pump" onclick="setRadarFilter('pump')">PUMP.FUN</button>
+          <button class="filter-btn" data-filter="ray" onclick="setRadarFilter('ray')">RAYDIUM</button>
+          <button class="filter-btn" data-filter="graduating" onclick="setRadarFilter('graduating')">BONDING ≥80%</button>
+        </div>
+        <div class="radar-list" id="radar-container" style="flex: 1; min-height: 0; overflow-y: auto;">
+          <!-- Rendered dynamically -->
+        </div>
       </div>
 
       <!-- COMPONENT A: REJECTION BREAKDOWN (ROLLING 1,000) -->
-      <div class="rejection-breakdown-panel" style="border-top: 1px solid var(--border-subtle); padding: 5px 8px; background: rgba(13, 19, 34, 0.75); flex-shrink: 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+      <div class="rejection-breakdown-panel h-[110px] min-h-[110px] max-h-[110px] shrink-0" style="height: 110px; min-height: 110px; max-height: 110px; flex-shrink: 0; border-top: 1px solid var(--border-subtle); padding: 4px 8px; background: rgba(13, 19, 34, 0.75); overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
           <div class="panel-title" style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-main);">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="margin-right: 3px;"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
             REJECTION BREAKDOWN (ROLLING 1,000)
           </div>
           <span class="mono" id="rejection-total-badge" style="font-size: 8.5px; color: var(--cyan); background: rgba(6, 182, 212, 0.1); padding: 1px 4px; border-radius: 3px; border: 1px solid rgba(6, 182, 212, 0.25);">0 EVAL</span>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="display: flex; flex-direction: column; gap: 2.5px;">
           <!-- LOW LIQUIDITY -->
           <div>
             <div style="display: flex; justify-content: space-between; font-size: 8px; margin-bottom: 1px; line-height: 1.1;">
               <span style="color: var(--text-muted); font-weight: 500;">LOW LIQUIDITY</span>
               <span class="mono" id="gauge-low-liq-val" style="color: #ef4444; font-weight: 700;">0.0% (0)</span>
             </div>
-            <div style="width: 100%; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+            <div style="width: 100%; height: 2.5px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
               <div id="gauge-low-liq-bar" style="width: 0%; height: 100%; background: #ef4444; border-radius: 2px; transition: width 0.3s ease;"></div>
             </div>
           </div>
@@ -1189,7 +1197,7 @@
               <span style="color: var(--text-muted); font-weight: 500;">LOW CONVICTION</span>
               <span class="mono" id="gauge-low-conv-val" style="color: #6366f1; font-weight: 700;">0.0% (0)</span>
             </div>
-            <div style="width: 100%; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+            <div style="width: 100%; height: 2.5px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
               <div id="gauge-low-conv-bar" style="width: 0%; height: 100%; background: #6366f1; border-radius: 2px; transition: width 0.3s ease;"></div>
             </div>
           </div>
@@ -1199,7 +1207,7 @@
               <span style="color: var(--text-muted); font-weight: 500;">HAWKES WASH</span>
               <span class="mono" id="gauge-hawkes-val" style="color: #f59e0b; font-weight: 700;">0.0% (0)</span>
             </div>
-            <div style="width: 100%; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+            <div style="width: 100%; height: 2.5px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
               <div id="gauge-hawkes-bar" style="width: 0%; height: 100%; background: #f59e0b; border-radius: 2px; transition: width 0.3s ease;"></div>
             </div>
           </div>
@@ -1209,7 +1217,7 @@
               <span style="color: var(--text-muted); font-weight: 500;">LOW DISPERSION</span>
               <span class="mono" id="gauge-dispersion-val" style="color: #a855f7; font-weight: 700;">0.0% (0)</span>
             </div>
-            <div style="width: 100%; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+            <div style="width: 100%; height: 2.5px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
               <div id="gauge-dispersion-bar" style="width: 0%; height: 100%; background: #a855f7; border-radius: 2px; transition: width 0.3s ease;"></div>
             </div>
           </div>
@@ -1219,7 +1227,7 @@
               <span style="color: var(--text-muted); font-weight: 500;">DEV CLUSTER</span>
               <span class="mono" id="gauge-dev-cluster-val" style="color: #06b6d4; font-weight: 700;">0.0% (0)</span>
             </div>
-            <div style="width: 100%; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+            <div style="width: 100%; height: 2.5px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
               <div id="gauge-dev-cluster-bar" style="width: 0%; height: 100%; background: #06b6d4; border-radius: 2px; transition: width 0.3s ease;"></div>
             </div>
           </div>
@@ -1227,7 +1235,7 @@
       </div>
 
       <!-- COMPONENT B: STAGE 2 DEEP AUDIT LOG -->
-      <div class="stage2-audit-panel" style="border-top: 1px solid var(--border-subtle); background: var(--bg-panel); flex: 1; min-height: 135px; display: flex; flex-direction: column; overflow: hidden;">
+      <div class="stage2-audit-panel flex-1 min-h-0 flex flex-col" style="border-top: 1px solid var(--border-subtle); background: var(--bg-panel); flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background: rgba(13, 19, 34, 0.85); border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;">
           <div class="panel-title" style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-main);">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" style="margin-right: 3px;"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
@@ -1238,7 +1246,7 @@
             LIVE VERDICTS
           </span>
         </div>
-        <div class="stage2-audit-table-wrap" style="flex: 1; overflow-y: auto; padding: 2px 4px; scrollbar-width: none; -ms-overflow-style: none;">
+        <div class="stage2-audit-table-wrap flex-1 min-h-0 overflow-y-auto" style="flex: 1; min-height: 0; overflow-y: auto; padding: 2px 4px; scrollbar-width: none; -ms-overflow-style: none;">
           <table class="w-full table-fixed border-collapse" style="width: 100%; table-layout: fixed; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; line-height: 1.15;">
             <thead>
               <tr class="text-[9px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-800" style="color: #64748b; font-size: 9px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #1e293b;">
@@ -2402,15 +2410,15 @@ sudo systemctl restart dmne-alpha.service</code></pre>
       if (filtered.length === 0) {
         const totalScanned = document.getElementById("rejected-count") ? document.getElementById("rejected-count").innerText : "378,600+";
         radar.innerHTML = `
-          <div class="radar-empty-state">
-            <div class="radar-pulse-ring"></div>
-            <div class="mono" style="font-size:9.5px; color:var(--cyan); font-weight:700; margin-top:2px;">RADAR SCANNER ACTIVE</div>
-            <div class="mono" style="font-size:8px; color:var(--text-dim); line-height:1.2; margin:1px 0;">
+          <div class="radar-empty-state" style="padding: 4px 8px; margin: 2px 4px; gap: 2px;">
+            <div class="radar-pulse-ring" style="width: 24px; height: 24px;"></div>
+            <div class="mono" style="font-size:9px; color:var(--cyan); font-weight:700; margin-top:1px;">RADAR SCANNER ACTIVE</div>
+            <div class="mono" style="font-size:7.5px; color:var(--text-dim); line-height:1.1; margin:0;">
               ${filter !== 'all' ? `No candidates match filter "${filter.toUpperCase()}".` : 'Listening to Solana DEX transactions...'}
             </div>
             <div style="display:flex; gap:4px; margin-top:2px;">
-              <span class="f-badge pass" style="padding:1px 5px; font-size:7.5px;">100% RPC AUDIT</span>
-              <span class="f-badge" style="color:var(--cyan); border-color:rgba(6,182,212,0.3); padding:1px 5px; font-size:7.5px;">${totalScanned} SCANNED</span>
+              <span class="f-badge pass" style="padding:1px 4px; font-size:7px;">100% RPC AUDIT</span>
+              <span class="f-badge" style="color:var(--cyan); border-color:rgba(6,182,212,0.3); padding:1px 4px; font-size:7px;">${totalScanned} SCANNED</span>
             </div>
           </div>
         `;
@@ -2504,8 +2512,8 @@ sudo systemctl restart dmne-alpha.service</code></pre>
         return;
       }
 
-      // Display up to the last 6 entries
-      const list = audits.slice(0, 6);
+      // Display up to 16 entries for expanded audit table
+      const list = audits.slice(0, 16);
       tbody.innerHTML = list.map(entry => {
         const fullVerdict = entry.verdict || (entry.is_admitted ? "ADMITTED" : "REJECT");
         const vClean = fullVerdict.replace(/^REJECT:\s*/i, "").trim().toUpperCase();
