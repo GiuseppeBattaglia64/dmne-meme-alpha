@@ -50,6 +50,7 @@ mod hawkes;
 mod adaptive_exits;
 mod orderflow;
 mod genesis_guard;
+mod cold_path;
 
 pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
 
@@ -1110,6 +1111,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 trades.reverse();
                             }
                             let json_resp = serde_json::json!({ "total": trades.len(), "trades": trades }).to_string();
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /api/agent/tasks") {
+                            let mut tasks: Vec<serde_json::Value> = Vec::new();
+                            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                if let Ok(t) = db::list_pending_tasks(&pg_client).await {
+                                    tasks = t.into_iter().map(|(task_id, task_type, anomaly_summary, counterfactual_delta_sol, proposed_diff, guardrail_checks_passed)| {
+                                        serde_json::json!({
+                                            "task_id": task_id,
+                                            "task_type": task_type,
+                                            "anomaly_summary": anomaly_summary,
+                                            "counterfactual_delta_sol": counterfactual_delta_sol,
+                                            "proposed_diff": proposed_diff,
+                                            "guardrail_checks_passed": guardrail_checks_passed
+                                        })
+                                    }).collect();
+                                }
+                            }
+                            let json_resp = serde_json::to_string(&tasks).unwrap_or_else(|_| "[]".to_string());
+                            let res = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                json_resp.len(),
+                                json_resp
+                            );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("GET /api/agent/autopsies") {
+                            let mut autopsies: Vec<cold_path::TradeAutopsyReport> = Vec::new();
+                            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
+                                if let Ok(rows) = db::fetch_recent_autopsies(&pg_client, 25).await {
+                                    autopsies = rows;
+                                }
+                            }
+                            let json_resp = serde_json::to_string(&autopsies).unwrap_or_else(|_| "[]".to_string());
                             let res = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                                 json_resp.len(),

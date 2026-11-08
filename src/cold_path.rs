@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // DMNE QUANT // COLD-PATH POST-TRADE FORENSIC AUTOPSY AGENT
 // Post-Mortem Root Cause Classification & Counterfactual Gate Calibration
 

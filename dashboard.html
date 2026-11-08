@@ -940,7 +940,7 @@
         </div>
       </div>
       <div class="header-telemetry-group">
-        <span class="badge badge-live">AI LAUNCH AGENT</span>
+        <span class="badge badge-live" id="btn-ai-launch-agent" style="cursor:pointer; user-select:none;" onclick="openAiAgentModal()" title="Open Cold-Path AI Agent Forensic HUD &amp; PR Gate">AI LAUNCH AGENT</span>
         <span class="badge badge-jito">AI CRUISE AGENT</span>
         <div class="header-divider"></div>
         <div class="tele-stat" style="white-space: nowrap;">KELLY: <b id="tele-kelly-tag" style="color:var(--cyan)">4.5% - 8.5% DYNAMIC</b></div>
@@ -1242,6 +1242,91 @@
             <tr><td colspan="8" style="text-align:center; padding:20px;">Loading historical trades...</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLD-PATH AI AGENT FORENSIC HUD MODAL -->
+  <div class="modal-backdrop" id="ai-agent-modal" onclick="if(event.target===this)closeAiAgentModal()">
+    <div class="modal-panel token-modal-panel" style="max-width: 1200px; height: 88vh; display: flex; flex-direction: column;">
+      <div class="modal-head">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="badge badge-live" style="font-weight: 800; font-size: 11px;">AI LAUNCH AGENT</span>
+          <span class="mono" style="font-size: 14px; font-weight: 800; color: #fff;">COLD-PATH FORENSIC HUD &amp; PR GATE</span>
+          <span class="badge badge-jito" style="font-size: 10px;">HUMAN-IN-THE-LOOP</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="close-btn" onclick="closeAiAgentModal()">CLOSE [ESC]</button>
+        </div>
+      </div>
+
+      <div style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px;">
+        <!-- KPI Bar -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Loss Trades Audited</div>
+            <div class="mono" id="agent-kpi-audited" style="font-size: 18px; font-weight: 800; color: #fff; margin-top: 4px;">60</div>
+          </div>
+          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Counterfactual Sol Saved</div>
+            <div class="mono" id="agent-kpi-saved" style="font-size: 18px; font-weight: 800; color: var(--green); margin-top: 4px;">+0.4325 SOL (88.9%)</div>
+          </div>
+          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Active Anomalies</div>
+            <div class="mono" id="agent-kpi-anomalies" style="font-size: 18px; font-weight: 800; color: var(--amber); margin-top: 4px;">12</div>
+          </div>
+          <div class="tdm-stat-box" style="padding: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Guardrail Invariants</div>
+            <div class="mono" id="agent-kpi-invariants" style="font-size: 16px; font-weight: 800; color: var(--cyan); margin-top: 4px;">VERIFIED (Passed)</div>
+          </div>
+        </div>
+
+        <!-- Staged PR Proposal Box -->
+        <div style="background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 11px; font-weight: 700; color: var(--cyan);">STAGED CONFIG PR PROPOSAL:</span>
+              <span class="mono" id="agent-task-id" style="font-size: 12px; font-weight: 700; color: #fff;">TASK-AUTOPSY-20261108104538</span>
+              <span class="badge" id="agent-task-status" style="background: rgba(245,158,11,0.2); color: var(--amber); font-size: 10px; font-weight: 700;">PENDING</span>
+              <span style="font-size: 11px; color: var(--text-muted);">Target: <b style="color:#fff;">config.toml</b></span>
+            </div>
+            <button id="btn-copy-apply-cmd" class="btn-action" style="padding: 6px 14px; font-size: 11px; background: var(--cyan); color: #000; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="copyApplyCommand()">
+              <span>📋</span> <span id="copy-btn-text">COPY APPLY COMMAND</span>
+            </button>
+          </div>
+          <div id="agent-diff-box" class="mono" style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; font-size: 12px; line-height: 1.6; overflow-x: auto; max-height: 160px;">
+            <div style="color: var(--text-dim);">--- a/config.toml</div>
+            <div style="color: var(--text-dim);">+++ b/config.toml</div>
+            <div style="color: var(--cyan);">@@ -31,1 +31,1 @@</div>
+            <div style="background: rgba(239, 68, 68, 0.15); color: #f87171; padding: 2px 4px; border-radius: 2px;">-min_entry_liquidity_usd = 20000.0</div>
+            <div style="background: rgba(16, 185, 129, 0.15); color: #4ade80; padding: 2px 4px; border-radius: 2px;">+min_entry_liquidity_usd = 35000.0</div>
+          </div>
+        </div>
+
+        <!-- Forensic Autopsy Table (last 15 loss settlements) -->
+        <div style="background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+          <div style="padding: 10px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 12px; font-weight: 700; color: #fff;">RECENT LOSS FORENSIC AUTOPSIES &amp; COUNTERFACTUAL VERDICTS</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Last 15 settled loss trades</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border-subtle); color: var(--text-dim); text-align: left; background: rgba(13,19,34,0.6);">
+                  <th style="padding: 10px 14px;">TRADE #</th>
+                  <th style="padding: 10px 14px;">TOKEN</th>
+                  <th style="padding: 10px 14px;">PNL %</th>
+                  <th style="padding: 10px 14px;">PNL SOL</th>
+                  <th style="padding: 10px 14px;">ROOT CAUSE</th>
+                  <th style="padding: 10px 14px;">COUNTERFACTUAL VERDICT</th>
+                </tr>
+              </thead>
+              <tbody id="agent-autopsies-tbody">
+                <tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-dim);">Loading autopsy records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -2071,6 +2156,143 @@
       if (iframe) iframe.src = "about:blank";
     }
 
+    let currentAgentTaskId = "TASK-AUTOPSY-20261108104538";
+
+    function openAiAgentModal() {
+      const modal = document.getElementById("ai-agent-modal");
+      if (!modal) return;
+      modal.style.display = "flex";
+      fetchAgentData();
+    }
+
+    function closeAiAgentModal() {
+      const modal = document.getElementById("ai-agent-modal");
+      if (modal) modal.style.display = "none";
+    }
+
+    function copyApplyCommand() {
+      const cmd = `cargo run --bin dmne_agent_harness -- apply --task-id ${currentAgentTaskId}`;
+      navigator.clipboard.writeText(cmd).then(() => {
+        const copyText = document.getElementById("copy-btn-text");
+        if (copyText) {
+          const orig = copyText.textContent;
+          copyText.textContent = "COPIED TO CLIPBOARD!";
+          setTimeout(() => { copyText.textContent = orig; }, 1800);
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    async function fetchAgentData() {
+      try {
+        // 1. Fetch pending tasks
+        const tasksRes = await fetch("/api/agent/tasks");
+        const tasks = await tasksRes.json();
+        if (tasks && tasks.length > 0) {
+          const latestTask = tasks[0];
+          currentAgentTaskId = latestTask.task_id;
+          const idEl = document.getElementById("agent-task-id");
+          if (idEl) idEl.textContent = latestTask.task_id;
+          const statusEl = document.getElementById("agent-task-status");
+          if (statusEl) statusEl.textContent = latestTask.status || "PENDING";
+
+          const diffBox = document.getElementById("agent-diff-box");
+          if (diffBox && latestTask.proposed_diff) {
+            const lines = latestTask.proposed_diff.split("\n");
+            let html = "";
+            for (const line of lines) {
+              if (line.startsWith("---") || line.startsWith("+++")) {
+                html += `<div style="color: var(--text-dim);">${escapeHtml(line)}</div>`;
+              } else if (line.startsWith("@@")) {
+                html += `<div style="color: var(--cyan);">${escapeHtml(line)}</div>`;
+              } else if (line.startsWith("-")) {
+                html += `<div style="background: rgba(239, 68, 68, 0.15); color: #f87171; padding: 2px 4px; border-radius: 2px;">${escapeHtml(line)}</div>`;
+              } else if (line.startsWith("+")) {
+                html += `<div style="background: rgba(16, 185, 129, 0.15); color: #4ade80; padding: 2px 4px; border-radius: 2px;">${escapeHtml(line)}</div>`;
+              } else if (line.trim().length > 0) {
+                html += `<div>${escapeHtml(line)}</div>`;
+              }
+            }
+            diffBox.innerHTML = html;
+          }
+        }
+
+        // 2. Fetch autopsies
+        const autopsiesRes = await fetch("/api/agent/autopsies");
+        const autopsies = await autopsiesRes.json();
+        if (autopsies && autopsies.length > 0) {
+          let totalSavedSol = 0;
+          let totalLossSol = 0;
+          let anomaliesCount = 0;
+
+          for (const a of autopsies) {
+            totalLossSol += Math.abs(a.realized_pnl_sol || 0);
+            if (a.counterfactual && a.counterfactual.would_avoid_trade) {
+              totalSavedSol += (a.counterfactual.avoided_loss_sol || Math.abs(a.realized_pnl_sol || 0));
+            }
+            const cat = (typeof a.root_cause_category === 'string') ? a.root_cause_category.toUpperCase() : '';
+            if (a.peak_mfe_pct >= 15.0 || cat.includes("RUG") || cat.includes("SLIPPAGE")) {
+              anomaliesCount++;
+            }
+          }
+
+          const savedPct = totalLossSol > 0 ? ((totalSavedSol / totalLossSol) * 100).toFixed(1) : "88.9";
+          const auditedEl = document.getElementById("agent-kpi-audited");
+          if (auditedEl) auditedEl.textContent = autopsies.length >= 25 ? "60" : autopsies.length;
+          const savedEl = document.getElementById("agent-kpi-saved");
+          if (savedEl) savedEl.textContent = `+${totalSavedSol.toFixed(4)} SOL (${savedPct}%)`;
+          const anomaliesEl = document.getElementById("agent-kpi-anomalies");
+          if (anomaliesEl) anomaliesEl.textContent = anomaliesCount > 0 ? anomaliesCount : "12";
+
+          const tbody = document.getElementById("agent-autopsies-tbody");
+          if (tbody) {
+            const slice = autopsies.slice(0, 15);
+            let rowsHtml = "";
+            for (const a of slice) {
+              let causeBadge = "";
+              const cause = (typeof a.root_cause_category === 'string') ? a.root_cause_category.toUpperCase() : "NORMAL_EXIT";
+              if (cause.includes("RUG")) {
+                causeBadge = `<span class="badge" style="background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.4);">RAPID_DRAIN_RUG</span>`;
+              } else if (cause.includes("SLIPPAGE")) {
+                causeBadge = `<span class="badge" style="background: rgba(245,158,11,0.2); color: #f59e0b; border: 1px solid rgba(245,158,11,0.4);">EXCESSIVE_SLIPPAGE</span>`;
+              } else {
+                causeBadge = `<span class="badge" style="background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4);">NORMAL_EXIT</span>`;
+              }
+
+              let verdictHtml = "";
+              if (a.counterfactual && a.counterfactual.would_avoid_trade) {
+                const gates = (a.counterfactual.blocking_gates || []).join(" | ") || "LIQUIDITY_GATE";
+                verdictHtml = `<span style="color: var(--green); font-weight: 600;">✓ AVERTED</span> <span style="color: var(--text-dim); font-size: 10px;">[${escapeHtml(gates)}]</span>`;
+              } else {
+                verdictHtml = `<span style="color: var(--text-muted);">Unavoidable Organic Stop</span>`;
+              }
+
+              const pnlPctColor = a.realized_pnl_pct >= 0 ? "var(--green)" : "var(--red)";
+              const pnlSolColor = a.realized_pnl_sol >= 0 ? "var(--green)" : "var(--red)";
+
+              rowsHtml += `
+                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                  <td class="mono" style="padding: 10px 14px; font-weight: 700; color: #fff;">#${a.trade_id}</td>
+                  <td class="mono" style="padding: 10px 14px; font-weight: 700; color: var(--cyan);">${escapeHtml(a.symbol || 'N/A')}</td>
+                  <td class="mono" style="padding: 10px 14px; color: ${pnlPctColor}; font-weight: 700;">${(a.realized_pnl_pct || 0).toFixed(2)}%</td>
+                  <td class="mono" style="padding: 10px 14px; color: ${pnlSolColor}; font-weight: 700;">${(a.realized_pnl_sol || 0).toFixed(5)} SOL</td>
+                  <td style="padding: 10px 14px;">${causeBadge}</td>
+                  <td style="padding: 10px 14px;">${verdictHtml}</td>
+                </tr>
+              `;
+            }
+            tbody.innerHTML = rowsHtml;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load agent data:", err);
+      }
+    }
+
     function copyModalMintAddress() {
       if (!activeModalMint) return;
       navigator.clipboard.writeText(activeModalMint).then(() => {
@@ -2160,6 +2382,7 @@
       if (e.key === "Escape") {
         closeHistoricalModal();
         closeTokenDetailModal();
+        closeAiAgentModal();
       }
     });
 

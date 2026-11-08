@@ -4,6 +4,7 @@
 
 use tokio_postgres::{Client, NoTls, Error};
 use serde_json::{Value, json, Map};
+use crate::cold_path::{CounterfactualResult, RootCauseCategory, TradeAutopsyReport};
 
 pub const DEFAULT_DB_URL: &str = "host=localhost user=ubuntu dbname=dmne_quant";
 
@@ -768,3 +769,59 @@ pub async fn fetch_harness_autopsies(
     }
     Ok(records)
 }
+
+/// Fetches recent trade autopsy reports ordered by trade_id DESC
+pub async fn fetch_recent_autopsies(
+    client: &Client,
+    limit: i64,
+) -> Result<Vec<TradeAutopsyReport>, String> {
+    let stmt = "
+        SELECT 
+            trade_id, symbol, mint, realized_pnl_pct, realized_pnl_sol,
+            exit_rule, hold_duration_secs, peak_mfe_pct, max_mae_pct,
+            slippage_drift_pct, entry_cvd_ratio, entry_hawkes_eta,
+            root_cause_category, counterfactual_recommendation::text AS cf_raw
+        FROM trade_forensic_autopsies
+        ORDER BY trade_id DESC
+        LIMIT $1;
+    ";
+    let rows = client.query(stmt, &[&limit]).await.map_err(|e| e.to_string())?;
+    let mut reports = Vec::new();
+    for row in rows {
+        let root_cause_str: String = row.get("root_cause_category");
+        let root_cause_category = match root_cause_str.as_str() {
+            "RAPID_DRAIN_RUG" => RootCauseCategory::RapidDrainRug,
+            "EXCESSIVE_SLIPPAGE" => RootCauseCategory::ExcessiveSlippage,
+            "STAGNATION_DECAY" => RootCauseCategory::StagnationDecay,
+            "ORGANIC_STOP" => RootCauseCategory::OrganicStop,
+            _ => RootCauseCategory::NormalExit,
+        };
+        let cf_raw: String = row.get("cf_raw");
+        let counterfactual: CounterfactualResult = serde_json::from_str(&cf_raw).unwrap_or_else(|_| CounterfactualResult {
+            would_avoid_trade: false,
+            avoided_loss_sol: 0.0,
+            avoided_loss_pct: 0.0,
+            blocking_gates: Vec::new(),
+            recommendation: String::new(),
+        });
+
+        reports.push(TradeAutopsyReport {
+            trade_id: row.get("trade_id"),
+            symbol: row.get("symbol"),
+            mint: row.get("mint"),
+            realized_pnl_pct: row.get("realized_pnl_pct"),
+            realized_pnl_sol: row.get("realized_pnl_sol"),
+            exit_rule: row.get("exit_rule"),
+            hold_duration_secs: row.get("hold_duration_secs"),
+            peak_mfe_pct: row.get("peak_mfe_pct"),
+            max_mae_pct: row.get("max_mae_pct"),
+            slippage_drift_pct: row.get("slippage_drift_pct"),
+            entry_cvd_ratio: row.get("entry_cvd_ratio"),
+            entry_hawkes_eta: row.get("entry_hawkes_eta"),
+            root_cause_category,
+            counterfactual,
+        });
+    }
+    Ok(reports)
+}
+
