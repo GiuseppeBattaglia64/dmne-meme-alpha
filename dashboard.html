@@ -977,7 +977,7 @@
         <span class="badge badge-purple" id="mode-badge" style="background:#0284c7; color:#fff; font-weight:700; height: 36px; padding: 0 14px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">🧪 PAPER MODE</span>
       </div>
       <div class="header-actions-group">
-        <button class="wallet-btn" id="pause-btn" style="background:#f59e0b;" onclick="toggleScannerPause()">⏸ PAUSE</button>
+        <button class="wallet-btn" id="btn-pause" style="background:#f59e0b;" onclick="togglePause()">⏸ PAUSE</button>
         <button class="wallet-btn" style="background:#dc2626;" onclick="triggerPanicDump()">🛑 PANIC DUMP</button>
         <button class="wallet-btn" onclick="openDepositModal()">📥 DEPOSIT</button>
         <button class="wallet-btn withdraw-btn" onclick="openWithdrawModal()">📤 WITHDRAW</button>
@@ -3337,6 +3337,9 @@ sudo systemctl restart dmne-alpha.service</code></pre>
           if (data.stage2_audit_log) {
             renderStage2AuditLog(data.stage2_audit_log);
           }
+          if (data.is_scanner_paused !== undefined) {
+            updatePauseButtonUI(data.is_scanner_paused);
+          }
         }
       } catch (e) {
         console.error("Initial state sync error", e);
@@ -3373,11 +3376,7 @@ sudo systemctl restart dmne-alpha.service</code></pre>
         }
         
         if (data.is_scanner_paused !== undefined) {
-          const btn = document.getElementById('pause-btn');
-          if (btn) {
-            btn.innerText = data.is_scanner_paused ? '▶ RESUME' : '⏸ PAUSE';
-            btn.style.background = data.is_scanner_paused ? '#10b981' : '#f59e0b';
-          }
+          updatePauseButtonUI(data.is_scanner_paused);
         }
         if (data.live_onchain_sol > 0.05) {
           const modeBadge = document.getElementById('mode-badge');
@@ -3751,6 +3750,41 @@ Mode: ${data.mode}`);
       if (!to || !amt) { alert('Please provide destination address and amount'); return; }
       alert('Withdrawal signed and queued for execution: ' + amt + ' SOL to ' + to);
       closeModals();
+    }
+
+    function updatePauseButtonUI(isPaused) {
+      const btn = document.getElementById('btn-pause') || document.getElementById('pause-btn');
+      if (btn) {
+        btn.innerText = isPaused ? '▶ RESUME' : '⏸ PAUSE';
+        btn.style.background = isPaused ? '#10b981' : '#f59e0b';
+      }
+    }
+
+    async function togglePause() {
+      try {
+        const res = await fetch('/api/pause', { method: 'POST' });
+        const data = await res.json();
+        updatePauseButtonUI(data.status === 'PAUSED');
+      } catch (err) {
+        console.error('Failed to toggle pause:', err);
+      }
+    }
+
+    function toggleScannerPause() {
+      togglePause();
+    }
+
+    async function triggerPanicDump() {
+      if (!confirm("⚠️ Are you sure you want to trigger PANIC DUMP? All active positions will be liquidated immediately.")) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/panic', { method: 'POST' });
+        const data = await res.json();
+        alert('Panic dump triggered: ' + JSON.stringify(data));
+      } catch (err) {
+        console.error('Failed to trigger panic:', err);
+      }
     }
   </script>
 

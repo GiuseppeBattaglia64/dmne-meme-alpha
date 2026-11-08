@@ -980,10 +980,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let status = if g.is_scanner_paused { "PAUSED" } else { "RUNNING" };
                             let json_resp = format!("{{\"status\":\"{}\"}}", status);
                             let res = format!(
-                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                                 json_resp.len(),
                                 json_resp
                             );
+                            let _ = socket.write_all(res.as_bytes()).await;
+                        } else if req.starts_with("OPTIONS /api/pause") {
+                            let res = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
                             let _ = socket.write_all(res.as_bytes()).await;
                         } else if req.starts_with("GET /api/panic") || req.starts_with("POST /api/panic") {
                             let mut g = st.write().await;
