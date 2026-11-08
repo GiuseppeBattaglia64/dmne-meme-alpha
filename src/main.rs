@@ -1533,6 +1533,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 json_resp
                             );
                             let _ = socket.write_all(res.as_bytes()).await;
+                        } else if (req.starts_with("GET /") || req.starts_with("HEAD /")) && req.split_whitespace().nth(1).map(|p| p.ends_with(".png") && !p.contains("..")).unwrap_or(false) {
+                            let is_head = req.starts_with("HEAD ");
+                            let path = req.split_whitespace().nth(1).unwrap_or("");
+                            let clean_name = path.trim_start_matches('/').split('?').next().unwrap_or("");
+                            let file_path = format!("/home/ubuntu/dmne-meme-alpha/{}", clean_name);
+                            match tokio::fs::read(&file_path).await {
+                                Ok(bytes) => {
+                                    let headers = format!(
+                                        "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nCache-Control: no-cache\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                        bytes.len()
+                                    );
+                                    let _ = socket.write_all(headers.as_bytes()).await;
+                                    if !is_head {
+                                        let _ = socket.write_all(&bytes).await;
+                                    }
+                                }
+                                Err(_) => {
+                                    let not_found = "HTTP/1.1 404 NOT FOUND\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+                                    let _ = socket.write_all(not_found.as_bytes()).await;
+                                }
+                            }
                         } else {
                             let html_body = tokio::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/dashboard.html").await
                                 .unwrap_or_else(|_| DASHBOARD_HTML.to_string());
