@@ -297,14 +297,19 @@ pub fn evaluate_hawkes_filter(
     eval_time: f64,
     cfg: &HawkesConfig,
 ) -> HawkesMetrics {
-    let mut sorted_ts = timestamps.to_vec();
+    // Normalize timestamps: if timestamps are passed in milliseconds (> 1e11), normalize to fractional seconds
+    let norm_eval_time = if eval_time > 1e11 { eval_time / 1000.0 } else { eval_time };
+    let mut sorted_ts: Vec<f64> = timestamps
+        .iter()
+        .map(|&t| if t > 1e11 { t / 1000.0 } else { t })
+        .collect();
     sorted_ts.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    sorted_ts.retain(|&t| t <= eval_time + 0.5);
+    sorted_ts.retain(|&t| t <= norm_eval_time + 0.5);
 
     let deltas = compute_inter_arrival_deltas(&sorted_ts, cfg.max_inter_arrival_gap_secs);
     let (mean_dt, std_dt, cv) = compute_regularity_metrics(&deltas);
     let (alpha_hat, branching) = fit_hawkes_mle_alpha(&sorted_ts, cfg.mu_baseline, cfg.beta_decay);
-    let intensity = calculate_conditional_intensity(&sorted_ts, eval_time, cfg.mu_baseline, alpha_hat, cfg.beta_decay);
+    let intensity = calculate_conditional_intensity(&sorted_ts, norm_eval_time, cfg.mu_baseline, alpha_hat, cfg.beta_decay);
 
     // Cold-start guard: If arrival observations count < min_sample_size, bypass wash-trading gate
     if sorted_ts.len() < cfg.min_sample_size {
@@ -324,7 +329,7 @@ pub fn evaluate_hawkes_filter(
     let mut reason = None;
 
     if deltas.len() >= cfg.min_observations {
-        let counts = discretize_arrival_timestamps_to_counts(&sorted_ts, eval_time, 10.0);
+        let counts = discretize_arrival_timestamps_to_counts(&sorted_ts, norm_eval_time, 10.0);
         let discrete_disp = evaluate_discrete_orderflow_dispersion_with_config(&counts, cfg);
 
         // 1. Robotic clocking check: continuous deterministic periodicity or discrete underdispersion
@@ -849,5 +854,26 @@ mod tests {
         assert_eq!(bins[1], 0);
         assert_eq!(bins[2], 1); // 111.0
         assert_eq!(bins[3], 1); // 115.0
+    }
+
+    #[test]
+    fn test_hawkes_timestamp_units_normalized_and_asserted() {
+        let cfg = HawkesConfig::default();
+        // 1. Fractional seconds (normal ~1.70e9)
+        let ts_secs = vec![1700000000.0, 1700000002.0, 1700000004.0, 1700000006.0, 1700000008.0];
+        let eval_secs = 1700000010.0;
+        let m1 = evaluate_hawkes_filter(&ts_secs, eval_secs, &cfg);
+        assert_eq!(m1.observations_count, 4);
+
+        // 2. Milliseconds (~1.70e12) - should be normalized by / 1000.0
+        let ts_ms = vec![1700000000000.0, 1700000002000.0, 1700000004000.0, 1700000006000.0, 1700000008000.0];
+        let eval_ms = 1700000010000.0;
+        let m2 = evaluate_hawkes_filter(&ts_ms, eval_ms, &cfg);
+        assert_eq!(m2.observations_count, 4);
+
+        // Deltas and metrics must match identically after normalization
+        assert!((m1.mean_delta_t_secs - m2.mean_delta_t_secs).abs() < 1e-6);
+        assert!((m1.cv_regularity - m2.cv_regularity).abs() < 1e-6);
+        assert!((m1.branching_ratio - m2.branching_ratio).abs() < 1e-6);
     }
 }

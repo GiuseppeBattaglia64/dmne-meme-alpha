@@ -117,7 +117,7 @@ impl RollingRejectionTracker {
     }
 
     /// Produces a normalized telemetry snapshot over the active rolling window
-    pub fn snapshot(&self) -> RejectionGaugeTelemetry {
+    pub fn snapshot(&self) -> RejectionGaugeSnapshot {
         let total = self.window.len() as f64;
         let count_liq = self.counts[0] as u64;
         let count_conv = self.counts[1] as u64;
@@ -134,21 +134,21 @@ impl RollingRejectionTracker {
             }
         };
 
-        RejectionGaugeTelemetry {
+        RejectionGaugeSnapshot {
+            total_evaluated: self.window.len() as u64,
             low_liquidity: count_liq,
+            low_conviction: count_conv,
             count_low_conviction: count_conv,
             hawkes_wash: count_wash,
             low_dispersion: count_disp,
             dev_cluster: count_dev,
             admitted: count_admitted,
-            total_evaluated: self.window.len() as u64,
             pct_low_liquidity: pct(count_liq),
             pct_low_conviction: pct(count_conv),
             pct_hawkes_wash: pct(count_wash),
             pct_low_dispersion: pct(count_disp),
             pct_dev_cluster: pct(count_dev),
             pct_admitted: pct(count_admitted),
-            tracker: None,
         }
     }
 }
@@ -178,114 +178,64 @@ impl ConcurrentRollingRejectionTracker {
         }
     }
 
-    pub fn snapshot(&self) -> RejectionGaugeTelemetry {
+    pub fn snapshot(&self) -> RejectionGaugeSnapshot {
         if let Ok(guard) = self.inner.read() {
             guard.snapshot()
         } else {
-            RejectionGaugeTelemetry::default()
+            RejectionGaugeSnapshot::default()
         }
     }
 }
 
-/// Telemetry tracking rolling pre-trade rejection vectors and relative distributions
+/// Flat, lightweight DTO with primitive scalars representing a rolling telemetry snapshot
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RejectionGaugeTelemetry {
+pub struct RejectionGaugeSnapshot {
+    pub total_evaluated: u64,
     pub low_liquidity: u64,
-    #[serde(alias = "low_conviction")]
+    pub low_conviction: u64,
+    #[serde(default)]
     pub count_low_conviction: u64,
     pub hawkes_wash: u64,
     pub low_dispersion: u64,
     pub dev_cluster: u64,
     pub admitted: u64,
-    pub total_evaluated: u64,
     pub pct_low_liquidity: f64,
     pub pct_low_conviction: f64,
     pub pct_hawkes_wash: f64,
     pub pct_low_dispersion: f64,
     pub pct_dev_cluster: f64,
-    #[serde(default)]
     pub pct_admitted: f64,
-    #[serde(skip)]
-    tracker: Option<RollingRejectionTracker>,
 }
 
-impl Default for RejectionGaugeTelemetry {
+impl Default for RejectionGaugeSnapshot {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RejectionGaugeTelemetry {
+impl RejectionGaugeSnapshot {
     pub fn new() -> Self {
         Self {
+            total_evaluated: 0,
             low_liquidity: 0,
+            low_conviction: 0,
             count_low_conviction: 0,
             hawkes_wash: 0,
             low_dispersion: 0,
             dev_cluster: 0,
             admitted: 0,
-            total_evaluated: 0,
             pct_low_liquidity: 0.0,
             pct_low_conviction: 0.0,
             pct_hawkes_wash: 0.0,
             pct_low_dispersion: 0.0,
             pct_dev_cluster: 0.0,
             pct_admitted: 0.0,
-            tracker: Some(RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY)),
         }
-    }
-
-    /// Records an evaluation decision in the rolling sliding window and re-calculates normalized percentages
-    pub fn record(&mut self, category: RejectionCategory) {
-        let tracker = self.tracker.get_or_insert_with(|| RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY));
-        tracker.record(category);
-        let snap = tracker.snapshot();
-
-        self.low_liquidity = snap.low_liquidity;
-        self.count_low_conviction = snap.count_low_conviction;
-        self.hawkes_wash = snap.hawkes_wash;
-        self.low_dispersion = snap.low_dispersion;
-        self.dev_cluster = snap.dev_cluster;
-        self.admitted = snap.admitted;
-        self.total_evaluated = snap.total_evaluated;
-        self.pct_low_liquidity = snap.pct_low_liquidity;
-        self.pct_low_conviction = snap.pct_low_conviction;
-        self.pct_hawkes_wash = snap.pct_hawkes_wash;
-        self.pct_low_dispersion = snap.pct_low_dispersion;
-        self.pct_dev_cluster = snap.pct_dev_cluster;
-        self.pct_admitted = snap.pct_admitted;
-    }
-
-    /// Calculates percentages across all categories reconciling against the total evaluation count
-    pub fn compute_percentages(&mut self) {
-        let total = (self.low_liquidity
-            + self.count_low_conviction
-            + self.hawkes_wash
-            + self.low_dispersion
-            + self.dev_cluster
-            + self.admitted) as f64;
-
-        if total > 0.0 {
-            self.pct_low_liquidity = ((self.low_liquidity as f64 / total) * 100.0 * 10.0).round() / 10.0;
-            self.pct_low_conviction = ((self.count_low_conviction as f64 / total) * 100.0 * 10.0).round() / 10.0;
-            self.pct_hawkes_wash = ((self.hawkes_wash as f64 / total) * 100.0 * 10.0).round() / 10.0;
-            self.pct_low_dispersion = ((self.low_dispersion as f64 / total) * 100.0 * 10.0).round() / 10.0;
-            self.pct_dev_cluster = ((self.dev_cluster as f64 / total) * 100.0 * 10.0).round() / 10.0;
-            self.pct_admitted = ((self.admitted as f64 / total) * 100.0 * 10.0).round() / 10.0;
-        } else {
-            self.pct_low_liquidity = 0.0;
-            self.pct_low_conviction = 0.0;
-            self.pct_hawkes_wash = 0.0;
-            self.pct_low_dispersion = 0.0;
-            self.pct_dev_cluster = 0.0;
-            self.pct_admitted = 0.0;
-        }
-    }
-
-    pub fn recompute_percentages(&mut self) {
-        self.compute_percentages();
     }
 }
+
+/// Backward-compatible type alias for RejectionGaugeSnapshot
+pub type RejectionGaugeTelemetry = RejectionGaugeSnapshot;
 
 /// A single evaluated candidate audit entry in Stage 2 Deep Audit Log
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -363,25 +313,27 @@ mod tests {
 
     #[test]
     fn test_rejection_gauge_recording_and_percentages() {
-        let mut gauge = RejectionGaugeTelemetry::new();
-        assert_eq!(gauge.total_evaluated, 0);
+        let mut tracker = RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY);
+        assert_eq!(tracker.len(), 0);
 
         // Record 60 low liquidity, 20 hawkes wash, 10 low dispersion, 10 dev cluster, 5 admitted
         for _ in 0..60 {
-            gauge.record(RejectionCategory::LowLiquidity);
+            tracker.record(RejectionCategory::LowLiquidity);
         }
         for _ in 0..20 {
-            gauge.record(RejectionCategory::HawkesWash);
+            tracker.record(RejectionCategory::HawkesWash);
         }
         for _ in 0..10 {
-            gauge.record(RejectionCategory::LowDispersion);
+            tracker.record(RejectionCategory::LowDispersion);
         }
         for _ in 0..10 {
-            gauge.record(RejectionCategory::DevCluster);
+            tracker.record(RejectionCategory::DevCluster);
         }
         for _ in 0..5 {
-            gauge.record(RejectionCategory::Admitted);
+            tracker.record(RejectionCategory::Admitted);
         }
+
+        let gauge = tracker.snapshot();
 
         assert_eq!(gauge.total_evaluated, 105);
         assert_eq!(gauge.low_liquidity, 60);
@@ -406,28 +358,31 @@ mod tests {
 
     #[test]
     fn test_rejection_gauge_mathematical_reconciliation() {
-        let mut gauge = RejectionGaugeTelemetry::new();
+        let mut tracker = RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY);
 
         // Disperse 100 rejections across all 5 categories
         for _ in 0..30 {
-            gauge.record(RejectionCategory::LowLiquidity);
+            tracker.record(RejectionCategory::LowLiquidity);
         }
         for _ in 0..25 {
-            gauge.record(RejectionCategory::LowConviction);
+            tracker.record(RejectionCategory::LowConviction);
         }
         for _ in 0..20 {
-            gauge.record(RejectionCategory::HawkesWash);
+            tracker.record(RejectionCategory::HawkesWash);
         }
         for _ in 0..15 {
-            gauge.record(RejectionCategory::LowDispersion);
+            tracker.record(RejectionCategory::LowDispersion);
         }
         for _ in 0..10 {
-            gauge.record(RejectionCategory::DevCluster);
+            tracker.record(RejectionCategory::DevCluster);
         }
+
+        let gauge = tracker.snapshot();
 
         assert_eq!(gauge.total_evaluated, 100);
         assert_eq!(gauge.low_liquidity, 30);
         assert_eq!(gauge.count_low_conviction, 25);
+        assert_eq!(gauge.low_conviction, 25);
         assert_eq!(gauge.hawkes_wash, 20);
         assert_eq!(gauge.low_dispersion, 15);
         assert_eq!(gauge.dev_cluster, 10);
@@ -536,14 +491,13 @@ mod tests {
     }
 
     #[test]
-    fn test_rejection_gauge_telemetry_sliding_window() {
-        let mut gauge = RejectionGaugeTelemetry::new();
-        for _ in 0..1200 {
-            gauge.record(RejectionCategory::DevCluster);
-        }
-        assert_eq!(gauge.total_evaluated, 1000);
-        assert_eq!(gauge.dev_cluster, 1000);
-        assert_eq!(gauge.pct_dev_cluster, 100.0);
+    fn test_rejection_gauge_snapshot_dto() {
+        let snap = RejectionGaugeSnapshot::new();
+        assert_eq!(snap.total_evaluated, 0);
+        assert_eq!(snap.low_liquidity, 0);
+        assert_eq!(snap.low_conviction, 0);
+        assert_eq!(snap.count_low_conviction, 0);
+        assert_eq!(snap.pct_low_liquidity, 0.0);
     }
 
     #[test]

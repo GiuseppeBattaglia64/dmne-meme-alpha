@@ -479,3 +479,25 @@ pub async fn fetch_recent_stage2_audits(
     }
     out
 }
+
+/// Queries the most recent pre-trade rejection reasons from PostgreSQL for rolling window hydration
+pub async fn fetch_recent_rejection_reasons(
+    client: &Client,
+    limit: i64,
+) -> Vec<(bool, String)> {
+    let stmt = "
+        SELECT admitted, COALESCE(rejection_reason, 'Admitted') as rejection_reason
+        FROM pre_trade_audits
+        ORDER BY timestamp DESC
+        LIMIT $1
+    ";
+    let mut out = Vec::new();
+    if let Ok(rows) = client.query(stmt, &[&limit]).await {
+        for r in rows {
+            let admitted: bool = r.get("admitted");
+            let reason: String = r.get("rejection_reason");
+            out.push((admitted, reason));
+        }
+    }
+    out
+}

@@ -520,4 +520,18 @@ mod tests {
 
         let _ = tokio::fs::remove_file(&log_file).await;
     }
+
+    #[tokio::test]
+    async fn test_get_arrival_timestamps_secs_returns_fractional_seconds() {
+        let tracker = HawkesArrivalTracker::new(10);
+        let mint = "MINT_TIMESTAMP_TEST";
+        let now_ms = 1_700_000_000_123u64;
+
+        tracker.record_arrival(mint, now_ms).await;
+        let ts = tracker.get_arrival_timestamps_secs(mint).await;
+        assert_eq!(ts.len(), 1);
+        // Must be in fractional Unix seconds (e.g. 1700000000.123, < 1e11)
+        assert!(ts[0] < 1e11);
+        assert!((ts[0] - 1700000000.123).abs() < 1e-3);
+    }
 }

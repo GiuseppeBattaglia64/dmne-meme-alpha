@@ -133,8 +133,8 @@ use tokio::sync::RwLock;
 use tokio_tungstenite::connect_async;
 use dmne_meme_alpha::shadow_logger;
 use dmne_meme_alpha::radar::{
-    truncate_mint_address, RejectionCategory, RejectionGaugeTelemetry, Stage2AuditEntry,
-    Stage2AuditRingBuffer, STAGE2_AUDIT_LOG_CAPACITY,
+    truncate_mint_address, RejectionCategory, RollingRejectionTracker, Stage2AuditEntry,
+    Stage2AuditRingBuffer, ROLLING_WINDOW_CAPACITY, STAGE2_AUDIT_LOG_CAPACITY,
 };
 
 const SOLANA_WSS_URL: &str = "wss://api.mainnet-beta.solana.com";
@@ -228,7 +228,7 @@ pub struct BotState {
     #[serde(default)]
     pub rejected_candidates: std::collections::HashMap<String, u64>,
     #[serde(default)]
-    pub rejection_gauge: RejectionGaugeTelemetry,
+    pub rejection_tracker: RollingRejectionTracker,
     #[serde(default)]
     pub stage2_audit_log: Stage2AuditRingBuffer,
 }
@@ -257,7 +257,7 @@ impl BotState {
             effective_risk_cfg: config::RiskConfig::default(),
             banned_tokens: std::collections::HashSet::new(),
             rejected_candidates: std::collections::HashMap::new(),
-            rejection_gauge: RejectionGaugeTelemetry::new(),
+            rejection_tracker: RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY),
             stage2_audit_log: Stage2AuditRingBuffer::new(STAGE2_AUDIT_LOG_CAPACITY),
         }
     }
@@ -272,7 +272,7 @@ impl BotState {
         is_admitted: bool,
         category: RejectionCategory,
     ) {
-        self.rejection_gauge.record(category);
+        self.rejection_tracker.record(category);
         let time_str = chrono::Utc::now().format("%H:%M:%S").to_string();
         let entry = Stage2AuditEntry {
             timestamp: time_str,
@@ -705,10 +705,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         println!("[STARTUP RECONCILE] Restored {} lifetime one-shot banned tokens from settled_trades archive", settled_count);
 
-        // Hydrate recent Stage 2 audits into fixed ring buffer
-        let recent_audits = db::fetch_recent_stage2_audits(&pg, 8).await;
-        let audit_count = recent_audits.len();
-        for (time_str, mint, liq, hhi, admitted, reason) in recent_audits.into_iter().rev() {
+        // Hydrate recent rejection evaluations into rolling rejection tracker
+        let recent_rejections = db::fetch_recent_rejection_reasons(&pg, ROLLING_WINDOW_CAPACITY as i64).await;
+        let rejections_hydrated = recent_rejections.len();
+        for (admitted, reason) in recent_rejections.into_iter().rev() {
             let cat = if admitted {
                 RejectionCategory::Admitted
             } else if reason.contains("LIQUIDITY") {
@@ -722,6 +722,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 RejectionCategory::LowConviction
             };
+            g.rejection_tracker.record(cat);
+        }
+        println!("[STARTUP RECONCILE] Hydrated {} historical rejection audits into rolling tracker", rejections_hydrated);
+
+        // Hydrate recent Stage 2 audits into fixed ring buffer
+        let recent_audits = db::fetch_recent_stage2_audits(&pg, 8).await;
+        let audit_count = recent_audits.len();
+        for (time_str, mint, liq, hhi, admitted, reason) in recent_audits.into_iter().rev() {
             let (metric, verdict) = if admitted {
                 (format!("HHI: {:.2}", hhi), "ADMITTED".to_string())
             } else if reason.contains("LIQUIDITY") {
@@ -744,7 +752,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 verdict,
                 is_admitted: admitted,
             };
-            g.rejection_gauge.record(cat);
             g.stage2_audit_log.push(entry);
         }
         println!("[STARTUP RECONCILE] Restored {} recent Stage 2 audits into ring buffer", audit_count);
@@ -909,7 +916,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "closed_trades": guard.closed_trades,
                                         "recent_onchain_events": guard.recent_onchain_events,
                                         "risk_config": &guard.effective_risk_cfg,
-                                        "rejection_gauge": &guard.rejection_gauge,
+                                        "rejection_gauge": guard.rejection_tracker.snapshot(),
                                         "stage2_audit_log": &guard.stage2_audit_log.entries,
                                     })).unwrap_or_default()
                                 };
@@ -949,7 +956,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "closed_trades": guard.closed_trades,
                                 "recent_onchain_events": guard.recent_onchain_events,
                                 "risk_config": &guard.effective_risk_cfg,
-                                "rejection_gauge": &guard.rejection_gauge,
+                                "rejection_gauge": guard.rejection_tracker.snapshot(),
                                 "stage2_audit_log": &guard.stage2_audit_log.entries,
                             })).unwrap_or_default();
                             let res = format!(
