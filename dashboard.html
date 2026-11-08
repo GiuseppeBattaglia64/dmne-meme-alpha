@@ -64,6 +64,13 @@
       --purple-glow: rgba(168, 85, 247, 0.16);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none !important;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none !important;
+      scrollbar-width: none !important;
+    }
     html, body {
       height: 100vh;
       max-height: 100vh;
@@ -1354,117 +1361,117 @@
   </div>
 
   <!-- COLD-PATH AI AGENT FORENSIC HUD MODAL -->
-  <div class="modal-backdrop" id="ai-agent-modal" onclick="if(event.target===this)closeAiAgentModal()">
-    <div class="modal-panel token-modal-panel" style="max-width: 1200px; height: 88vh; display: flex; flex-direction: column;">
-      <div class="modal-head">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span class="badge badge-live" style="font-weight: 800; font-size: 11px;">AI LAUNCH AGENT</span>
-          <span class="mono" style="font-size: 14px; font-weight: 800; color: #fff;">COLD-PATH FORENSIC HUD &amp; PR GATE</span>
-          <span class="badge badge-jito" style="font-size: 10px;">HUMAN-IN-THE-LOOP</span>
+  <div class="modal-backdrop no-scrollbar" id="ai-agent-modal" onclick="if(event.target===this)closeAiAgentModal()">
+    <div class="modal-panel token-modal-panel no-scrollbar max-h-[92vh] flex flex-col p-4 gap-2" style="max-width: 1200px;">
+      <div class="modal-head" style="padding: 4px 8px; margin-bottom: 0;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="badge badge-live" style="font-weight: 800; font-size: 10.5px;">AI LAUNCH AGENT</span>
+          <span class="mono" style="font-size: 13px; font-weight: 800; color: #fff;">COLD-PATH FORENSIC HUD &amp; PR GATE</span>
+          <span class="badge badge-jito" style="font-size: 9.5px;">HUMAN-IN-THE-LOOP</span>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <button class="close-btn" onclick="closeAiAgentModal()">CLOSE [ESC]</button>
         </div>
       </div>
 
-      <div style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px;">
+      <div class="no-scrollbar" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
         <!-- KPI Bar -->
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
-          <div class="tdm-stat-box" style="padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
-            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Loss Trades Audited</div>
-            <div class="mono" id="agent-kpi-audited" style="font-size: 17px; font-weight: 800; color: #fff; margin-top: 2px;">60</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+          <div class="tdm-stat-box py-1.5 px-3" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Loss Trades Audited</div>
+            <div class="mono text-lg" id="agent-kpi-audited" style="font-weight: 800; color: #fff; margin-top: 1px; line-height: 1.2;">60</div>
           </div>
-          <div class="tdm-stat-box" style="padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
-            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Counterfactual Sol Saved</div>
-            <div class="mono" id="agent-kpi-saved" style="font-size: 17px; font-weight: 800; color: var(--green); margin-top: 2px;">+0.4325 SOL (88.9%)</div>
+          <div class="tdm-stat-box py-1.5 px-3" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Counterfactual Sol Saved</div>
+            <div class="mono text-lg" id="agent-kpi-saved" style="font-weight: 800; color: var(--green); margin-top: 1px; line-height: 1.2;">+0.4325 SOL (88.9%)</div>
           </div>
-          <div class="tdm-stat-box" style="padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
-            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Active Anomalies</div>
-            <div class="mono" id="agent-kpi-anomalies" style="font-size: 17px; font-weight: 800; color: var(--amber); margin-top: 2px;">12</div>
+          <div class="tdm-stat-box py-1.5 px-3" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Active Anomalies</div>
+            <div class="mono text-lg" id="agent-kpi-anomalies" style="font-weight: 800; color: var(--amber); margin-top: 1px; line-height: 1.2;">12</div>
           </div>
-          <div class="tdm-stat-box" style="padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
-            <div class="tdm-stat-label" style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Guardrail Invariants</div>
-            <div class="mono" id="agent-kpi-invariants" style="font-size: 15px; font-weight: 800; color: var(--cyan); margin-top: 2px;">VERIFIED (Passed)</div>
+          <div class="tdm-stat-box py-1.5 px-3" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="tdm-stat-label" style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Guardrail Invariants</div>
+            <div class="mono text-lg" id="agent-kpi-invariants" style="font-weight: 800; color: var(--cyan); margin-top: 1px; line-height: 1.2;">VERIFIED (Passed)</div>
           </div>
         </div>
 
         <!-- HISTORICAL EQUITY TRAJECTORY BENCHMARK (COMPACT) -->
-        <div class="mt-2 p-2.5 bg-slate-950/70 border border-slate-800 rounded-lg flex flex-col gap-1.5 shrink-0">
+        <div class="p-2 bg-slate-950/70 border border-slate-800 rounded-lg flex flex-col gap-1 shrink-0">
           <div class="flex items-center justify-between text-xs font-mono">
             <div class="flex items-center gap-2">
-              <span class="font-bold text-cyan-400 tracking-wider text-[11px]">EQUITY TRAJECTORY BENCHMARK (130 TRADES)</span>
+              <span class="font-bold text-cyan-400 tracking-wider text-[10.5px]">EQUITY TRAJECTORY BENCHMARK (130 TRADES)</span>
               <span class="px-1.5 py-0.2 text-[8px] font-mono font-bold rounded bg-cyan-950/70 border border-cyan-500/40 text-cyan-300">
                 UNBIASED SYMMETRIC REPLAY
               </span>
             </div>
-            <div class="flex items-center gap-2 text-[9.5px]">
-              <span class="px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 font-bold">
+            <div class="flex items-center gap-2 text-[9px]">
+              <span class="px-1.5 py-0.5 rounded bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 font-bold">
                 NET ALPHA: +0.0408 SOL (+26.7%)
               </span>
-              <span class="px-2 py-0.5 rounded bg-cyan-950/50 border border-cyan-500/40 text-cyan-300 font-bold">
+              <span class="px-1.5 py-0.5 rounded bg-cyan-950/50 border border-cyan-500/40 text-cyan-300 font-bold">
                 MAX DD: -89.7%
               </span>
             </div>
           </div>
 
-          <div class="relative w-full rounded border border-slate-800/80 overflow-hidden bg-slate-950 flex items-center justify-center p-1 min-h-[160px] max-h-[195px]">
+          <div class="relative w-full rounded border border-slate-800/80 overflow-hidden bg-slate-950 flex items-center justify-center p-0.5 h-[130px] min-h-[130px] max-h-[130px]">
             <img id="img-equity-benchmark" 
                  src="/equity_curve_comparative.png" 
                  alt="Comparative Equity Trajectory" 
-                 class="w-full h-auto max-h-[185px] object-contain rounded" 
+                 class="w-full h-auto max-h-[120px] object-contain rounded" 
                  onerror="this.parentElement.innerHTML='<div class=\'text-xs font-mono text-slate-500 p-2 text-center\'>Chart loading...</div>'" />
           </div>
         </div>
 
         <!-- Staged PR Proposal Box -->
-        <div style="background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;" class="mt-2">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 11px; font-weight: 700; color: var(--cyan);">STAGED CONFIG PR PROPOSAL:</span>
-              <span class="mono" id="agent-task-id" style="font-size: 12px; font-weight: 700; color: #fff;">TASK-AUTOPSY-20261108104538</span>
-              <span class="badge" id="agent-task-status" style="background: rgba(245,158,11,0.2); color: var(--amber); font-size: 10px; font-weight: 700;">PENDING</span>
-              <span style="font-size: 11px; color: var(--text-muted);">Target: <b style="color:#fff;">config.toml</b></span>
-            </div>
+        <div style="background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; gap: 4px;" class="shrink-0">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <button id="btn-one-click-apply" onclick="promptOneClickApply()" class="px-3 py-1.5 rounded text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition-colors flex items-center gap-1.5" style="cursor: pointer;">
+              <span style="font-size: 10.5px; font-weight: 700; color: var(--cyan);">STAGED CONFIG PR PROPOSAL:</span>
+              <span class="mono" id="agent-task-id" style="font-size: 11px; font-weight: 700; color: #fff;">TASK-AUTOPSY-20261108104538</span>
+              <span class="badge" id="agent-task-status" style="background: rgba(245,158,11,0.2); color: var(--amber); font-size: 9px; font-weight: 700;">PENDING</span>
+              <span style="font-size: 10px; color: var(--text-muted);">Target: <b style="color:#fff;">config.toml</b></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button id="btn-one-click-apply" onclick="promptOneClickApply()" class="px-2 py-0.5 rounded text-[10.5px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500/30 transition-colors flex items-center gap-1" style="cursor: pointer;">
                 <span>⚡ ONE-CLICK APPLY (ADMIN)</span>
               </button>
-              <button id="btn-copy-apply-cmd" class="btn-action" style="padding: 6px 14px; font-size: 11px; background: var(--cyan); color: #000; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="copyApplyCommand()">
+              <button id="btn-copy-apply-cmd" class="btn-action" style="padding: 3px 8px; font-size: 9.5px; background: var(--cyan); color: #000; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;" onclick="copyApplyCommand()">
                 <span>📋</span> <span id="copy-btn-text">COPY APPLY COMMAND</span>
               </button>
             </div>
           </div>
           <!-- Alert feedback box for one-click apply -->
-          <div id="apply-feedback-alert" style="display: none; padding: 8px 12px; border-radius: 6px; font-size: 11px; font-family: monospace; font-weight: 700;"></div>
-          <div id="agent-diff-box" class="mono" style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; font-size: 12px; line-height: 1.6; overflow-x: auto; max-height: 160px;">
+          <div id="apply-feedback-alert" style="display: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-family: monospace; font-weight: 700;"></div>
+          <div id="agent-diff-box" class="mono max-h-[75px] overflow-hidden py-1 text-[10px]" style="background: #020408; border: 1px solid #1e293b; border-radius: 5px; padding: 4px 8px; line-height: 1.35;">
             <div style="color: var(--text-dim);">--- a/config.toml</div>
             <div style="color: var(--text-dim);">+++ b/config.toml</div>
             <div style="color: var(--cyan);">@@ -31,1 +31,1 @@</div>
-            <div style="background: rgba(239, 68, 68, 0.15); color: #f87171; padding: 2px 4px; border-radius: 2px;">-min_entry_liquidity_usd = 20000.0</div>
-            <div style="background: rgba(16, 185, 129, 0.15); color: #4ade80; padding: 2px 4px; border-radius: 2px;">+min_entry_liquidity_usd = 35000.0</div>
+            <div style="background: rgba(239, 68, 68, 0.15); color: #f87171; padding: 1px 3px; border-radius: 2px;">-min_entry_liquidity_usd = 20000.0</div>
+            <div style="background: rgba(16, 185, 129, 0.15); color: #4ade80; padding: 1px 3px; border-radius: 2px;">+min_entry_liquidity_usd = 35000.0</div>
           </div>
         </div>
 
         <!-- Forensic Autopsy Table (last 15 loss settlements) -->
-        <div style="background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;" class="mt-2">
-          <div style="padding: 10px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 12px; font-weight: 700; color: #fff;">RECENT LOSS FORENSIC AUTOPSIES &amp; COUNTERFACTUAL VERDICTS</span>
-            <span style="font-size: 11px; color: var(--text-dim);">Last 15 settled loss trades</span>
+        <div style="background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;" class="shrink-0">
+          <div style="padding: 5px 10px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 10.5px; font-weight: 700; color: #fff;">RECENT LOSS FORENSIC AUTOPSIES &amp; COUNTERFACTUAL VERDICTS</span>
+            <span style="font-size: 9.5px; color: var(--text-dim);">Last 15 settled loss trades</span>
           </div>
-          <div class="max-h-[180px] overflow-y-auto overflow-x-auto">
-            <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <div class="max-h-[120px] overflow-y-auto no-scrollbar overflow-x-auto">
+            <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
               <thead>
                 <tr style="border-bottom: 1px solid var(--border-subtle); color: var(--text-dim); text-align: left; background: rgba(13,19,34,0.6);">
-                  <th style="padding: 10px 14px;">TRADE #</th>
-                  <th style="padding: 10px 14px;">TOKEN</th>
-                  <th style="padding: 10px 14px;">PNL %</th>
-                  <th style="padding: 10px 14px;">PNL SOL</th>
-                  <th style="padding: 10px 14px;">ROOT CAUSE</th>
-                  <th style="padding: 10px 14px;">COUNTERFACTUAL VERDICT</th>
+                  <th class="py-0.5 px-2">TRADE #</th>
+                  <th class="py-0.5 px-2">TOKEN</th>
+                  <th class="py-0.5 px-2">PNL %</th>
+                  <th class="py-0.5 px-2">PNL SOL</th>
+                  <th class="py-0.5 px-2">ROOT CAUSE</th>
+                  <th class="py-0.5 px-2">COUNTERFACTUAL VERDICT</th>
                 </tr>
               </thead>
               <tbody id="agent-autopsies-tbody">
-                <tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-dim);">Loading autopsy records...</td></tr>
+                <tr><td colspan="6" style="text-align: center; padding: 8px; color: var(--text-dim);">Loading autopsy records...</td></tr>
               </tbody>
             </table>
           </div>
@@ -3144,12 +3151,12 @@ sudo systemctl restart dmne-alpha.service</code></pre>
 
               rowsHtml += `
                 <tr style="border-bottom: 1px solid var(--border-subtle);">
-                  <td class="mono" style="padding: 10px 14px; font-weight: 700; color: #fff;">#${a.trade_id}</td>
-                  <td class="mono" style="padding: 10px 14px; font-weight: 700; color: var(--cyan);">${escapeHtml(a.symbol || 'N/A')}</td>
-                  <td class="mono" style="padding: 10px 14px; color: ${pnlPctColor}; font-weight: 700;">${(a.realized_pnl_pct || 0).toFixed(2)}%</td>
-                  <td class="mono" style="padding: 10px 14px; color: ${pnlSolColor}; font-weight: 700;">${(a.realized_pnl_sol || 0).toFixed(5)} SOL</td>
-                  <td style="padding: 10px 14px;">${causeBadge}</td>
-                  <td style="padding: 10px 14px;">${verdictHtml}</td>
+                  <td class="mono" style="padding: 2px 8px; font-size: 10px; font-weight: 700; color: #fff;">#${a.trade_id}</td>
+                  <td class="mono" style="padding: 2px 8px; font-size: 10px; font-weight: 700; color: var(--cyan);">${escapeHtml(a.symbol || 'N/A')}</td>
+                  <td class="mono" style="padding: 2px 8px; font-size: 10px; color: ${pnlPctColor}; font-weight: 700;">${(a.realized_pnl_pct || 0).toFixed(2)}%</td>
+                  <td class="mono" style="padding: 2px 8px; font-size: 10px; color: ${pnlSolColor}; font-weight: 700;">${(a.realized_pnl_sol || 0).toFixed(5)} SOL</td>
+                  <td style="padding: 2px 8px; font-size: 10px;">${causeBadge}</td>
+                  <td style="padding: 2px 8px; font-size: 10px;">${verdictHtml}</td>
                 </tr>
               `;
             }
