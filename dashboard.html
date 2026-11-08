@@ -942,6 +942,21 @@
       <div class="header-telemetry-group">
         <span class="badge badge-live" id="btn-ai-launch-agent" style="cursor:pointer; user-select:none;" onclick="openAiAgentModal()" title="Open Cold-Path AI Agent Forensic HUD &amp; PR Gate">AI LAUNCH AGENT</span>
         <span class="badge badge-jito" id="btn-ai-cruise-agent" style="cursor:pointer; user-select:none;" onclick="openAiCruiseModal()" title="Open In-Flight Microstructure &amp; Dynamic Exit Supervisor">AI CRUISE AGENT</span>
+        
+        <!-- TOP NAVIGATION DROPDOWN: RUNBOOK / MANUAL -->
+        <div style="position: relative; display: inline-block; text-align: left;" id="manual-dropdown-container">
+          <button id="btn-manual-dropdown" onclick="toggleManualDropdown(event)" style="padding: 4px 10px; border-radius: 4px; font-family: monospace; font-size: 11px; font-weight: 700; background: var(--bg-card); color: #cbd5e1; border: 1px solid var(--border-subtle); cursor: pointer; display: flex; align-items: center; gap: 6px; transition: border-color 0.2s;" onmouseenter="this.style.borderColor='var(--cyan)'" onmouseleave="this.style.borderColor='var(--border-subtle)'">
+            <span>📖 RUNBOOK / MANUAL</span>
+            <span style="font-size: 10px; color: var(--text-dim);">▾</span>
+          </button>
+          <div id="manual-dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; width: 250px; border-radius: 6px; box-shadow: 0 10px 25px rgba(0,0,0,0.6); background: #0b0f19; border: 1px solid var(--border-glow); z-index: 100; padding: 4px 0; font-family: monospace; font-size: 11px;">
+            <a href="#" onclick="openManualChapter('ch1'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">1. Architecture &amp; Model</a>
+            <a href="#" onclick="openManualChapter('ch2'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">2. Pre-Trade &amp; Discovery Gates</a>
+            <a href="#" onclick="openManualChapter('ch3'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">3. AI Cruise Agent (In-Flight)</a>
+            <a href="#" onclick="openManualChapter('ch4'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">4. AI Launch Agent (Forensics)</a>
+            <a href="#" onclick="openManualChapter('ch5'); return false;" style="display: block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; transition: background 0.15s, color 0.15s;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'; this.style.color='var(--cyan)';" onmouseleave="this.style.background='transparent'; this.style.color='#cbd5e1';">5. Admin PR Gate &amp; Runbook</a>
+          </div>
+        </div>
         <div class="header-divider"></div>
         <div class="tele-stat" style="white-space: nowrap;">KELLY: <b id="tele-kelly-tag" style="color:var(--cyan)">4.5% - 8.5% DYNAMIC</b></div>
         <div class="tele-stat" style="white-space: nowrap;">SLOTS: <b id="concurrency-badge" style="color:#fff">0/4</b></div>
@@ -1484,6 +1499,231 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- USER MANUAL & OPERATIONAL RUNBOOK MODAL -->
+  <div class="modal-backdrop" id="user-manual-modal" onclick="if(event.target===this)closeUserManualModal()">
+    <div class="modal-panel" style="max-width: 1300px; height: 92vh; display: flex; flex-direction: column;">
+      <div class="modal-head">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span class="badge badge-jito" style="font-weight: 800; font-size: 11px;">DMNE QUANT DESK</span>
+          <span class="mono" style="font-size: 14px; font-weight: 800; color: #fff;">OPERATIONAL MANUAL &amp; RISK RUNBOOK</span>
+          <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: var(--cyan); font-size: 10px; font-weight: 700;">v1.0.0-beta</span>
+          <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--green); font-size: 10px; font-weight: 700;">NON-CUSTODIAL B2B PROP</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="close-btn" onclick="closeUserManualModal()">CLOSE [ESC]</button>
+        </div>
+      </div>
+
+      <div style="flex: 1; display: flex; overflow: hidden;">
+        <!-- Left Sticky Sidebar Table of Contents -->
+        <div style="width: 280px; background: #070b14; border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; overflow-y: auto;">
+          <div style="padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); font-size: 11px; font-weight: 800; color: var(--text-dim); text-transform: uppercase;">
+            TABLE OF CONTENTS
+          </div>
+          <nav style="display: flex; flex-direction: column; padding: 8px 0;">
+            <a href="#ch1" id="link-manual-ch1" class="manual-sidebar-link" onclick="openManualChapter('ch1'); return false;" style="padding: 10px 16px; font-family: monospace; font-size: 11px; color: var(--cyan); text-decoration: none; border-left: 2px solid var(--cyan); background: rgba(56,189,248,0.12); display: flex; align-items: center; gap: 8px;">
+              <span style="color: var(--cyan); font-weight: 800;">01.</span> Architecture &amp; Model
+            </a>
+            <a href="#ch2" id="link-manual-ch2" class="manual-sidebar-link" onclick="openManualChapter('ch2'); return false;" style="padding: 10px 16px; font-family: monospace; font-size: 11px; color: #cbd5e1; text-decoration: none; border-left: 2px solid transparent; display: flex; align-items: center; gap: 8px;">
+              <span style="color: var(--text-dim); font-weight: 800;">02.</span> Pre-Trade &amp; Discovery
+            </a>
+            <a href="#ch3" id="link-manual-ch3" class="manual-sidebar-link" onclick="openManualChapter('ch3'); return false;" style="padding: 10px 16px; font-family: monospace; font-size: 11px; color: #cbd5e1; text-decoration: none; border-left: 2px solid transparent; display: flex; align-items: center; gap: 8px;">
+              <span style="color: var(--text-dim); font-weight: 800;">03.</span> AI Cruise Agent (In-Flight)
+            </a>
+            <a href="#ch4" id="link-manual-ch4" class="manual-sidebar-link" onclick="openManualChapter('ch4'); return false;" style="padding: 10px 16px; font-family: monospace; font-size: 11px; color: #cbd5e1; text-decoration: none; border-left: 2px solid transparent; display: flex; align-items: center; gap: 8px;">
+              <span style="color: var(--text-dim); font-weight: 800;">04.</span> AI Launch Agent (Forensics)
+            </a>
+            <a href="#ch5" id="link-manual-ch5" class="manual-sidebar-link" onclick="openManualChapter('ch5'); return false;" style="padding: 10px 16px; font-family: monospace; font-size: 11px; color: #cbd5e1; text-decoration: none; border-left: 2px solid transparent; display: flex; align-items: center; gap: 8px;">
+              <span style="color: var(--text-dim); font-weight: 800;">05.</span> Admin PR Gate &amp; Runbook
+            </a>
+          </nav>
+          <div style="margin-top: auto; padding: 14px 16px; border-top: 1px solid var(--border-subtle); font-size: 10px; color: var(--text-dim); line-height: 1.5;">
+            DMNE MEME ALPHA ENGINE<br>
+            <span style="color: var(--green);">● SYSTEM ONLINE</span> (Solana Mainnet)
+          </div>
+        </div>
+
+        <!-- Right Content Pane -->
+        <div id="manual-content-pane" style="flex: 1; overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 32px; scroll-behavior: smooth;">
+          
+          <!-- CHAPTER 1 -->
+          <section id="ch1" style="display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 28px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="badge" style="background: rgba(56,189,248,0.2); color: var(--cyan); font-size: 11px; font-weight: 800;">CHAPTER 01</span>
+              <h2 style="font-size: 18px; font-weight: 800; color: #fff; margin: 0;">Institutional Architecture &amp; Non-Custodial Model</h2>
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0;">
+              DMNE Meme Alpha is an institutional quantitative algorithmic execution platform engineered specifically for Solana meme coin micro-liquidity markets. The system operates on a dual-speed decoupled paradigm separating sub-millisecond execution from asynchronous forensic intelligence.
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">⚡ SUB-MILLISECOND HOT-PATH (RUST)</div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Engineered in pure Rust with lock-free atomics, bounded rolling ring buffers, and Tokio async actors. Microstructure evaluations execute in under 5 microseconds, dispatching priority Jito bundles direct to Solana block builders.
+                </div>
+              </div>
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--green); margin-bottom: 6px;">🌊 COLD-PATH DATA LAKE (POSTGRESQL)</div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Every trade settlement, rejection snapshot, and tick trace is asynchronously ingested into PostgreSQL (<code style="color:var(--cyan);">dmne_quant</code>). Ensures complete forensic fidelity without introducing synchronous database lock contention to the execution path.
+                </div>
+              </div>
+            </div>
+            <div style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; font-size: 11px; line-height: 1.6; color: #94a3b8;">
+              <b style="color: #fff;">Multi-Tenant Prop Model:</b> Traders (e.g. Master Admin, Giuseppe, Giovanni) have isolated virtual sub-ledgers. Capital allocation operates on dynamic Fractional Kelly Sizing (4.5% to 8.5% NAV) across exactly 4 concurrent execution slots, guaranteeing strict capital preservation.
+            </div>
+          </section>
+
+          <!-- CHAPTER 2 -->
+          <section id="ch2" style="display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 28px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="badge" style="background: rgba(56,189,248,0.2); color: var(--cyan); font-size: 11px; font-weight: 800;">CHAPTER 02</span>
+              <h2 style="font-size: 18px; font-weight: 800; color: #fff; margin: 0;">Pre-Trade Filtration &amp; Discovery Gates</h2>
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0;">
+              Over 99.4% of candidate tokens are mathematically filtered before capital is exposed. Candidates must clear a cascade of quantitative gates:
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div style="background: var(--bg-card); border-left: 3px solid var(--cyan); padding: 12px 14px; border-radius: 0 6px 6px 0;">
+                <div style="font-weight: 700; color: #fff; font-size: 12px;">1. Hawkes Self-Exciting Point Process Filter</div>
+                <div style="font-size: 11px; color: #94a3b8; margin-top: 4px; line-height: 1.5;">
+                  Measures arrival time intervals in fractional Unix seconds (<code style="color:var(--cyan);">t &in; &reals;</code>). Calculates the self-excitation branching ratio (<code style="color:var(--cyan);">&eta; = &alpha; / &beta;</code>). Robotic clocking and wash-trading are detected when <code style="color:var(--amber);">&eta; &ge; 1.25</code> with sample size <code style="color:var(--cyan);">N &ge; 5</code>, triggering immediate rejection.
+                </div>
+              </div>
+              <div style="background: var(--bg-card); border-left: 3px solid var(--amber); padding: 12px 14px; border-radius: 0 6px 6px 0;">
+                <div style="font-weight: 700; color: #fff; font-size: 12px;">2. Genesis Guard &amp; Slot 0 Anti-Sniper Cluster Detection</div>
+                <div style="font-size: 11px; color: #94a3b8; margin-top: 4px; line-height: 1.5;">
+                  Surveils block 0 bundlers. Rejects any token where block 0 transactions bundle <code style="color:#f87171;">&gt; 25.0%</code> of circulating supply or multi-wallet clusters share identical Jito bribe tip accounts. Protects against coordinated sniper dumps.
+                </div>
+              </div>
+              <div style="background: var(--bg-card); border-left: 3px solid var(--green); padding: 12px 14px; border-radius: 0 6px 6px 0;">
+                <div style="font-weight: 700; color: #fff; font-size: 12px;">3. Cumulative Volume Delta (CVD) Orderflow Gate</div>
+                <div style="font-size: 11px; color: #94a3b8; margin-top: 4px; line-height: 1.5;">
+                  Maintains a 60-second rolling taker volume window. Requires taker buy pressure ratio <code style="color:var(--green);">&ge; +15.0%</code> (<code style="color:var(--cyan);">(BuyVol - SellVol) / TotalVol &ge; 0.15</code>) prior to queue entry confirmation.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- CHAPTER 3 -->
+          <section id="ch3" style="display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 28px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="badge" style="background: rgba(56,189,248,0.2); color: var(--cyan); font-size: 11px; font-weight: 800;">CHAPTER 03</span>
+              <h2 style="font-size: 18px; font-weight: 800; color: #fff; margin: 0;">AI Cruise Agent // In-Flight Dynamic Exit Supervisor</h2>
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0;">
+              Once a position is entered, the DCS Cruise Control Supervisor continuously evaluates micro-volatility and orderflow pressure on every price tick:
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">📈 VOLATILITY-SCALED PROFIT RATCHET</div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Computes rolling tick standard deviation (<code style="color:var(--cyan);">&sigma;_realized</code>). Trails peak price with dynamic delta <code style="color:var(--cyan);">&Delta;_trail = clamp(1.65 &times; &sigma;, 8.0%, 22.0%)</code>. As soon as Peak MFE hits <code style="color:var(--green);">&ge; +30.0%</code>, a profit floor is permanently locked at <code style="color:var(--green);">&ge; +12.0%</code>.
+                </div>
+              </div>
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--amber); margin-bottom: 6px;">⚠️ CVD ABSORPTION TRIPWIRE</div>
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+                  Detects hidden passive dumping into retail buying. If price is elevated but the CVD ratio collapses below <code style="color:#f87171;">-30.0%</code>, the supervisor cuts the trailing delta in half (<code style="color:var(--cyan);">0.5 &times; &Delta;_trail</code>) and immediately ratchets the exit floor.
+                </div>
+              </div>
+            </div>
+            <div style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 8px;">EMERGENCY RISK CIRCUIT MATRIX:</div>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 10px;">
+                <div style="background: rgba(245,158,11,0.1); padding: 8px; border-radius: 4px; border: 1px solid rgba(245,158,11,0.3);">
+                  <b style="color:var(--amber);">Early Abort:</b> -10.0%<br>
+                  <span style="color:var(--text-dim);">10k Tip &bull; Momentum stall</span>
+                </div>
+                <div style="background: rgba(239,68,68,0.1); padding: 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3);">
+                  <b style="color:#f87171;">Flash Dump:</b> -15.0%<br>
+                  <span style="color:var(--text-dim);">75k Tip &bull; 1-tick collapse</span>
+                </div>
+                <div style="background: rgba(239,68,68,0.1); padding: 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3);">
+                  <b style="color:#f87171;">Hard Stop-Loss:</b> -20.0%<br>
+                  <span style="color:var(--text-dim);">75k Tip &bull; Loss ceiling</span>
+                </div>
+                <div style="background: rgba(239,68,68,0.1); padding: 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3);">
+                  <b style="color:#f87171;">Max Slippage:</b> -25.0%<br>
+                  <span style="color:var(--text-dim);">75k Tip &bull; AMM LP drain</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- CHAPTER 4 -->
+          <section id="ch4" style="display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 28px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="badge" style="background: rgba(56,189,248,0.2); color: var(--cyan); font-size: 11px; font-weight: 800;">CHAPTER 04</span>
+              <h2 style="font-size: 18px; font-weight: 800; color: #fff; margin: 0;">AI Launch Agent // Cold-Path Forensic Autopsy Lake</h2>
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0;">
+              Every settled loss trade automatically undergoes an exhaustive post-mortem forensic autopsy stored in the <code style="color:var(--cyan);">trade_forensic_autopsies</code> database table:
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px;">
+                <span class="badge" style="background: rgba(239,68,68,0.2); color: #f87171; font-size: 9px;">RAPID_DRAIN_RUG</span>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 6px;">Catastrophic LP withdrawal or developer dump within seconds of pool initialization.</div>
+              </div>
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px;">
+                <span class="badge" style="background: rgba(245,158,11,0.2); color: var(--amber); font-size: 9px;">EXCESSIVE_SLIPPAGE</span>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 6px;">Adverse price drift (&gt; 4.0%) between quote simulation and confirmed on-chain fill.</div>
+              </div>
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px;">
+                <span class="badge" style="background: rgba(100,116,139,0.2); color: #94a3b8; font-size: 9px;">ORGANIC_STOP</span>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 6px;">Natural market retracement triggering disciplined hard stop without liquidity drain.</div>
+              </div>
+              <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px;">
+                <span class="badge" style="background: rgba(59,130,246,0.2); color: #60a5fa; font-size: 9px;">NORMAL_EXIT</span>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 6px;">Standard capital recycling via stagnation TTL or partial take-profit harvest.</div>
+              </div>
+            </div>
+            <div style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; font-size: 11px; line-height: 1.6; color: #94a3b8;">
+              <b style="color: #fff;">Counterfactual Replay Simulator:</b> Evaluates whether tightening parameters (e.g. Min Liquidity $35,000, CVD Ratio &ge; +25%) would have mathematically averted historic losses without filtering out historical multi-bagger winners.
+            </div>
+          </section>
+
+          <!-- CHAPTER 5 -->
+          <section id="ch5" style="display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="badge" style="background: rgba(56,189,248,0.2); color: var(--cyan); font-size: 11px; font-weight: 800;">CHAPTER 05</span>
+              <h2 style="font-size: 18px; font-weight: 800; color: #fff; margin: 0;">Admin PR Gate, Safety Invariants &amp; CLI Runbook</h2>
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0;">
+              DMNE enforces strict <b style="color:#fff;">Human-in-the-Loop</b> governance. The AI agent never autonomously edits <code style="color:var(--cyan);">config.toml</code> or restarts the live trading daemon. All proposals follow this rigorous workflow:
+            </p>
+            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">🛡️ MATHEMATICAL SAFETY INVARIANT BOUNDS</div>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 11px;">
+                <div>&bull; <b style="color:#fff;">Stop Loss:</b> -25.0% &le; SL &le; -10.0%</div>
+                <div>&bull; <b style="color:#fff;">Min Liquidity:</b> $15,000 &le; Liq &le; $100,000</div>
+                <div>&bull; <b style="color:#fff;">Emergency Tip:</b> &ge; 50,000 lamports</div>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 700; color: #fff;">OPERATIONAL CLI RUNBOOK:</div>
+              <pre class="mono" style="background: #020408; border: 1px solid #1e293b; border-radius: 6px; padding: 14px; font-size: 11px; line-height: 1.6; overflow-x: auto; color: #cbd5e1; margin: 0;"><code># 1. View anomaly board and pending PR proposals
+cargo run --release --bin dmne_agent_harness -- plan
+
+# 2. Trigger offline counterfactual sweep to synthesize optimal config PR
+cargo run --release --bin dmne_agent_harness -- propose
+
+# 3. Apply staged PR diff after human audit (validates safety invariants)
+cargo run --release --bin dmne_agent_harness -- apply --task-id &lt;TASK_ID&gt;
+
+# 4. Live Safety Check: Confirm ZERO active in-flight trades before restarting
+curl -s http://localhost:8090/api/state | jq '.active_positions'
+
+# 5. Safely reload live execution engine
+sudo systemctl restart dmne-alpha.service</code></pre>
+            </div>
+          </section>
+
         </div>
       </div>
     </div>
@@ -2805,12 +3045,64 @@
       }
     }
 
+    // --- USER MANUAL & OPERATIONAL RUNBOOK CONTROLLER ---
+    function toggleManualDropdown(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById("manual-dropdown-menu");
+      if (!menu) return;
+      const isHidden = menu.style.display === "none" || menu.style.display === "";
+      menu.style.display = isHidden ? "block" : "none";
+    }
+
+    document.addEventListener("click", (e) => {
+      const container = document.getElementById("manual-dropdown-container");
+      const menu = document.getElementById("manual-dropdown-menu");
+      if (menu && container && !container.contains(e.target)) {
+        menu.style.display = "none";
+      }
+    });
+
+    function openManualChapter(chapterId) {
+      const menu = document.getElementById("manual-dropdown-menu");
+      if (menu) menu.style.display = "none";
+      const modal = document.getElementById("user-manual-modal");
+      if (!modal) return;
+      modal.style.display = "flex";
+
+      // Update sidebar active link
+      document.querySelectorAll(".manual-sidebar-link").forEach(link => {
+        link.style.background = "transparent";
+        link.style.color = "#cbd5e1";
+        link.style.borderLeft = "2px solid transparent";
+      });
+      const activeLink = document.getElementById(`link-manual-${chapterId}`);
+      if (activeLink) {
+        activeLink.style.background = "rgba(56,189,248,0.12)";
+        activeLink.style.color = "var(--cyan)";
+        activeLink.style.borderLeft = "2px solid var(--cyan)";
+      }
+
+      // Smooth scroll to target chapter in pane
+      const target = document.getElementById(chapterId);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    function closeUserManualModal() {
+      const modal = document.getElementById("user-manual-modal");
+      if (modal) modal.style.display = "none";
+    }
+
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         closeHistoricalModal();
         closeTokenDetailModal();
         closeAiAgentModal();
         closeAiCruiseModal();
+        closeUserManualModal();
+        const menu = document.getElementById("manual-dropdown-menu");
+        if (menu) menu.style.display = "none";
       }
     });
 
