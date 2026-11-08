@@ -21,6 +21,8 @@ pub const STAGE2_AUDIT_LOG_CAPACITY: usize = 8;
 pub enum RejectionCategory {
     /// Liquidity < minimum parameter threshold
     LowLiquidity,
+    /// Conviction score, momentum, volume, or transactions below cutoff
+    LowConviction,
     /// Hawkes process self-excitation supercritical or cyclic periodicity
     HawkesWash,
     /// Shannon entropy or order flow dispersion below cutoff
@@ -29,19 +31,17 @@ pub enum RejectionCategory {
     DevCluster,
     /// Successfully passed all pre-flight checks and admitted to candidate queue
     Admitted,
-    /// Other pre-flight check failures (e.g. momentum overextension, confirmation drop)
-    Other,
 }
 
 impl RejectionCategory {
     pub fn as_str(&self) -> &'static str {
         match self {
             RejectionCategory::LowLiquidity => "LOW_LIQUIDITY",
+            RejectionCategory::LowConviction => "LOW_CONVICTION",
             RejectionCategory::HawkesWash => "HAWKES_WASH",
             RejectionCategory::LowDispersion => "LOW_DISPERSION",
             RejectionCategory::DevCluster => "DEV_CLUSTER",
             RejectionCategory::Admitted => "ADMITTED",
-            RejectionCategory::Other => "OTHER",
         }
     }
 }
@@ -50,16 +50,20 @@ impl RejectionCategory {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RejectionGaugeTelemetry {
     pub low_liquidity: u64,
+    #[serde(alias = "low_conviction")]
+    pub count_low_conviction: u64,
     pub hawkes_wash: u64,
     pub low_dispersion: u64,
     pub dev_cluster: u64,
     pub admitted: u64,
-    pub other: u64,
     pub total_evaluated: u64,
     pub pct_low_liquidity: f64,
+    pub pct_low_conviction: f64,
     pub pct_hawkes_wash: f64,
     pub pct_low_dispersion: f64,
     pub pct_dev_cluster: f64,
+    #[serde(default)]
+    pub pct_admitted: f64,
 }
 
 impl Default for RejectionGaugeTelemetry {
@@ -72,16 +76,18 @@ impl RejectionGaugeTelemetry {
     pub fn new() -> Self {
         Self {
             low_liquidity: 0,
+            count_low_conviction: 0,
             hawkes_wash: 0,
             low_dispersion: 0,
             dev_cluster: 0,
             admitted: 0,
-            other: 0,
             total_evaluated: 0,
             pct_low_liquidity: 0.0,
+            pct_low_conviction: 0.0,
             pct_hawkes_wash: 0.0,
             pct_low_dispersion: 0.0,
             pct_dev_cluster: 0.0,
+            pct_admitted: 0.0,
         }
     }
 
@@ -90,29 +96,43 @@ impl RejectionGaugeTelemetry {
         self.total_evaluated += 1;
         match category {
             RejectionCategory::LowLiquidity => self.low_liquidity += 1,
+            RejectionCategory::LowConviction => self.count_low_conviction += 1,
             RejectionCategory::HawkesWash => self.hawkes_wash += 1,
             RejectionCategory::LowDispersion => self.low_dispersion += 1,
             RejectionCategory::DevCluster => self.dev_cluster += 1,
             RejectionCategory::Admitted => self.admitted += 1,
-            RejectionCategory::Other => self.other += 1,
         }
-        self.recompute_percentages();
+        self.compute_percentages();
     }
 
-    /// Re-calculates percentages across the 4 primary rejection vectors
-    pub fn recompute_percentages(&mut self) {
-        let total_rejections = (self.low_liquidity + self.hawkes_wash + self.low_dispersion + self.dev_cluster) as f64;
-        if total_rejections > 0.0 {
-            self.pct_low_liquidity = ((self.low_liquidity as f64 / total_rejections) * 100.0 * 10.0).round() / 10.0;
-            self.pct_hawkes_wash = ((self.hawkes_wash as f64 / total_rejections) * 100.0 * 10.0).round() / 10.0;
-            self.pct_low_dispersion = ((self.low_dispersion as f64 / total_rejections) * 100.0 * 10.0).round() / 10.0;
-            self.pct_dev_cluster = ((self.dev_cluster as f64 / total_rejections) * 100.0 * 10.0).round() / 10.0;
+    /// Calculates percentages across all categories reconciling against the total evaluation count
+    pub fn compute_percentages(&mut self) {
+        let total = (self.low_liquidity
+            + self.count_low_conviction
+            + self.hawkes_wash
+            + self.low_dispersion
+            + self.dev_cluster
+            + self.admitted) as f64;
+
+        if total > 0.0 {
+            self.pct_low_liquidity = ((self.low_liquidity as f64 / total) * 100.0 * 10.0).round() / 10.0;
+            self.pct_low_conviction = ((self.count_low_conviction as f64 / total) * 100.0 * 10.0).round() / 10.0;
+            self.pct_hawkes_wash = ((self.hawkes_wash as f64 / total) * 100.0 * 10.0).round() / 10.0;
+            self.pct_low_dispersion = ((self.low_dispersion as f64 / total) * 100.0 * 10.0).round() / 10.0;
+            self.pct_dev_cluster = ((self.dev_cluster as f64 / total) * 100.0 * 10.0).round() / 10.0;
+            self.pct_admitted = ((self.admitted as f64 / total) * 100.0 * 10.0).round() / 10.0;
         } else {
             self.pct_low_liquidity = 0.0;
+            self.pct_low_conviction = 0.0;
             self.pct_hawkes_wash = 0.0;
             self.pct_low_dispersion = 0.0;
             self.pct_dev_cluster = 0.0;
+            self.pct_admitted = 0.0;
         }
+    }
+
+    pub fn recompute_percentages(&mut self) {
+        self.compute_percentages();
     }
 }
 
@@ -219,11 +239,68 @@ mod tests {
         assert_eq!(gauge.dev_cluster, 10);
         assert_eq!(gauge.admitted, 5);
 
-        // Normalized over 100 total rejections
-        assert_eq!(gauge.pct_low_liquidity, 60.0);
+        // Reconciled against total_evaluated = 105
+        let expected_liq: f64 = (((60.0f64 / 105.0f64) * 100.0f64 * 10.0f64).round()) / 10.0f64;
+        let expected_hawkes: f64 = (((20.0f64 / 105.0f64) * 100.0f64 * 10.0f64).round()) / 10.0f64;
+        let expected_disp: f64 = (((10.0f64 / 105.0f64) * 100.0f64 * 10.0f64).round()) / 10.0f64;
+        let expected_dev: f64 = (((10.0f64 / 105.0f64) * 100.0f64 * 10.0f64).round()) / 10.0f64;
+        let expected_admitted: f64 = (((5.0f64 / 105.0f64) * 100.0f64 * 10.0f64).round()) / 10.0f64;
+
+        assert_eq!(gauge.pct_low_liquidity, expected_liq);
+        assert_eq!(gauge.pct_hawkes_wash, expected_hawkes);
+        assert_eq!(gauge.pct_low_dispersion, expected_disp);
+        assert_eq!(gauge.pct_dev_cluster, expected_dev);
+        assert_eq!(gauge.pct_admitted, expected_admitted);
+    }
+
+    #[test]
+    fn test_rejection_gauge_mathematical_reconciliation() {
+        let mut gauge = RejectionGaugeTelemetry::new();
+
+        // Disperse 100 rejections across all 5 categories
+        for _ in 0..30 {
+            gauge.record(RejectionCategory::LowLiquidity);
+        }
+        for _ in 0..25 {
+            gauge.record(RejectionCategory::LowConviction);
+        }
+        for _ in 0..20 {
+            gauge.record(RejectionCategory::HawkesWash);
+        }
+        for _ in 0..15 {
+            gauge.record(RejectionCategory::LowDispersion);
+        }
+        for _ in 0..10 {
+            gauge.record(RejectionCategory::DevCluster);
+        }
+
+        assert_eq!(gauge.total_evaluated, 100);
+        assert_eq!(gauge.low_liquidity, 30);
+        assert_eq!(gauge.count_low_conviction, 25);
+        assert_eq!(gauge.hawkes_wash, 20);
+        assert_eq!(gauge.low_dispersion, 15);
+        assert_eq!(gauge.dev_cluster, 10);
+
+        assert_eq!(gauge.pct_low_liquidity, 30.0);
+        assert_eq!(gauge.pct_low_conviction, 25.0);
         assert_eq!(gauge.pct_hawkes_wash, 20.0);
-        assert_eq!(gauge.pct_low_dispersion, 10.0);
+        assert_eq!(gauge.pct_low_dispersion, 15.0);
         assert_eq!(gauge.pct_dev_cluster, 10.0);
+
+        let sum_pct = gauge.pct_low_liquidity
+            + gauge.pct_low_conviction
+            + gauge.pct_hawkes_wash
+            + gauge.pct_low_dispersion
+            + gauge.pct_dev_cluster;
+
+        assert!((sum_pct - 100.0).abs() <= 0.1, "Percentages must sum to 100.0% within +/-0.1%");
+
+        // Verify no category inflates to 100% when other categories are non-zero
+        assert!(gauge.pct_low_liquidity < 100.0);
+        assert!(gauge.pct_low_conviction < 100.0);
+        assert!(gauge.pct_hawkes_wash < 100.0);
+        assert!(gauge.pct_low_dispersion < 100.0);
+        assert!(gauge.pct_dev_cluster < 100.0);
     }
 
     #[test]

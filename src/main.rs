@@ -720,7 +720,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else if reason.contains("HAWKES") || reason.contains("WASH") {
                 RejectionCategory::HawkesWash
             } else {
-                RejectionCategory::Other
+                RejectionCategory::LowConviction
             };
             let (metric, verdict) = if admitted {
                 (format!("HHI: {:.2}", hhi), "ADMITTED".to_string())
@@ -1926,11 +1926,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 let (cat, metric, verdict) = if reject_reason == "LIQUIDITY_BELOW_FLOOR" {
                                                     (RejectionCategory::LowLiquidity, format!("${:.1}k (<${:.0}k)", liq / 1000.0, scanner_cfg.risk.min_entry_liquidity_usd / 1000.0), "REJECT: LOW_LIQUIDITY".to_string())
                                                 } else if reject_reason == "CONVICTION_BELOW_FLOOR" {
-                                                    (RejectionCategory::Other, format!("Conv: {:.0}%", conviction_pct), "REJECT: LOW_CONVICTION".to_string())
+                                                    (RejectionCategory::LowConviction, format!("Conv: {:.0}%", conviction_pct), "REJECT: LOW_CONVICTION".to_string())
                                                 } else if reject_reason.contains("MOMENTUM") {
-                                                    (RejectionCategory::Other, format!("m5: {:+.1}%", snap.m5_price_change_pct), "REJECT: LOW_MOMENTUM".to_string())
+                                                    (RejectionCategory::LowConviction, format!("m5: {:+.1}%", snap.m5_price_change_pct), "REJECT: LOW_MOMENTUM".to_string())
+                                                } else if reject_reason.contains("VOLUME") || reject_reason.contains("TXNS") {
+                                                    (RejectionCategory::LowConviction, format!("Vol: ${:.1}k", snap.m5_volume_usd / 1000.0), format!("REJECT: {}", reject_reason))
                                                 } else {
-                                                    (RejectionCategory::Other, format!("B/S: {:.2}", snap.buy_sell_ratio), format!("REJECT: {}", reject_reason))
+                                                    (RejectionCategory::LowConviction, format!("B/S: {:.2}", snap.buy_sell_ratio), format!("REJECT: {}", reject_reason))
                                                 };
                                                 g.record_stage2_audit(&sym, &mint, liq, metric, verdict, false, cat);
                                             }
@@ -1965,7 +1967,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             {
                                                 let mut g = scanner_state.write().await;
                                                 g.rejections_count += 1;
-                                                g.record_stage2_audit(&sym, &mint, liq, "Auth: Invalid".to_string(), "REJECT: SECURITY_CHECK".to_string(), false, RejectionCategory::Other);
+                                                g.record_stage2_audit(&sym, &mint, liq, "Auth: Invalid".to_string(), "REJECT: SECURITY_CHECK".to_string(), false, RejectionCategory::DevCluster);
                                             }
                                             let _ = scanner_audit_tx.send(db::AuditLogPayload {
                                                 token_mint: mint.clone(),
@@ -2310,7 +2312,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 {
                                                     let mut g = scanner_state.write().await;
                                                     g.rejections_count += 1;
-                                                    g.record_stage2_audit(&sym, &mint, liq, "Sim: Revert".to_string(), "REJECT: SIM_FAIL".to_string(), false, RejectionCategory::Other);
+                                                    g.record_stage2_audit(&sym, &mint, liq, "Sim: Revert".to_string(), "REJECT: SIM_FAIL".to_string(), false, RejectionCategory::LowConviction);
                                                 }
                                                 println!("[PREFLIGHT REJECT] Simulation reverted for mint {}: {}", mint, err);
                                                 let _ = scanner_audit_tx.send(db::AuditLogPayload {
