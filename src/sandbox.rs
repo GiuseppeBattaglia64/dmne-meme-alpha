@@ -799,9 +799,9 @@ mod tests {
         ctx.liquidity_usd = 35_000.0;
         let high_size = compute_sandbox_dynamic_size(&ctx, bankroll_sol, 0, &risk_cfg);
         assert!(high_size >= base_size);
-        assert!((high_size - 0.0150).abs() < 1e-4);
+        assert!((high_size - 0.0425).abs() < 1e-4);
         assert!(high_size <= bankroll_sol * risk_cfg.max_position_pct_nav);
-        assert!(high_size <= 0.0180);
+        assert!(high_size <= 0.10);
 
         // Solvency & headroom bounds
         let full_headroom = compute_sandbox_dynamic_size(&ctx, bankroll_sol, 4, &risk_cfg);

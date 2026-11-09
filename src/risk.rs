@@ -531,7 +531,7 @@ pub fn evaluate_conviction_tier(
 pub fn resolve_kelly_fraction_pct(tier: ConvictionTier, cfg: &RiskConfig) -> f64 {
     match tier {
         ConvictionTier::Tier3 | ConvictionTier::HighConviction => cfg.max_position_pct_nav * 100.0,
-        ConvictionTier::Tier2 | ConvictionTier::Baseline => ((cfg.base_position_pct_nav + cfg.max_position_pct_nav) / 2.0) * 100.0,
+        ConvictionTier::Tier2 | ConvictionTier::Baseline => (cfg.base_position_pct_nav * 1.35).min(cfg.max_position_pct_nav) * 100.0,
         ConvictionTier::Tier1 | ConvictionTier::LowVelocity => cfg.base_position_pct_nav * 100.0,
     }
 }
@@ -554,25 +554,25 @@ pub fn compute_dynamic_entry_size_sol(
         return 0.0;
     }
 
-    let dynamic_fraction = resolve_kelly_fraction_pct(conviction_tier, cfg) / 100.0;
+    let dynamic_fraction = match conviction_tier {
+        ConvictionTier::Tier1 | ConvictionTier::LowVelocity => cfg.base_position_pct_nav, // 4.5%
+        ConvictionTier::Tier2 | ConvictionTier::Baseline => (cfg.base_position_pct_nav * 1.35).min(cfg.max_position_pct_nav), // ~6.075%
+        ConvictionTier::Tier3 | ConvictionTier::HighConviction => cfg.max_position_pct_nav, // 8.5%
+    };
 
     let unconstrained_sol = bankroll_sol * dynamic_fraction;
-
-    // Hard-clamp the calculated entry size so it never exceeds 0.0180 SOL under any bankroll or tier condition
-    let clamped_size = unconstrained_sol.min(cfg.max_entry_sol.min(0.0180));
-
-    // Floating upper cap scales with NAV up to max_position_pct_nav, clamped hard to 0.0180 SOL
     let floating_cap = bankroll_sol * cfg.max_position_pct_nav;
-    let final_cap = floating_cap.min(cfg.max_entry_sol.min(0.0180));
+    let absolute_cap = cfg.max_entry_sol.min(0.10); // Standard circuit breaker
+    let final_cap = floating_cap.min(absolute_cap);
 
-    // Minimum sizing floor: ensure entry is at least 0.01 SOL if bankroll permits
-    let size = clamped_size.min(final_cap).max(0.010);
+    // Return dynamic size bounded between 0.010 SOL floor and final_cap
+    let size = unconstrained_sol.min(final_cap).max(0.010);
 
     if available_capital < size {
         if available_capital < 0.010 {
             return 0.0;
         }
-        return available_capital.min(0.0180);
+        return available_capital.min(final_cap);
     }
 
     size
@@ -1070,56 +1070,65 @@ mod tests {
     fn test_conviction_tier_evaluation() {
         let cfg = RiskConfig::default();
 
-        // 1. High conviction: buy_sell_ratio >= 2.0 (allocates 3.0%)
+        // 1. High conviction: buy_sell_ratio >= 2.0 (allocates 8.5%)
         let tier_high = evaluate_conviction_tier(2.2, 70.0, 30, 5000.0, &cfg);
         assert_eq!(tier_high, ConvictionTier::HighConviction);
-        assert!((resolve_kelly_fraction_pct(tier_high, &cfg) - 3.0).abs() < 1e-4);
+        assert!((resolve_kelly_fraction_pct(tier_high, &cfg) - 8.5).abs() < 1e-4);
 
         // 2. High conviction via top conviction %: conviction >= 85.0%
         let tier_high_conv = evaluate_conviction_tier(1.6, 90.0, 30, 5000.0, &cfg);
         assert_eq!(tier_high_conv, ConvictionTier::HighConviction);
 
-        // 3. Baseline tier: standard momentum (~2.75%)
+        // 3. Baseline tier: standard momentum (~6.075%)
         let tier_base = evaluate_conviction_tier(1.6, 70.0, 30, 5000.0, &cfg);
         assert_eq!(tier_base, ConvictionTier::Baseline);
-        assert!((resolve_kelly_fraction_pct(tier_base, &cfg) - 2.75).abs() < 1e-4);
+        assert!((resolve_kelly_fraction_pct(tier_base, &cfg) - 6.075).abs() < 1e-4);
 
-        // 4. Low velocity tier: borderline buy/sell ratio or low volume (2.5%)
+        // 4. Low velocity tier: borderline buy/sell ratio or low volume (4.5%)
         let tier_low = evaluate_conviction_tier(1.30, 60.0, 16, 2800.0, &cfg);
         assert_eq!(tier_low, ConvictionTier::LowVelocity);
-        assert!((resolve_kelly_fraction_pct(tier_low, &cfg) - 2.5).abs() < 1e-4);
+        assert!((resolve_kelly_fraction_pct(tier_low, &cfg) - 4.5).abs() < 1e-4);
     }
 
     #[test]
     fn test_compute_dynamic_entry_size_sol_tiers_and_guards() {
         let cfg = RiskConfig::default();
 
-        // 1. Unconstrained scaling with bankroll 0.50 SOL (available = 0.47 SOL)
-        let small_bankroll = 0.50;
+        // 1. Unconstrained scaling with lower bankroll (0.25 SOL)
+        let small_bankroll = 0.25;
         let size_high_small = compute_dynamic_entry_size_sol(small_bankroll, ConvictionTier::HighConviction, 0, &cfg);
         let size_base_small = compute_dynamic_entry_size_sol(small_bankroll, ConvictionTier::Baseline, 0, &cfg);
         let size_low_small = compute_dynamic_entry_size_sol(small_bankroll, ConvictionTier::LowVelocity, 0, &cfg);
 
-        // High tier (3.0% of 0.50 = 0.0150 SOL) > Base (2.75% of 0.50 = 0.01375 SOL) > Low (2.5% of 0.50 = 0.0125 SOL)
+        // High tier (8.5% of 0.25 = 0.02125 SOL) > Base (~6.075% of 0.25 = 0.0151875 SOL) > Low (4.5% of 0.25 = 0.01125 SOL)
         assert!(size_high_small > size_base_small);
         assert!(size_base_small > size_low_small);
-        assert!((size_high_small - 0.0150).abs() < 1e-4);
-        assert!((size_base_small - 0.01375).abs() < 1e-4);
-        assert!((size_low_small - 0.0125).abs() < 1e-4);
+        assert!((size_high_small - 0.02125).abs() < 1e-4);
+        assert!((size_base_small - 0.0151875).abs() < 1e-4);
+        assert!((size_low_small - 0.01125).abs() < 1e-4);
 
-        // 2. Hard clamp at 0.0180 SOL on larger bankroll (1.0 SOL)
-        let bankroll_sol = 1.00;
+        // 2. Floating NAV-relative dynamic Kelly sizing on larger bankroll (0.50 SOL)
+        let bankroll_sol = 0.50;
         let size_high = compute_dynamic_entry_size_sol(bankroll_sol, ConvictionTier::HighConviction, 0, &cfg);
         let size_base = compute_dynamic_entry_size_sol(bankroll_sol, ConvictionTier::Baseline, 0, &cfg);
         let size_low = compute_dynamic_entry_size_sol(bankroll_sol, ConvictionTier::LowVelocity, 0, &cfg);
 
-        // All sizes capped by hard clamp (0.0180 SOL)
-        assert_eq!(size_high, 0.0180);
-        assert_eq!(size_base, 0.0180);
-        assert_eq!(size_low, 0.0180);
+        assert!(size_high > size_base);
+        assert!(size_base > size_low);
+        assert!((size_high - 0.0425).abs() < 1e-4);
+        assert!((size_base - 0.030375).abs() < 1e-4);
+        assert!((size_low - 0.0225).abs() < 1e-4);
+
+        // All sizes capped by floating_cap (8.5% of 0.50 = 0.0425 SOL) and absolute cap
         assert!(size_high <= bankroll_sol * cfg.max_position_pct_nav);
-        assert!(size_high <= 0.0180);
+        assert!(size_high <= cfg.max_entry_sol);
         assert!(size_low >= 0.010);
+
+        // 3. Absolute circuit breaker clamp on very large bankroll (2.0 SOL)
+        let large_bankroll = 2.00;
+        let size_large = compute_dynamic_entry_size_sol(large_bankroll, ConvictionTier::HighConviction, 0, &cfg);
+        // Unconstrained: 2.0 * 0.085 = 0.17 SOL, capped by max_entry_sol = 0.060
+        assert_eq!(size_large, 0.060);
 
         // Tier1, Tier2, Tier3 variants alias test
         let size_t3 = compute_dynamic_entry_size_sol(small_bankroll, ConvictionTier::Tier3, 0, &cfg);

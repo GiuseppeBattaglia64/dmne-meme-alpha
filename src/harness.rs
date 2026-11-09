@@ -16,9 +16,9 @@ pub const MAX_PERMISSIBLE_STOP_LOSS_PCT: f64 = -25.0; // Stop loss cannot widen 
 pub const MIN_POSITION_SIZE_SOL: f64 = 0.010;
 pub const MAX_POSITION_SIZE_SOL: f64 = 0.10;
 
-pub const MIN_BASE_POSITION_PCT_NAV: f64 = 0.015;
+pub const MIN_BASE_POSITION_PCT_NAV: f64 = 0.02;
 pub const MAX_BASE_POSITION_PCT_NAV: f64 = 0.07;
-pub const MIN_MAX_POSITION_PCT_NAV: f64 = 0.025;
+pub const MIN_MAX_POSITION_PCT_NAV: f64 = 0.04;
 pub const MAX_MAX_POSITION_PCT_NAV: f64 = 0.12;
 pub const HARD_CEILING_MAX_COMMITTED_SOL: f64 = 0.10;
 
@@ -668,9 +668,9 @@ mod tests {
         assert!(res_nav_high.is_err());
         assert!(res_nav_high.unwrap_err()[0].contains("base_position_pct_nav"));
 
-        // Reset and test invalid max_position_pct_nav (< 0.025 or > 0.12)
-        cfg.risk.as_mut().unwrap().base_position_pct_nav = 0.025;
-        cfg.risk.as_mut().unwrap().max_position_pct_nav = 0.020;
+        // Reset and test invalid max_position_pct_nav (< 0.04 or > 0.12)
+        cfg.risk.as_mut().unwrap().base_position_pct_nav = 0.045;
+        cfg.risk.as_mut().unwrap().max_position_pct_nav = 0.030;
         let res_max_low = validate_safety_invariants_on_toml(&cfg);
         assert!(res_max_low.is_err());
         assert!(res_max_low.unwrap_err()[0].contains("max_position_pct_nav"));
