@@ -933,6 +933,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "closed_trades": guard.closed_trades,
                                         "recent_onchain_events": guard.recent_onchain_events,
                                         "risk_config": &guard.effective_risk_cfg,
+                                        "config": {
+                                            "risk": &guard.effective_risk_cfg,
+                                        },
                                         "rejection_gauge": guard.rejection_tracker.snapshot(),
                                         "stage2_audit_log": &guard.stage2_audit_log.entries,
                                     })).unwrap_or_default()
@@ -973,6 +976,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "closed_trades": guard.closed_trades,
                                 "recent_onchain_events": guard.recent_onchain_events,
                                 "risk_config": &guard.effective_risk_cfg,
+                                "config": {
+                                    "risk": &guard.effective_risk_cfg,
+                                },
                                 "rejection_gauge": guard.rejection_tracker.snapshot(),
                                 "stage2_audit_log": &guard.stage2_audit_log.entries,
                             })).unwrap_or_default();
