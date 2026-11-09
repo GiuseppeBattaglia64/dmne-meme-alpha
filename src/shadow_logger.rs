@@ -9,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, RwLock};
 
 pub const DEFAULT_SHADOW_LOG_PATH: &str = "logs/shadow_microstructure.jsonl";
-pub const DEFAULT_SOLANA_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
+pub const DEFAULT_SOLANA_RPC_URL: &str = "https://mainnet.helius-rpc.com/?api-key=1eadb81c-7820-4e10-9fe8-3328a837ec80";
 pub const DEFAULT_RPC_TIMEOUT_SECS: u64 = 4;
 pub const MAX_TOP_HOLDERS_COUNT: usize = 10;
 pub const DEFAULT_HAWKES_WINDOW_SIZE: usize = 50;

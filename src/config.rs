@@ -47,6 +47,7 @@ pub struct EngineConfig {
     pub sim_initial_cu_limit: u32,
     pub min_sim_cu_threshold: u64,
     pub default_rpc_url: String,
+    pub solana: SolanaConfig,
 
     // Institutional Risk Envelope
     pub risk: RiskConfig,
@@ -541,6 +542,32 @@ impl SandboxConfig {
     }
 }
 
+pub const DEFAULT_HELIUS_RPC_URL: &str = "https://mainnet.helius-rpc.com/?api-key=1eadb81c-7820-4e10-9fe8-3328a837ec80";
+
+pub fn default_solana_rpc_url() -> String {
+    if let Ok(env_url) = std::env::var("SOLANA_RPC_URL") {
+        let trimmed = env_url.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    DEFAULT_HELIUS_RPC_URL.to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SolanaConfig {
+    #[serde(default = "default_solana_rpc_url")]
+    pub rpc_url: String,
+}
+
+impl Default for SolanaConfig {
+    fn default() -> Self {
+        Self {
+            rpc_url: default_solana_rpc_url(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TomlConfigFile {
     pub risk: Option<RiskConfig>,
@@ -551,6 +578,7 @@ pub struct TomlConfigFile {
     pub genesis_guard: Option<GenesisGuardConfig>,
     pub funder_graph: Option<crate::funder_graph::FunderGraphConfig>,
     pub admin: Option<AdminConfig>,
+    pub solana: Option<SolanaConfig>,
 }
 
 impl Default for EngineConfig {
@@ -586,7 +614,8 @@ impl Default for EngineConfig {
             cu_headroom_multiplier: 1.15,        // 15% CU buffer over unitsConsumed
             sim_initial_cu_limit: 200_000,       // Initial simulation envelope
             min_sim_cu_threshold: 15_000,        // Rejection floor for no-op transactions
-            default_rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
+            default_rpc_url: default_solana_rpc_url(),
+            solana: SolanaConfig::default(),
             risk: RiskConfig::default(),
             hawkes: crate::hawkes::HawkesConfig::default(),
             dynamic_exits: DynamicExitsConfig::default(),
@@ -648,6 +677,27 @@ impl EngineConfig {
                 if let Some(adm) = toml_file.admin {
                     println!("[CONFIG] Loaded institutional [admin] envelope from config.toml");
                     cfg.admin = adm;
+                }
+                if let Some(mut sol) = toml_file.solana {
+                    println!("[CONFIG] Loaded institutional [solana] envelope from config.toml");
+                    if let Ok(env_url) = std::env::var("SOLANA_RPC_URL") {
+                        let trimmed = env_url.trim();
+                        if !trimmed.is_empty() {
+                            sol.rpc_url = trimmed.to_string();
+                        }
+                    }
+                    cfg.default_rpc_url = sol.rpc_url.clone();
+                    cfg.solana = sol;
+                } else {
+                    let mut sol = SolanaConfig::default();
+                    if let Ok(env_url) = std::env::var("SOLANA_RPC_URL") {
+                        let trimmed = env_url.trim();
+                        if !trimmed.is_empty() {
+                            sol.rpc_url = trimmed.to_string();
+                        }
+                    }
+                    cfg.default_rpc_url = sol.rpc_url.clone();
+                    cfg.solana = sol;
                 }
             }
         }
@@ -773,6 +823,18 @@ mod tests {
         let empty_toml = "";
         let parsed_empty: AdminConfig = toml::from_str(empty_toml).expect("Failed to deserialize empty AdminConfig");
         assert_eq!(parsed_empty.admin_passphrase.as_deref(), Some("dmne-alpha-desk-2026"));
+    }
+
+    #[test]
+    fn test_solana_config_defaults_and_deserialization() {
+        let default_cfg = SolanaConfig::default();
+        assert!(default_cfg.rpc_url.contains("helius-rpc.com") || std::env::var("SOLANA_RPC_URL").is_ok());
+
+        let toml_str = r#"
+            rpc_url = "https://custom-rpc.example.com"
+        "#;
+        let parsed: SolanaConfig = toml::from_str(toml_str).expect("Failed to deserialize SolanaConfig");
+        assert_eq!(parsed.rpc_url, "https://custom-rpc.example.com");
     }
 }
 

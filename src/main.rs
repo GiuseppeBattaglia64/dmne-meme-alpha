@@ -246,6 +246,8 @@ pub struct BotState {
     #[serde(default)]
     pub effective_risk_cfg: config::RiskConfig,
     #[serde(default)]
+    pub solana_config: config::SolanaConfig,
+    #[serde(default)]
     pub banned_tokens: std::collections::HashSet<String>,
     #[serde(default)]
     pub rejected_candidates: std::collections::HashMap<String, u64>,
@@ -279,6 +281,7 @@ impl BotState {
             closed_trades: Vec::new(),
             recent_onchain_events: Vec::new(),
             effective_risk_cfg: config::RiskConfig::default(),
+            solana_config: config::SolanaConfig::default(),
             banned_tokens: std::collections::HashSet::new(),
             rejected_candidates: std::collections::HashMap::new(),
             rejection_tracker: RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY),
@@ -688,6 +691,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = Arc::new(RwLock::new(BotState::new()));
     let config = Arc::new(config::EngineConfig::load());
+    {
+        let mut g = state.write().await;
+        g.solana_config = config.solana.clone();
+        g.effective_risk_cfg = config.risk.clone();
+    }
     let db_audit_tx = db::spawn_db_audit_worker(db::DEFAULT_DB_URL);
     let funder_cache = funder_graph::FunderGraphEvaluator::load_cache(&config.funder_graph.cache_path).unwrap_or_default();
     let funder_evaluator = Arc::new(funder_graph::FunderGraphEvaluator::new(config.funder_graph.clone(), funder_cache));
@@ -702,6 +710,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         g.rejections_count = rejections as u64;
         g.total_realized_pnl_sol = net;
         g.effective_risk_cfg = config.risk.clone();
+        g.solana_config = config.solana.clone();
 
         // Restore historical closed trades & quarantine state from PostgreSQL
         let historical_trades = db::fetch_settled_trades_for_reconcile(&pg).await;
@@ -853,7 +862,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let rpc_client = http_client.clone();
     let (shadow_handle, shadow_worker) = shadow_logger::init_shadow_logger(rpc_client.clone(), "logs/shadow_microstructure.jsonl");
-    let shadow_handle = shadow_handle.with_rpc_url(config.default_rpc_url.clone());
+    let shadow_handle = shadow_handle.with_rpc_url(config.solana.rpc_url.clone());
     tokio::spawn(shadow_worker);
 
     // 1. Dashboard Web Server (Port 8090)
@@ -883,7 +892,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "method": "getBalance",
                 "params": [pubkey]
             });
-            if let Ok(res) = balance_client.post(&balance_cfg.default_rpc_url)
+            if let Ok(res) = balance_client.post(&balance_cfg.solana.rpc_url)
                 .json(&req_body)
                 .timeout(Duration::from_millis(3000))
                 .send()
@@ -955,6 +964,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "risk_config": &guard.effective_risk_cfg,
                                         "config": {
                                             "risk": &guard.effective_risk_cfg,
+                                            "solana": &guard.solana_config,
                                         },
                                         "rejection_gauge": guard.rejection_tracker.snapshot(),
                                         "stage2_audit_log": &guard.stage2_audit_log.entries,
@@ -998,6 +1008,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "risk_config": &guard.effective_risk_cfg,
                                 "config": {
                                     "risk": &guard.effective_risk_cfg,
+                                    "solana": &guard.solana_config,
                                 },
                                 "rejection_gauge": guard.rejection_tracker.snapshot(),
                                 "stage2_audit_log": &guard.stage2_audit_log.entries,
@@ -1725,7 +1736,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let genesis_profile = if eval_cfg.genesis_guard.enabled {
                             Some(genesis_guard::inspect_candidate_genesis(
                                 &eval_client,
-                                &eval_cfg.default_rpc_url,
+                                &eval_cfg.solana.rpc_url,
                                 &candidate.token_mint,
                                 &final_snap.pair_address,
                             ).await)
@@ -1736,21 +1747,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let holder_records: Option<Vec<funder_graph::TokenHolderRecord>> = if let Some(cached) = eval_funder.cache.get(&candidate.token_mint) {
                             Some(cached.clone())
                         } else {
-                            let (shares, _) = shadow_logger::fetch_rpc_holder_distribution(
+                            let holders = funder_graph::fetch_holders_from_rpc(
                                 &eval_client,
-                                &eval_cfg.default_rpc_url,
+                                &eval_cfg.solana.rpc_url,
                                 &candidate.token_mint,
                                 2,
                             ).await;
-                            if !shares.is_empty() {
-                                Some(shares.into_iter().enumerate().map(|(i, pct)| {
-                                    funder_graph::TokenHolderRecord {
-                                        holder_address: format!("Holder_{}_{}", &candidate.token_mint[..6.min(candidate.token_mint.len())], i),
-                                        supply_pct: pct,
-                                        is_liquidity_pool: i == 0 && pct > 45.0,
-                                        funding_source: None,
-                                    }
-                                }).collect())
+                            if !holders.is_empty() {
+                                Some(holders)
                             } else {
                                 None
                             }
@@ -2484,7 +2488,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             );
                                             continue;
                                         }
-                                        let rpc_endpoint = &scanner_cfg.default_rpc_url;
+                                        let rpc_endpoint = &scanner_cfg.solana.rpc_url;
                                         if !verify_token_security(&scanner_client, rpc_endpoint, &mint).await {
                                             {
                                                 let mut g = scanner_state.write().await;

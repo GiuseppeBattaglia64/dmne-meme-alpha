@@ -135,5 +135,9 @@ cache_path = "logs/sandbox_onchain_cache.json"
 [admin]
 admin_passphrase = "dmne-alpha-desk-2026"
 
+[solana]
+rpc_url = "https://mainnet.helius-rpc.com/?api-key=1eadb81c-7820-4e10-9fe8-3328a837ec80"
+
+
 
 

@@ -222,6 +222,27 @@ pub fn evaluate_holder_entropy(holders: &[HolderRecord]) -> Result<(), String> {
     Ok(())
 }
 
+/// Resolves token holder records via Solana JSON-RPC `getTokenLargestAccounts`
+pub async fn fetch_holders_from_rpc(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    mint: &str,
+    timeout_secs: u64,
+) -> Vec<TokenHolderRecord> {
+    let (shares, _) = crate::shadow_logger::fetch_rpc_holder_distribution(client, rpc_url, mint, timeout_secs).await;
+    if shares.is_empty() {
+        return Vec::new();
+    }
+    shares.into_iter().enumerate().map(|(i, pct)| {
+        TokenHolderRecord {
+            holder_address: format!("Holder_{}_{}", &mint[..6.min(mint.len())], i),
+            supply_pct: pct,
+            is_liquidity_pool: i == 0 && pct > 45.0,
+            funding_source: None,
+        }
+    }).collect()
+}
+
 impl FunderGraphEvaluator {
     pub fn new(config: FunderGraphConfig, cache: HashMap<String, Vec<TokenHolderRecord>>) -> Self {
         Self { config, cache }
