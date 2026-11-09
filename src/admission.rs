@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn test_admission_low_liquidity_rejection() {
         let mut candidate = make_test_candidate();
-        candidate.liquidity_usd = 15000.0; // Below 35000.0 default
+        candidate.liquidity_usd = 15000.0; // Below 25000.0 default
         let cfg = EngineConfig::default();
         let res = evaluate_candidate_admission(&candidate, &cfg, None);
         assert!(res.is_err());
@@ -395,6 +395,10 @@ mod tests {
             RejectionReason::LowLiquidity { current_usd, required_usd } => {
                 assert_eq!(current_usd, 15000.0);
                 assert_eq!(required_usd, cfg.risk.min_entry_liquidity_usd);
+                assert_eq!(
+                    err.metric_label(),
+                    format!("${:.1}k (<${:.0}k)", 15.0, cfg.risk.min_entry_liquidity_usd / 1000.0)
+                );
             }
             _ => panic!("Expected LowLiquidity error"),
         }

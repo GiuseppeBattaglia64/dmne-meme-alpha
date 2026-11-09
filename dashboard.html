@@ -2580,8 +2580,15 @@ sudo systemctl restart dmne-alpha.service</code></pre>
         // 3. Merged Metric Calculation
         let metricDisplay = "-";
         if (vClean.includes("LOW_LIQUIDITY") || vClean.includes("LIQUIDITY") || vClean === "LOW LIQ") {
-          const liqK = entry.liquidity_usd ? (entry.liquidity_usd / 1000.0).toFixed(1) : "0.0";
-          metricDisplay = `$${liqK}k (<$35k)`;
+          if (entry.key_metric && entry.key_metric.includes("<$")) {
+            metricDisplay = entry.key_metric;
+          } else {
+            const liqK = entry.liquidity_usd ? (entry.liquidity_usd / 1000.0).toFixed(1) : "0.0";
+            const floorK = (typeof state !== 'undefined' && state && state.config && state.config.risk && state.config.risk.min_entry_liquidity_usd)
+              ? Math.round(state.config.risk.min_entry_liquidity_usd / 1000.0)
+              : 25;
+            metricDisplay = `$${liqK}k (<$${floorK}k)`;
+          }
         } else if (vClean.includes("LOW_CONVICTION") || vClean.includes("CONVICTION")) {
           if (entry.key_metric && entry.key_metric.includes("Conv")) {
             metricDisplay = entry.key_metric;

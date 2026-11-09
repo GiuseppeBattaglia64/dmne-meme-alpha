@@ -96,15 +96,15 @@ pub fn is_emergency_risk_exit(rule_label: &str) -> bool {
         || lower.contains("early_abort")
 }
 
-pub fn resolve_exit_tip(rule_label: &str, pnl_sol: f64, cfg: &RiskConfig) -> u64 {
+pub fn resolve_exit_tip(rule_label: &str, pnl_sol: f64, _cfg: &RiskConfig) -> u64 {
     if is_emergency_risk_exit(rule_label) || pnl_sol <= 0.0 {
-        // Defensive exits (Stop-Loss, Early Abort, Flash Dump), floor the tip at 10,000 lamports (saving 86.7% overhead)
-        cfg.jito_tip_lamports.min(10_000).max(10_000)
+        // Defensive exits (Stop-Loss, Early Abort, Flash Dump, Max Slippage) and any PnL <= 0: return 10_000 lamports
+        10_000
     } else {
-        // Profitable exits (Take-Profit 1, Take-Profit 2, Dynamic Ratchet), scale tip dynamically:
-        // tip = max(10_000, min(150_000, (pnl_sol * 1e9 * 0.08)))
-        let raw = pnl_sol * 1e9 * 0.08;
-        raw.clamp(10_000.0, 150_000.0).round() as u64
+        // Profitable exits (TP1, TP2, Dynamic Ratchet): scale tip dynamically:
+        // max(10_000, min(150_000, (pnl_sol * 1e9 * 0.08) as u64))
+        let scaled = (pnl_sol * 1e9 * 0.08) as u64;
+        scaled.clamp(10_000, 150_000)
     }
 }
 
