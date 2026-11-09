@@ -2129,8 +2129,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let hawkes_eval = hawkes::HawkesEvaluator::new(eval_cfg.hawkes.clone());
                 let arrivals = active_arrivals.get(&pos.token_mint).map(|v| v.as_slice()).unwrap_or(&[]);
                 let has_hawkes_decay = hold_secs > 25
-                    && pos.pnl_pct >= 3.0
-                    && pos.pnl_pct < 15.0
+                    && pos.pnl_pct >= effective_risk_cfg.min_take_profit_activation_pct
+                    && pos.pnl_pct < effective_risk_cfg.tp1_trigger_pct
                     && hawkes_eval.evaluate_inflight_decay(arrivals, now_epoch as f64);
 
                 let action = if has_toxic_vpin {

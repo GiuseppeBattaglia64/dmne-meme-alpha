@@ -76,7 +76,10 @@ pub struct EngineConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskConfig {
+    #[serde(default = "default_stop_loss_pct")]
     pub stop_loss_pct: f64,
+    #[serde(default)]
+    pub max_stop_loss_pct: Option<f64>,
     #[serde(default = "default_max_slippage_loss_pct")]
     pub max_slippage_loss_pct: f64,
     #[serde(default = "default_flash_dump_tick_pct")]
@@ -101,7 +104,10 @@ pub struct RiskConfig {
     #[serde(default = "default_max_runner_trailing_drop_pct")]
     pub max_runner_trailing_drop_pct: f64,
 
+    #[serde(default = "default_stagnation_ttl_secs")]
     pub stagnation_ttl_secs: u64,
+    #[serde(default, alias = "stagnation_timeout_secs")]
+    pub stagnation_timeout_sec: Option<u64>,
     #[serde(default = "default_cruise_baseline_ttl_secs")]
     pub cruise_baseline_ttl_secs: u64,
     #[serde(default = "default_min_stagnation_ttl_secs")]
@@ -111,6 +117,8 @@ pub struct RiskConfig {
     pub stagnation_max_peak_pct: f64,
     pub stagnation_band_min_pct: f64,
     pub stagnation_band_max_pct: f64,
+    #[serde(default = "default_min_take_profit_activation_pct")]
+    pub min_take_profit_activation_pct: f64,
 
     // Anti-Churn Quarantine & Entry Momentum Gates
     #[serde(default = "default_reentry_cooldown_secs")]
@@ -350,15 +358,19 @@ fn default_jito_tip_lamports() -> u64 { 10000 }
 fn default_emergency_jito_tip_lamports() -> u64 { 75000 }
 fn default_min_entry_sol() -> f64 { 0.010 }
 fn default_max_entry_sol() -> f64 { 0.060 }
+fn default_stop_loss_pct() -> f64 { -20.0 }
+fn default_stagnation_ttl_secs() -> u64 { 160 }
 fn default_min_gas_reserve_sol() -> f64 { 0.030 }
 fn default_base_position_size_sol() -> f64 { 0.045 }
 fn default_base_position_pct_nav() -> f64 { 0.045 }
 fn default_max_position_pct_nav() -> f64 { 0.085 }
+fn default_min_take_profit_activation_pct() -> f64 { 10.0 }
 
 impl Default for RiskConfig {
     fn default() -> Self {
         Self {
             stop_loss_pct: -20.0,
+            max_stop_loss_pct: None,
             max_slippage_loss_pct: -25.0,
             flash_dump_tick_pct: -15.0,
             flash_dump_max_pnl_pct: 0.0,
@@ -373,12 +385,14 @@ impl Default for RiskConfig {
             min_runner_trailing_drop_pct: 12.0,
             max_runner_trailing_drop_pct: 25.0,
             stagnation_ttl_secs: 160,
+            stagnation_timeout_sec: None,
             cruise_baseline_ttl_secs: 240,
             min_stagnation_ttl_secs: 120,
             max_stagnation_ttl_secs: 360,
             stagnation_max_peak_pct: 12.0,
             stagnation_band_min_pct: -8.0,
             stagnation_band_max_pct: 5.0,
+            min_take_profit_activation_pct: 10.0,
             reentry_cooldown_secs: 3600,
             toxic_exit_permanent_ban: true,
             min_entry_liquidity_usd: 25000.0,
@@ -648,8 +662,16 @@ impl EngineConfig {
         let path = "/home/ubuntu/dmne-meme-alpha/config.toml";
         if let Ok(content) = std::fs::read_to_string(path) {
             if let Ok(toml_file) = toml::from_str::<TomlConfigFile>(&content) {
-                if let Some(r) = toml_file.risk {
+                if let Some(mut r) = toml_file.risk {
                     println!("[CONFIG] Loaded institutional [risk] envelope from config.toml");
+                    if let Some(msl) = r.max_stop_loss_pct {
+                        r.stop_loss_pct = -msl.abs();
+                    } else if r.stop_loss_pct > 0.0 {
+                        r.stop_loss_pct = -r.stop_loss_pct.abs();
+                    }
+                    if let Some(ttk) = r.stagnation_timeout_sec {
+                        r.stagnation_ttl_secs = ttk;
+                    }
                     cfg.breakeven_arm_peak_pct = r.breakeven_arm_pct;
                     cfg.breakeven_floor_pct = r.breakeven_floor_pct;
                     cfg.hard_stop_loss_pct = r.stop_loss_pct;
@@ -864,6 +886,22 @@ mod tests {
         let parsed: SolanaConfig = toml::from_str(toml_str).expect("Failed to deserialize SolanaConfig");
         assert_eq!(parsed.rpc_url, "https://custom-rpc.example.com");
         assert_eq!(parsed.public_rpc_url, "https://custom-public-rpc.example.com");
+    }
+
+    #[test]
+    fn test_load_full_config_toml() {
+        let content = std::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/config.toml").unwrap();
+        let toml_file = toml::from_str::<TomlConfigFile>(&content).expect("Failed to deserialize config.toml");
+        assert!(toml_file.risk.is_some());
+
+        let engine_cfg = EngineConfig::load();
+        assert_eq!(engine_cfg.risk.stop_loss_pct, -8.0);
+        assert_eq!(engine_cfg.hard_stop_loss_pct, -8.0);
+        assert_eq!(engine_cfg.risk.min_take_profit_activation_pct, 10.0);
+        assert_eq!(engine_cfg.risk.stagnation_ttl_secs, 25);
+        assert_eq!(engine_cfg.stagnation_ttl_seconds, 25);
+        assert_eq!(engine_cfg.risk.stagnation_band_min_pct, -4.0);
+        assert_eq!(engine_cfg.risk.stagnation_band_max_pct, 4.0);
     }
 }
 

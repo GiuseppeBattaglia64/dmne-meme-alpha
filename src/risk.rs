@@ -250,8 +250,9 @@ pub fn evaluate_position_exit_with_congestion(
     }
 
     // 2. Hard Stop-Loss (Emergency defensive exit: floored at 10k)
-    if pnl_pct <= cfg.stop_loss_pct {
-        let rule_label = format!("Stop-Loss ({:.0}%)", cfg.stop_loss_pct);
+    let stop_loss_threshold = -cfg.stop_loss_pct.abs();
+    if pnl_pct <= stop_loss_threshold {
+        let rule_label = format!("Stop-Loss ({:.0}%)", stop_loss_threshold);
         let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
         return ExitAction::FullExit {
             rule_label,
@@ -469,7 +470,7 @@ pub fn evaluate_position_exit_with_congestion(
 }
 
 pub fn is_historical_exit_toxic(exit_pnl_pct: f64, cfg: &RiskConfig) -> bool {
-    exit_pnl_pct < cfg.stagnation_band_min_pct || exit_pnl_pct <= cfg.stop_loss_pct
+    exit_pnl_pct < cfg.stagnation_band_min_pct || exit_pnl_pct <= -cfg.stop_loss_pct.abs()
 }
 
 pub fn validate_entry_gates(

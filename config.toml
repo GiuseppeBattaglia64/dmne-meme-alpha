@@ -1,11 +1,20 @@
 [risk]
-stop_loss_pct = -20.0
+# 1. TIGHTEN STOP-LOSS (Cut losses fast)
+# Lower maximum adverse excursion from -20% down to -8.0%.
+# If the breakout doesn't follow through immediately, bail before liquidity evaporates.
+stop_loss_pct = -8.0
+max_stop_loss_pct = 8.0
 max_slippage_loss_pct = -25.0
 flash_dump_tick_pct = -15.0
 flash_dump_max_pnl_pct = 0.0
 
 breakeven_arm_pct = 24.0
 breakeven_floor_pct = 8.0
+
+# 2. PROFIT FLOOR BEFORE HAWKES EXIT (Let winners run)
+# Do not allow Hawkes Dynamic Exit to trigger below +10.0%.
+# Prevent the engine from dumping winners for small +3% scraps.
+min_take_profit_activation_pct = 10.0
 
 tp1_trigger_pct = 45.0
 tp1_sell_fraction = 0.40
@@ -18,18 +27,20 @@ cruise_baseline_trail_mult = 2.20
 min_runner_trailing_drop_pct = 12.0
 max_runner_trailing_drop_pct = 25.0
 
-stagnation_ttl_secs = 160
-cruise_baseline_ttl_secs = 240
-min_stagnation_ttl_secs = 120
-max_stagnation_ttl_secs = 360
-stagnation_max_peak_pct = 12.0
-stagnation_band_min_pct = -8.0
-stagnation_band_max_pct = 5.0
+# 3. TIME-TO-KILL (TTK) ON STAGNATION
+# If PnL is between -4% and +4% after 25 seconds, force exit at scratch.
+stagnation_ttl_secs = 25
+stagnation_timeout_sec = 25
+cruise_baseline_ttl_secs = 35
+min_stagnation_ttl_secs = 15
+max_stagnation_ttl_secs = 120
+stagnation_max_peak_pct = 8.0
+stagnation_band_min_pct = -4.0
+stagnation_band_max_pct = 4.0
 
 reentry_cooldown_secs = 3600
 toxic_exit_permanent_ban = true
 min_entry_liquidity_usd = 25000.0
-base_position_size_sol = 0.045
 min_entry_price_change_pct = 1.5
 max_entry_price_change_pct = 85.0
 min_entry_buy_sell_ratio = 1.25
