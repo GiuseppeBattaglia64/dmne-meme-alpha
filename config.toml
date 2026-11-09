@@ -28,7 +28,7 @@ stagnation_band_max_pct = 5.0
 
 reentry_cooldown_secs = 3600
 toxic_exit_permanent_ban = true
-min_entry_liquidity_usd = 35000.0
+min_entry_liquidity_usd = 25000.0
 base_position_size_sol = 0.045
 min_entry_price_change_pct = 1.5
 max_entry_price_change_pct = 85.0

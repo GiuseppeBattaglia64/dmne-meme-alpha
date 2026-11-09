@@ -579,7 +579,8 @@ pub fn simulate_v071_exit(
         risk_cfg,
         sl_mode,
     );
-    let tip = resolve_exit_tip(reason, risk_cfg);
+    let gross_sol = size_sol * (gross_pnl_pct / 100.0);
+    let tip = resolve_exit_tip(reason, gross_sol, risk_cfg);
     let net_sol = compute_net_realized_sol_with_tip(size_sol, gross_pnl_pct, risk_cfg, tip);
     let net_pnl_pct = compute_net_pnl_pct(size_sol, net_sol);
     (net_pnl_pct, net_sol, reason.to_string())
@@ -677,9 +678,9 @@ mod tests {
         low_liq.liquidity_usd = 15000.0;
         assert_eq!(gate.validate_pre_entry(&low_liq, &risk_cfg, &sandbox_cfg), Err("LIQUIDITY_BELOW_MIN"));
 
-        // FDV to Liquidity ratio exceeded ($400,000 / $22,000 = 18.2x > 15.0x)
+        // FDV to Liquidity ratio exceeded ($400,000 / $26,000 = 15.4x > 15.0x)
         let mut high_fdv = ctx.clone();
-        high_fdv.liquidity_usd = 22000.0;
+        high_fdv.liquidity_usd = 26000.0;
         high_fdv.fdv_usd = 400000.0;
         assert_eq!(gate.validate_pre_entry(&high_fdv, &risk_cfg, &sandbox_cfg), Err("FDV_TO_LIQUIDITY_RATIO_EXCEEDED"));
 

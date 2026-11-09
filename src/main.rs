@@ -687,7 +687,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let historical_trades = db::fetch_settled_trades_for_reconcile(&pg).await;
         for (mint, symbol, size, pnl_sol, pnl_pct, rule, epoch, db_toxic) in historical_trades {
             let is_toxic = db_toxic || risk::is_historical_exit_toxic(pnl_pct, &config.risk);
-            let tip = risk::resolve_exit_tip(&rule, &config.risk);
+            let tip = risk::resolve_exit_tip(&rule, pnl_sol, &config.risk);
             let priority = if risk::is_emergency_risk_exit(&rule) {
                 "HIGH_URGENCY_EMERGENCY".to_string()
             } else {
@@ -797,7 +797,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else {
                             risk::is_historical_exit_toxic(pnl_pct, &config.risk)
                         };
-                        let tip = risk::resolve_exit_tip(&reason, &config.risk);
+                        let tip = risk::resolve_exit_tip(&reason, pnl_sol, &config.risk);
                         let priority = if risk::is_emergency_risk_exit(&reason) {
                             "HIGH_URGENCY_EMERGENCY".to_string()
                         } else {

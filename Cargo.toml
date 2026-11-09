@@ -43,6 +43,10 @@ path = "src/bin/dmne_forensic_agent.rs"
 name = "dmne_agent_harness"
 path = "src/bin/dmne_agent_harness.rs"
 
+[[bin]]
+name = "sandbox_sensitivity_audit"
+path = "src/bin/sandbox_sensitivity_audit.rs"
+
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
 tokio-tungstenite = { version = "0.23", features = ["native-tls"] }

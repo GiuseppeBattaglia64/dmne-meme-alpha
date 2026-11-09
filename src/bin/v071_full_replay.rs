@@ -218,7 +218,8 @@ fn replay_trade_v071(trade: &TradeRecord, cfg: &RiskConfig) -> ReplayedTrade {
     {
         let gross_pnl_pct = cfg.breakeven_floor_pct;
         let rule_label = format!("Breakeven Guard (+{:.0}%)", cfg.breakeven_floor_pct);
-        let tip = resolve_exit_tip(&rule_label, cfg);
+        let est_pnl_sol = trade.size_sol * (gross_pnl_pct / 100.0);
+        let tip = resolve_exit_tip(&rule_label, est_pnl_sol, cfg);
         let replay_pnl_sol = compute_net_realized_sol_with_tip(trade.size_sol, gross_pnl_pct, cfg, tip);
         let replay_pnl_pct = compute_net_pnl_pct(trade.size_sol, replay_pnl_sol);
         let capital_preserved = replay_pnl_sol - trade.realized_pnl_sol;

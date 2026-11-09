@@ -235,11 +235,25 @@ pub fn evaluate_candidate_admission(
         let price_multiple = (1.0 + (candidate.m5_price_change_pct / 100.0))
             .max(1.0 + (candidate.h1_price_change_pct / 100.0))
             .max(1.0);
+
         let (is_overhang, top5_pct) = crate::funder_graph::evaluate_sniper_overhang(holders, price_multiple);
         if is_overhang {
             return Err(RejectionReason::DevCluster {
                 reason: "SNIPER_OVERHANG_UNREALIZED_PROFIT_EXCESS".to_string(),
                 metric_label: format!("Overhang: {:.1}% (>18% @ {:.1}x)", top5_pct, price_multiple),
+            });
+        }
+
+        // 2.0% Deployer Supply Overhang Ceiling Gate
+        let top_dev_holding = holders
+            .iter()
+            .filter(|h| !h.is_liquidity_pool)
+            .map(|h| h.supply_pct)
+            .fold(0.0f64, f64::max);
+        if top_dev_holding >= 2.0 && price_multiple >= 3.0 {
+            return Err(RejectionReason::DevCluster {
+                reason: "DEPLOYER_SUPPLY_OVERHANG_2PCT".to_string(),
+                metric_label: format!("Dev: {:.1}% (>=2.0% @ {:.1}x)", top_dev_holding, price_multiple),
             });
         }
 
@@ -646,6 +660,59 @@ mod tests {
                 assert!(metric_label.contains("H_norm"));
             }
             _ => panic!("Expected DevCluster error for low Shannon entropy, got: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_admission_deployer_supply_overhang_2pct_rejection() {
+        let mut candidate = make_test_candidate();
+        // Set price multiple >= 3.0 (e.g. +220% gain -> 3.2x)
+        candidate.m5_price_change_pct = 220.0;
+        // Deployer holds >= 2.0% (e.g. 2.5%)
+        candidate.holder_records = Some(vec![
+            TokenHolderRecord {
+                holder_address: "AMM_POOL".to_string(),
+                supply_pct: 80.0,
+                is_liquidity_pool: true,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "DEV_WALLET".to_string(),
+                supply_pct: 2.5,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "H2".to_string(),
+                supply_pct: 1.5,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "H3".to_string(),
+                supply_pct: 1.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "H4".to_string(),
+                supply_pct: 0.8,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+        ]);
+        let cfg = EngineConfig::default();
+        let res = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert_eq!(err.category(), RejectionCategory::DevCluster);
+        match err {
+            RejectionReason::DevCluster { reason, metric_label } => {
+                assert_eq!(reason, "DEPLOYER_SUPPLY_OVERHANG_2PCT");
+                assert!(metric_label.contains("Dev: 2.5%"));
+                assert!(metric_label.contains(">=2.0%"));
+            }
+            _ => panic!("Expected DevCluster DEPLOYER_SUPPLY_OVERHANG_2PCT, got: {:?}", err),
         }
     }
 }

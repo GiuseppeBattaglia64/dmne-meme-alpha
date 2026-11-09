@@ -96,11 +96,15 @@ pub fn is_emergency_risk_exit(rule_label: &str) -> bool {
         || lower.contains("early_abort")
 }
 
-pub fn resolve_exit_tip(rule_label: &str, cfg: &RiskConfig) -> u64 {
-    if is_emergency_risk_exit(rule_label) {
-        cfg.emergency_jito_tip_lamports
+pub fn resolve_exit_tip(rule_label: &str, pnl_sol: f64, cfg: &RiskConfig) -> u64 {
+    if is_emergency_risk_exit(rule_label) || pnl_sol <= 0.0 {
+        // Defensive exits (Stop-Loss, Early Abort, Flash Dump), floor the tip at 10,000 lamports (saving 86.7% overhead)
+        cfg.jito_tip_lamports.min(10_000).max(10_000)
     } else {
-        cfg.jito_tip_lamports
+        // Profitable exits (Take-Profit 1, Take-Profit 2, Dynamic Ratchet), scale tip dynamically:
+        // tip = max(10_000, min(150_000, (pnl_sol * 1e9 * 0.08)))
+        let raw = pnl_sol * 1e9 * 0.08;
+        raw.clamp(10_000.0, 150_000.0).round() as u64
     }
 }
 
@@ -124,69 +128,84 @@ pub fn evaluate_position_exit(
     pos.last_price = current_price;
 
     let elapsed_secs = now_epoch.saturating_sub(pos.opened_at_epoch);
+    let est_full_pnl_sol = pos.remaining_size_sol * (pnl_pct / 100.0);
 
-    // 1. Max Adverse Slippage Cutoff (Emergency tip escalation)
+    // 1. Max Adverse Slippage Cutoff (Emergency defensive exit: floored at 10k)
     if pnl_pct <= cfg.max_slippage_loss_pct {
+        let rule_label = format!("Max Slippage Loss ({:.0}%)", cfg.max_slippage_loss_pct);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
         return ExitAction::FullExit {
-            rule_label: format!("Max Slippage Loss ({:.0}%)", cfg.max_slippage_loss_pct),
+            rule_label,
             is_toxic: true,
-            tip_lamports: cfg.emergency_jito_tip_lamports,
+            tip_lamports,
         };
     }
 
-    // 2. Hard Stop-Loss (Emergency tip escalation)
+    // 2. Hard Stop-Loss (Emergency defensive exit: floored at 10k)
     if pnl_pct <= cfg.stop_loss_pct {
+        let rule_label = format!("Stop-Loss ({:.0}%)", cfg.stop_loss_pct);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
         return ExitAction::FullExit {
-            rule_label: format!("Stop-Loss ({:.0}%)", cfg.stop_loss_pct),
+            rule_label,
             is_toxic: true,
-            tip_lamports: cfg.emergency_jito_tip_lamports,
+            tip_lamports,
         };
     }
 
-    // 3. Flash Dump Circuit Breaker (Emergency tip escalation)
+    // 3. Flash Dump Circuit Breaker (Emergency defensive exit: floored at 10k)
     if tick_drop_pct <= cfg.flash_dump_tick_pct && pnl_pct <= cfg.flash_dump_max_pnl_pct {
+        let rule_label = format!("Flash Dump Breaker ({:.0}%)", cfg.flash_dump_tick_pct);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
         return ExitAction::FullExit {
-            rule_label: format!("Flash Dump Breaker ({:.0}%)", cfg.flash_dump_tick_pct),
+            rule_label,
             is_toxic: true,
-            tip_lamports: cfg.emergency_jito_tip_lamports,
+            tip_lamports,
         };
     }
 
-    // 3b. Early Fail-Fast Abort for Dead-on-Arrival Entries (Emergency tip escalation)
+    // 3b. Early Fail-Fast Abort for Dead-on-Arrival Entries (Emergency defensive exit: floored at 10k)
     if !pos.tp1_executed && elapsed_secs >= cfg.early_abort_window_secs && pos.peak_pnl_pct < cfg.early_abort_max_peak_pct && pnl_pct <= cfg.early_abort_loss_pct {
+        let rule_label = format!("Early Abort ({:.0}%)", cfg.early_abort_loss_pct);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
         return ExitAction::FullExit {
-            rule_label: format!("Early Abort ({:.0}%)", cfg.early_abort_loss_pct),
+            rule_label,
             is_toxic: true,
-            tip_lamports: cfg.emergency_jito_tip_lamports,
+            tip_lamports,
         };
     }
 
-    // 4. Tier 1 Take-Profit (Standard tip)
+    // 4. Tier 1 Take-Profit (Profitable exit: dynamic tip scaling)
     if !pos.tp1_executed && pnl_pct >= cfg.tp1_trigger_pct {
         pos.tp1_executed = true;
         let sol_closed = pos.initial_size_sol * cfg.tp1_sell_fraction;
         pos.remaining_size_sol = (pos.remaining_size_sol - sol_closed).max(0.0);
+        let rule_label = format!("TP1 Scale-Out (+{:.0}%)", cfg.tp1_trigger_pct);
+        let est_pnl_sol = sol_closed * (pnl_pct / 100.0);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_pnl_sol, cfg);
 
         return ExitAction::PartialSell {
             sell_fraction_of_remaining: cfg.tp1_sell_fraction,
             sol_basis_closed: sol_closed,
-            rule_label: format!("TP1 Scale-Out (+{:.0}%)", cfg.tp1_trigger_pct),
-            tip_lamports: cfg.jito_tip_lamports,
+            rule_label,
+            tip_lamports,
         };
     }
 
-    // 5. Tier 2 Take-Profit (Standard tip)
+    // 5. Tier 2 Take-Profit (Profitable exit: dynamic tip scaling)
     if pos.tp1_executed && !pos.tp2_executed && pnl_pct >= cfg.tp2_trigger_pct {
         pos.tp2_executed = true;
         let sol_closed = pos.initial_size_sol * cfg.tp2_sell_fraction;
         let fraction_of_current = cfg.tp2_sell_fraction / (1.0 - cfg.tp1_sell_fraction);
         pos.remaining_size_sol = (pos.remaining_size_sol - sol_closed).max(0.0);
+        let rule_label = format!("TP2 Scale-Out (+{:.0}%)", cfg.tp2_trigger_pct);
+        let est_pnl_sol = sol_closed * (pnl_pct / 100.0);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_pnl_sol, cfg);
 
         return ExitAction::PartialSell {
             sell_fraction_of_remaining: fraction_of_current.min(1.0),
             sol_basis_closed: sol_closed,
-            rule_label: format!("TP2 Scale-Out (+{:.0}%)", cfg.tp2_trigger_pct),
-            tip_lamports: cfg.jito_tip_lamports,
+            rule_label,
+            tip_lamports,
         };
     }
 
@@ -239,13 +258,15 @@ pub fn evaluate_position_exit(
                 } else {
                     "Dynamic Trailing Runner"
                 };
+                let rule_label = format!(
+                    "{} (-{:.1}% from +{:.1}% Peak | Floor +{:.1}%)",
+                    rule_prefix, effective_delta, pos.peak_pnl_pct, effective_floor
+                );
+                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
                 return ExitAction::FullExit {
-                    rule_label: format!(
-                        "{} (-{:.1}% from +{:.1}% Peak | Floor +{:.1}%)",
-                        rule_prefix, effective_delta, pos.peak_pnl_pct, effective_floor
-                    ),
+                    rule_label,
                     is_toxic: false,
-                    tip_lamports: cfg.jito_tip_lamports,
+                    tip_lamports,
                 };
             }
         } else {
@@ -260,13 +281,15 @@ pub fn evaluate_position_exit(
                 } else {
                     "Trailing Runner"
                 };
+                let rule_label = format!(
+                    "{} (-{:.0}% from +{:.1}% Peak)",
+                    rule_prefix, effective_trail, pos.peak_pnl_pct
+                );
+                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
                 return ExitAction::FullExit {
-                    rule_label: format!(
-                        "{} (-{:.0}% from +{:.1}% Peak)",
-                        rule_prefix, effective_trail, pos.peak_pnl_pct
-                    ),
+                    rule_label,
                     is_toxic: false,
-                    tip_lamports: cfg.jito_tip_lamports,
+                    tip_lamports,
                 };
             }
         }
@@ -277,52 +300,60 @@ pub fn evaluate_position_exit(
         if is_bearish_absorption && pos.peak_pnl_pct >= cfg.breakeven_floor_pct {
             let absorption_floor = (pos.peak_pnl_pct * 0.80).max(cfg.breakeven_floor_pct);
             if pnl_pct <= absorption_floor {
+                let rule_label = format!(
+                    "CVD Absorption Ratchet Floor (+{:.1}% from +{:.1}% Peak)",
+                    absorption_floor, pos.peak_pnl_pct
+                );
+                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
                 return ExitAction::FullExit {
-                    rule_label: format!(
-                        "CVD Absorption Ratchet Floor (+{:.1}% from +{:.1}% Peak)",
-                        absorption_floor, pos.peak_pnl_pct
-                    ),
+                    rule_label,
                     is_toxic: false,
-                    tip_lamports: cfg.jito_tip_lamports,
+                    tip_lamports,
                 };
             }
         } else if let Some(ref band) = dyn_band {
             if band.is_ratchet_active && pnl_pct <= band.dynamic_floor {
+                let rule_label = format!(
+                    "Dynamic Ratchet Floor (+{:.1}% from +{:.1}% Peak)",
+                    band.dynamic_floor, pos.peak_pnl_pct
+                );
+                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
                 return ExitAction::FullExit {
-                    rule_label: format!(
-                        "Dynamic Ratchet Floor (+{:.1}% from +{:.1}% Peak)",
-                        band.dynamic_floor, pos.peak_pnl_pct
-                    ),
+                    rule_label,
                     is_toxic: false,
-                    tip_lamports: cfg.jito_tip_lamports,
+                    tip_lamports,
                 };
             }
         }
     }
 
-    // 7. Uncapped Breakeven Guard (Standard tip)
+    // 7. Uncapped Breakeven Guard (Profitable exit: dynamic tip scaling)
     if !pos.tp1_executed
         && pos.peak_pnl_pct >= cfg.breakeven_arm_pct
         && pnl_pct <= cfg.breakeven_floor_pct
     {
+        let rule_label = format!("Breakeven Guard (+{:.0}%)", cfg.breakeven_floor_pct);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
         return ExitAction::FullExit {
-            rule_label: format!("Breakeven Guard (+{:.0}%)", cfg.breakeven_floor_pct),
+            rule_label,
             is_toxic: false,
-            tip_lamports: cfg.jito_tip_lamports,
+            tip_lamports,
         };
     }
 
-    // 8. Conditional Stagnation TTL (Standard tip)
+    // 8. Conditional Stagnation TTL
     if !pos.tp1_executed
         && elapsed_secs >= cfg.stagnation_ttl_secs
         && pos.peak_pnl_pct < cfg.stagnation_max_peak_pct
         && pnl_pct >= cfg.stagnation_band_min_pct
         && pnl_pct <= cfg.stagnation_band_max_pct
     {
+        let rule_label = "Stagnation TTL Exit".to_string();
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
         return ExitAction::FullExit {
-            rule_label: "Stagnation TTL Exit".to_string(),
+            rule_label,
             is_toxic: false,
-            tip_lamports: cfg.jito_tip_lamports,
+            tip_lamports,
         };
     }
 
@@ -474,7 +505,8 @@ pub fn compute_net_realized_sol_for_exit(
     rule_label: &str,
     cfg: &RiskConfig,
 ) -> f64 {
-    let tip = resolve_exit_tip(rule_label, cfg);
+    let gross_sol = basis_sol * (gross_pnl_pct / 100.0);
+    let tip = resolve_exit_tip(rule_label, gross_sol, cfg);
     compute_net_realized_sol_with_tip(basis_sol, gross_pnl_pct, cfg, tip)
 }
 
@@ -624,7 +656,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Stop-Loss"));
                 assert!(is_toxic);
-                assert_eq!(tip_lamports, cfg.emergency_jito_tip_lamports);
+                assert_eq!(tip_lamports, 10_000);
             }
             _ => panic!("Expected Stop-Loss exit"),
         }
@@ -641,7 +673,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Flash Dump Breaker"));
                 assert!(is_toxic);
-                assert_eq!(tip_lamports, cfg.emergency_jito_tip_lamports);
+                assert_eq!(tip_lamports, 10_000);
             }
             _ => panic!("Expected Flash Dump Breaker exit"),
         }
@@ -660,7 +692,7 @@ mod tests {
                 assert!((sol_basis_closed - 0.04).abs() < 1e-6);
                 assert!((pos.remaining_size_sol - 0.06).abs() < 1e-6);
                 assert!(pos.tp1_executed);
-                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+                assert_eq!(tip_lamports, 150_000);
             },
             _ => panic!("Expected TP1 PartialSell"),
         }
@@ -672,7 +704,7 @@ mod tests {
                 assert!((sol_basis_closed - 0.035).abs() < 1e-6);
                 assert!((pos.remaining_size_sol - 0.025).abs() < 1e-6); // 25% moonbag runner
                 assert!(pos.tp2_executed);
-                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+                assert_eq!(tip_lamports, 150_000);
             },
             _ => panic!("Expected TP2 PartialSell"),
         }
@@ -695,7 +727,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Trailing Runner (-18% from +60.0% Peak)"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+                assert_eq!(tip_lamports, 150_000);
             }
             _ => panic!("Expected Trailing Runner exit"),
         }
@@ -718,7 +750,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Breakeven Guard"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+                assert_eq!(tip_lamports, 150_000);
             }
             _ => panic!("Expected Breakeven Guard exit"),
         }
@@ -750,7 +782,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Dynamic Ratchet Floor"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+                assert_eq!(tip_lamports, 150_000);
             }
             _ => panic!("Expected Dynamic Ratchet Floor exit"),
         }
@@ -767,7 +799,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Dynamic Trailing Runner"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+                assert_eq!(tip_lamports, 150_000);
             }
             _ => panic!("Expected Dynamic Trailing Runner exit"),
         }
@@ -819,7 +851,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("CVD Absorption Ratchet Runner"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, cfg.jito_tip_lamports);
+                assert_eq!(tip_lamports, 150_000);
             }
             _ => panic!("Expected CVD Absorption Ratchet Runner exit, got {:?}", action),
         }
@@ -853,7 +885,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Max Slippage Loss"));
                 assert!(is_toxic);
-                assert_eq!(tip_lamports, cfg.emergency_jito_tip_lamports);
+                assert_eq!(tip_lamports, 10_000);
             }
             _ => panic!("Expected Max Slippage Loss exit"),
         }
@@ -959,7 +991,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Early Abort"));
                 assert!(is_toxic);
-                assert_eq!(tip_lamports, cfg.emergency_jito_tip_lamports);
+                assert_eq!(tip_lamports, 10_000);
             }
             _ => panic!("Expected Early Abort exit"),
         }
@@ -1037,18 +1069,18 @@ mod tests {
     #[test]
     fn test_emergency_tip_resolution() {
         let cfg = RiskConfig::default();
-        // Emergency risk exits escalate to 75,000 lamports
-        assert_eq!(resolve_exit_tip("Stop-Loss (-20%)", &cfg), cfg.emergency_jito_tip_lamports);
-        assert_eq!(resolve_exit_tip("Flash Dump Breaker (-15%)", &cfg), cfg.emergency_jito_tip_lamports);
-        assert_eq!(resolve_exit_tip("Max Slippage Loss (-25%)", &cfg), cfg.emergency_jito_tip_lamports);
-        assert_eq!(resolve_exit_tip("Early Abort (-10%)", &cfg), cfg.emergency_jito_tip_lamports);
+        // Defensive risk exits floor at 10,000 lamports (saving 86.7% overhead)
+        assert_eq!(resolve_exit_tip("Stop-Loss (-20%)", -0.010, &cfg), 10_000);
+        assert_eq!(resolve_exit_tip("Flash Dump Breaker (-15%)", -0.008, &cfg), 10_000);
+        assert_eq!(resolve_exit_tip("Max Slippage Loss (-25%)", -0.015, &cfg), 10_000);
+        assert_eq!(resolve_exit_tip("Early Abort (-10%)", -0.005, &cfg), 10_000);
 
-        // Standard exits stay at 10,000 lamports
-        assert_eq!(resolve_exit_tip("TP1 Scale-Out (+45%)", &cfg), cfg.jito_tip_lamports);
-        assert_eq!(resolve_exit_tip("TP2 Scale-Out (+90%)", &cfg), cfg.jito_tip_lamports);
-        assert_eq!(resolve_exit_tip("Trailing Runner (-18% from +50.0% Peak)", &cfg), cfg.jito_tip_lamports);
-        assert_eq!(resolve_exit_tip("Breakeven Guard (+8%)", &cfg), cfg.jito_tip_lamports);
-        assert_eq!(resolve_exit_tip("Stagnation TTL Exit", &cfg), cfg.jito_tip_lamports);
+        // Profitable exits scale tip dynamically: max(10_000, min(150_000, pnl_sol * 1e9 * 0.08))
+        assert_eq!(resolve_exit_tip("TP1 Scale-Out (+45%)", 0.0001, &cfg), 10_000);
+        assert_eq!(resolve_exit_tip("TP2 Scale-Out (+90%)", 0.0010, &cfg), 80_000);
+        assert_eq!(resolve_exit_tip("Trailing Runner (-18% from +50.0% Peak)", 0.010, &cfg), 150_000);
+        assert_eq!(resolve_exit_tip("Breakeven Guard (+8%)", 0.0005, &cfg), 40_000);
+        assert_eq!(resolve_exit_tip("Stagnation TTL Exit", 0.0000, &cfg), 10_000);
     }
 
     #[test]
@@ -1060,10 +1092,8 @@ mod tests {
         let net_standard = compute_net_realized_sol(basis_sol, gross_pnl_pct, &cfg);
         let net_emergency = compute_net_realized_sol_for_exit(basis_sol, gross_pnl_pct, "Stop-Loss (-20%)", &cfg);
 
-        // Emergency tip deducts 75,000 lamports (0.000075 SOL) vs standard 10,000 lamports (0.000010 SOL)
-        let tip_difference = (cfg.emergency_jito_tip_lamports - cfg.jito_tip_lamports) as f64 / LAMPORTS_PER_SOL;
-        assert!((net_standard - net_emergency - tip_difference).abs() < 1e-12);
-        assert!(net_emergency < net_standard);
+        // Defensive exit floors tip at 10,000 lamports, matching standard baseline tip
+        assert!((net_standard - net_emergency).abs() < 1e-12);
     }
 
     #[test]
