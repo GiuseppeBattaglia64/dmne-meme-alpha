@@ -1997,11 +1997,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 guard.active_positions.iter().enumerate().map(|(i, p)| (i, p.token_mint.clone())).collect()
             };
 
-            for (idx, mint) in active_mints {
-                if let Some(snap) = fetch_live_price(&eval_client, &mint).await {
+            let mut active_arrivals: std::collections::HashMap<String, Vec<f64>> = std::collections::HashMap::new();
+            for (idx, mint) in &active_mints {
+                let arrivals = eval_shadow.get_arrival_timestamps_secs(mint).await;
+                active_arrivals.insert(mint.clone(), arrivals);
+                if let Some(snap) = fetch_live_price(&eval_client, mint).await {
                     let mut guard = eval_state.write().await;
-                    if idx < guard.active_positions.len() {
-                        let pos = &mut guard.active_positions[idx];
+                    if *idx < guard.active_positions.len() {
+                        let pos = &mut guard.active_positions[*idx];
                         pos.current_price_sol = snap.price_sol;
                         pos.record_price_tick(snap.price_sol, eval_cfg.dynamic_exits.vol_window_size);
                         let now_f64 = chrono::Utc::now().timestamp() as f64;
@@ -2081,12 +2084,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     cvd_tracker: pos.cvd_tracker.clone(),
                 };
 
-                let action = risk::evaluate_position_exit(
-                    &mut active_pos,
-                    pos.current_price_sol,
-                    now_epoch,
-                    &effective_risk_cfg,
-                );
+                let hold_secs = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
+                let hawkes_eval = hawkes::HawkesEvaluator::new(eval_cfg.hawkes.clone());
+                let arrivals = active_arrivals.get(&pos.token_mint).map(|v| v.as_slice()).unwrap_or(&[]);
+                let has_hawkes_decay = hold_secs > 25
+                    && pos.pnl_pct >= 3.0
+                    && pos.pnl_pct < 15.0
+                    && hawkes_eval.evaluate_inflight_decay(arrivals, now_epoch as f64);
+
+                let action = if has_hawkes_decay {
+                    println!(
+                        "[CRUISE] Trade #{} {} Hawkes arrival intensity collapsed. Locking gain early.",
+                        pos.id, pos.symbol
+                    );
+                    risk::ExitAction::FullExit {
+                        rule_label: "Dynamic Exit (Hawkes Decay)".to_string(),
+                        is_toxic: false,
+                        tip_lamports: effective_risk_cfg.jito_tip_lamports,
+                    }
+                } else {
+                    risk::evaluate_position_exit(
+                        &mut active_pos,
+                        pos.current_price_sol,
+                        now_epoch,
+                        &effective_risk_cfg,
+                    )
+                };
 
                 match action {
                     risk::ExitAction::PartialSell { sol_basis_closed, rule_label, tip_lamports, .. } => {

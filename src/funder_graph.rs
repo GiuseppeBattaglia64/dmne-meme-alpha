@@ -102,6 +102,8 @@ pub struct TokenHolderRecord {
     pub funding_source: Option<HolderFundingSource>,
 }
 
+pub type HolderRecord = TokenHolderRecord;
+
 /// Cluster of token holders traced back to a common root funder
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunderCluster {
@@ -152,9 +154,82 @@ pub fn evaluate_sniper_overhang(holders: &[TokenHolderRecord], price_multiple: f
     (is_excess, top5_pct)
 }
 
+/// Calculates raw and normalized Shannon entropy over top non-pool holders:
+/// - Filters out liquidity pools and AMM vaults (!h.is_liquidity_pool && h.supply_pct > 0.0).
+/// - Takes up to top_n (default 20) individual holder percentages: p_i = pct / 100.0.
+/// - Normalizes the probabilities across the sample: p'_i = p_i / sum(p_i).
+/// - Computes raw Shannon entropy: H(X) = -sum(p'_i * log2(p'_i)).
+/// - Computes normalized Shannon entropy: H_norm = H(X) / log2(N) (where N = number of evaluated holders, max 1.0).
+/// Returns (raw_entropy, normalized_entropy).
+pub fn calculate_shannon_entropy(holders: &[HolderRecord], top_n: usize) -> (f64, f64) {
+    let mut non_pool: Vec<&HolderRecord> = holders
+        .iter()
+        .filter(|h| !h.is_liquidity_pool && h.supply_pct > 0.0)
+        .collect();
+    non_pool.sort_by(|a, b| b.supply_pct.partial_cmp(&a.supply_pct).unwrap_or(std::cmp::Ordering::Equal));
+    let sample: Vec<&HolderRecord> = non_pool.into_iter().take(top_n).collect();
+
+    let n = sample.len();
+    if n <= 1 {
+        return (0.0, 0.0);
+    }
+
+    let sum_p: f64 = sample.iter().map(|h| h.supply_pct / 100.0).sum();
+    if sum_p <= 0.0 {
+        return (0.0, 0.0);
+    }
+
+    let mut raw_entropy = 0.0;
+    for h in &sample {
+        let p_norm = (h.supply_pct / 100.0) / sum_p;
+        if p_norm > 0.0 {
+            raw_entropy -= p_norm * p_norm.log2();
+        }
+    }
+
+    let max_entropy = (n as f64).log2();
+    let norm_entropy = if max_entropy > 0.0 {
+        (raw_entropy / max_entropy).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+
+    (raw_entropy, norm_entropy)
+}
+
+/// Evaluates normalized Shannon entropy across top non-pool holders.
+/// - If holders length < 5, returns Ok(()) (fail-closed already handles missing RPC).
+/// - Calculates normalized entropy for top 20 holders.
+/// - Invariant: If N >= 10 and H_norm < 0.62 (indicating unnatural sybil distribution or cartel concentration),
+///   returns Err(format!("LOW_SHANNON_ENTROPY_{:.3}", h_norm)).
+pub fn evaluate_holder_entropy(holders: &[HolderRecord]) -> Result<(), String> {
+    if holders.len() < 5 {
+        return Ok(());
+    }
+
+    let non_pool_count = holders
+        .iter()
+        .filter(|h| !h.is_liquidity_pool && h.supply_pct > 0.0)
+        .count()
+        .min(20);
+
+    let (_raw_h, norm_h) = calculate_shannon_entropy(holders, 20);
+
+    if non_pool_count >= 10 && norm_h < 0.62 {
+        return Err(format!("LOW_SHANNON_ENTROPY_{:.3}", norm_h));
+    }
+
+    Ok(())
+}
+
 impl FunderGraphEvaluator {
     pub fn new(config: FunderGraphConfig, cache: HashMap<String, Vec<TokenHolderRecord>>) -> Self {
         Self { config, cache }
+    }
+
+    /// Evaluates normalized Shannon entropy across top non-pool holders.
+    pub fn evaluate_holder_entropy(&self, holders: &[HolderRecord]) -> Result<(), String> {
+        evaluate_holder_entropy(holders)
     }
 
     /// Evaluates sniper profit overhang ceiling on provided holders.
@@ -670,6 +745,44 @@ mod tests {
         let (excess_low, pct_low) = evaluate_sniper_overhang(&low_overhang_holders, 5.0);
         assert!(!excess_low);
         assert!((pct_low - 15.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_calculate_shannon_entropy_uniform_and_clustered() {
+        let make_holder = |addr: &str, pct: f64, is_pool: bool| TokenHolderRecord {
+            holder_address: addr.to_string(),
+            supply_pct: pct,
+            is_liquidity_pool: is_pool,
+            funding_source: None,
+        };
+
+        // 1. Uniform distribution: 20 equal non-pool holders (2.5% each) + 1 LP pool (ignored)
+        let mut uniform_holders = vec![make_holder("LP_POOL", 50.0, true)];
+        for i in 0..20 {
+            uniform_holders.push(make_holder(&format!("HOLDER_{}", i), 2.5, false));
+        }
+        let (_raw_uniform, norm_uniform) = calculate_shannon_entropy(&uniform_holders, 20);
+        assert!((norm_uniform - 1.0).abs() < 1e-4);
+        assert!(evaluate_holder_entropy(&uniform_holders).is_ok());
+
+        // 2. Heavily clustered / sybil cartel: 1 dominant wallet holds 90% and 10 small wallets hold 1% each
+        let mut clustered_holders = vec![make_holder("LP_POOL", 10.0, true)];
+        clustered_holders.push(make_holder("CARTEL_WHALE", 90.0, false));
+        for i in 0..10 {
+            clustered_holders.push(make_holder(&format!("SYBIL_{}", i), 1.0, false));
+        }
+        let (_raw_clustered, norm_clustered) = calculate_shannon_entropy(&clustered_holders, 20);
+        assert!(norm_clustered < 0.62);
+        let res = evaluate_holder_entropy(&clustered_holders);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("LOW_SHANNON_ENTROPY"));
+
+        // 3. Small sample (< 5 holders total) => Bypassed
+        let small_holders = vec![
+            make_holder("HOLDER_1", 10.0, false),
+            make_holder("HOLDER_2", 10.0, false),
+        ];
+        assert!(evaluate_holder_entropy(&small_holders).is_ok());
     }
 }
 

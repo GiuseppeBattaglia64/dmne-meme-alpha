@@ -652,6 +652,31 @@ impl HawkesEvaluator {
     ) -> DiscreteDispersionMetrics {
         evaluate_discrete_orderflow_dispersion_with_config(counts, cfg)
     }
+
+    /// Evaluates in-flight point-process intensity decay while a trade is live.
+    /// Returns true if arrival intensity over the last 5s collapses by > 70% relative to prior 20s.
+    pub fn evaluate_inflight_decay(&self, recent_timestamps_secs: &[f64], current_time_secs: f64) -> bool {
+        if recent_timestamps_secs.len() < 5 {
+            return false;
+        }
+        // Compute rolling intensity lambda(t) over the last 5s vs prior 20s
+        let window_short = 5.0;
+        let window_long = 25.0;
+        let recent_count = recent_timestamps_secs
+            .iter()
+            .filter(|&&t| current_time_secs - t <= window_short && current_time_secs >= t)
+            .count();
+        let prior_count = recent_timestamps_secs
+            .iter()
+            .filter(|&&t| current_time_secs - t > window_short && current_time_secs - t <= window_long)
+            .count();
+
+        let short_rate = recent_count as f64 / window_short;
+        let prior_rate = (prior_count as f64 / (window_long - window_short)).max(0.1);
+
+        // If arrival intensity collapses by > 70% while trade is live
+        short_rate < (prior_rate * 0.30)
+    }
 }
 
 #[cfg(test)]
@@ -875,5 +900,34 @@ mod tests {
         assert!((m1.mean_delta_t_secs - m2.mean_delta_t_secs).abs() < 1e-6);
         assert!((m1.cv_regularity - m2.cv_regularity).abs() < 1e-6);
         assert!((m1.branching_ratio - m2.branching_ratio).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_evaluate_inflight_decay() {
+        let evaluator = HawkesEvaluator::new(HawkesConfig::default());
+        let now = 1000.0;
+
+        // 1. Insufficient observations (< 5) => false
+        let few = vec![now - 2.0, now - 1.0];
+        assert!(!evaluator.evaluate_inflight_decay(&few, now));
+
+        // 2. Active stream (high recent arrivals) => false
+        // 5 in last 5s, 10 in prior 20s
+        let mut active = Vec::new();
+        for i in 1..=10 {
+            active.push(now - 5.0 - (i as f64 * 1.5)); // in (5, 25]
+        }
+        for i in 1..=5 {
+            active.push(now - (i as f64 * 0.8)); // in [0, 5]
+        }
+        assert!(!evaluator.evaluate_inflight_decay(&active, now));
+
+        // 3. Collapsed intensity (> 70% collapse in last 5s) => true
+        // 0 in last 5s, 10 in prior 20s
+        let mut collapsed = Vec::new();
+        for i in 1..=10 {
+            collapsed.push(now - 5.1 - (i as f64 * 1.5));
+        }
+        assert!(evaluator.evaluate_inflight_decay(&collapsed, now));
     }
 }

@@ -243,6 +243,15 @@ pub fn evaluate_candidate_admission(
             });
         }
 
+        // Shannon Entropy Dispersion Gate
+        if let Err(reason) = crate::funder_graph::evaluate_holder_entropy(holders) {
+            let (_, h_norm) = crate::funder_graph::calculate_shannon_entropy(holders, 20);
+            return Err(RejectionReason::DevCluster {
+                reason,
+                metric_label: format!("H_norm: {:.2}", h_norm),
+            });
+        }
+
         let funder_metrics: FunderGraphMetrics = match funder_evaluator {
             Some(fe) => fe.evaluate_holders(&candidate.token_mint, holders),
             None => {
@@ -597,6 +606,46 @@ mod tests {
                 assert!(metric_label.contains("Overhang: 20.0%"));
             }
             _ => panic!("Expected DevCluster SNIPER_OVERHANG_UNREALIZED_PROFIT_EXCESS, got: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_admission_shannon_entropy_rejection() {
+        let mut candidate = make_test_candidate();
+        // 1 whale with 90% and 10 sybils with 1%
+        let mut holders = vec![
+            TokenHolderRecord {
+                holder_address: "LP".to_string(),
+                supply_pct: 10.0,
+                is_liquidity_pool: true,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "WHALE".to_string(),
+                supply_pct: 90.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+        ];
+        for i in 0..10 {
+            holders.push(TokenHolderRecord {
+                holder_address: format!("SYBIL_{}", i),
+                supply_pct: 1.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            });
+        }
+        candidate.holder_records = Some(holders);
+        let cfg = EngineConfig::default();
+        let res = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        match err {
+            RejectionReason::DevCluster { reason, metric_label } => {
+                assert!(reason.contains("LOW_SHANNON_ENTROPY"));
+                assert!(metric_label.contains("H_norm"));
+            }
+            _ => panic!("Expected DevCluster error for low Shannon entropy, got: {:?}", err),
         }
     }
 }

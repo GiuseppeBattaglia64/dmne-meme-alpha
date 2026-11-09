@@ -302,6 +302,10 @@ impl ShadowHandle {
         self.hawkes_tracker.get_arrival_timestamps_secs(token_mint).await
     }
 
+    pub async fn record_arrival(&self, token_mint: &str, timestamp_ms: u64) {
+        self.hawkes_tracker.record_arrival(token_mint, timestamp_ms).await;
+    }
+
     /// Non-blocking evaluation logger that records Hawkes deltas, VPIN slices, and RPC holder entropy
     pub fn log_evaluation(
         &self,
