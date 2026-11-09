@@ -40,6 +40,8 @@ pub struct CandidateTelemetry {
     pub arrival_timestamps: Vec<f64>,
     pub genesis_profile: Option<GenesisBundleProfile>,
     pub holder_records: Option<Vec<TokenHolderRecord>>,
+    #[serde(default)]
+    pub vpin_calculator: Option<crate::orderflow::VpinCalculator>,
 }
 
 /// Typed rejection reason returned when a candidate fails any admission gate
@@ -184,6 +186,17 @@ pub fn evaluate_candidate_admission(
 
     // 4. Real-Time Orderflow CVD & Divergence Filter Gate
     if cfg.orderflow.enabled {
+        // VPIN Volume-Synchronized Probability of Toxicity Gate
+        if let Some(ref vpin_calc) = candidate.vpin_calculator {
+            if vpin_calc.is_toxic_sell_dominated() {
+                let vpin = vpin_calc.compute_vpin().unwrap_or(0.0);
+                return Err(RejectionReason::OrderflowCvd {
+                    reason: format!("HIGH_VPIN_TOXICITY_{:.2}", vpin),
+                    metric_label: format!("VPIN: {:.2} (Toxic)", vpin),
+                });
+            }
+        }
+
         let mut cvd_tracker = RollingCvdTracker::new(cfg.orderflow.cvd_window_secs);
         let now_epoch_f64 = chrono::Utc::now().timestamp() as f64;
         let sol_price_usd = cfg.sol_reference_price_usd.max(1.0);
@@ -370,6 +383,7 @@ mod tests {
                     funding_source: None,
                 },
             ]),
+            vpin_calculator: None,
         }
     }
 
@@ -717,6 +731,31 @@ mod tests {
                 assert!(metric_label.contains(">=2.0%"));
             }
             _ => panic!("Expected DevCluster DEPLOYER_SUPPLY_OVERHANG_2PCT, got: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_admission_vpin_toxicity_rejection() {
+        let mut candidate = make_test_candidate();
+        let mut vpin_calc = crate::orderflow::VpinCalculator::new(1.0, 10);
+        // Fill 6 buckets of pure sell volume (1.0 SOL each)
+        for _ in 0..6 {
+            vpin_calc.add_trade(false, 1.0);
+        }
+        assert!(vpin_calc.is_toxic_sell_dominated());
+        candidate.vpin_calculator = Some(vpin_calc);
+
+        let cfg = EngineConfig::default();
+        let res = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert_eq!(err.category(), RejectionCategory::LowConviction);
+        match err {
+            RejectionReason::OrderflowCvd { reason, metric_label } => {
+                assert!(reason.starts_with("HIGH_VPIN_TOXICITY"));
+                assert!(metric_label.contains("Toxic"));
+            }
+            _ => panic!("Expected OrderflowCvd HIGH_VPIN_TOXICITY error, got: {:?}", err),
         }
     }
 }

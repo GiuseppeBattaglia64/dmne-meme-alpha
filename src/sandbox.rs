@@ -580,7 +580,7 @@ pub fn simulate_v071_exit(
         sl_mode,
     );
     let gross_sol = size_sol * (gross_pnl_pct / 100.0);
-    let tip = resolve_exit_tip(reason, gross_sol, risk_cfg);
+    let tip = resolve_exit_tip(reason, gross_sol, 1.0, risk_cfg);
     let net_sol = compute_net_realized_sol_with_tip(size_sol, gross_pnl_pct, risk_cfg, tip);
     let net_pnl_pct = compute_net_pnl_pct(size_sol, net_sol);
     (net_pnl_pct, net_sol, reason.to_string())

@@ -48,6 +48,93 @@ impl ActivePosition {
     }
 }
 
+pub const REJECT_SWAP_EMPTYING_POOL: &str = "REJECT_SWAP_EMPTYING_POOL";
+
+/// Rolling 15-second quote reserve tracker for derivative drain and slippage modulation
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReserveTracker {
+    pub quote_reserve_sol: f64,
+    pub last_update_ts: f64,
+    pub rolling_reserve_history: Vec<(f64, f64)>, // (timestamp, reserve)
+}
+
+impl Default for ReserveTracker {
+    fn default() -> Self {
+        Self {
+            quote_reserve_sol: 0.0,
+            last_update_ts: 0.0,
+            rolling_reserve_history: Vec::new(),
+        }
+    }
+}
+
+impl ReserveTracker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Maintains rolling 15s buffer of quote reserve snapshots
+    pub fn record_reserve_snapshot(&mut self, current_reserve_sol: f64, now_ts: f64) {
+        self.quote_reserve_sol = current_reserve_sol;
+        self.last_update_ts = now_ts;
+        self.rolling_reserve_history.push((now_ts, current_reserve_sol));
+        self.rolling_reserve_history.retain(|(ts, _)| now_ts - *ts <= 15.0);
+    }
+
+    /// Returns percentage change in quote reserve over the last 5 seconds
+    pub fn compute_reserve_drain_rate_5s(&self, now_ts: f64) -> f64 {
+        if self.rolling_reserve_history.is_empty() {
+            return 0.0;
+        }
+        let target_ts = now_ts - 5.0;
+        let baseline = self
+            .rolling_reserve_history
+            .iter()
+            .filter(|(ts, _)| *ts <= target_ts)
+            .last()
+            .map(|(_, r)| *r)
+            .unwrap_or_else(|| self.rolling_reserve_history.first().unwrap().1);
+
+        if baseline <= 0.0 {
+            0.0
+        } else {
+            (self.quote_reserve_sol - baseline) / baseline
+        }
+    }
+}
+
+/// Computes adaptive slippage in basis points based on pool reserve depth, swap impact, and drain rate
+pub fn compute_adaptive_slippage_bps(
+    swap_sol: f64,
+    pool_liquidity_usd: f64,
+    sol_price_usd: f64,
+    reserve_drain_pct_5s: f64,
+) -> u32 {
+    let sol_price = if sol_price_usd > 0.0 { sol_price_usd } else { 150.0 };
+    let reserve_sol = (pool_liquidity_usd / 2.0) / sol_price;
+    let impact_frac = if (reserve_sol + swap_sol) > 0.0 {
+        swap_sol / (reserve_sol + swap_sol)
+    } else {
+        0.0
+    };
+
+    let mut allowed_bps = 250u32; // 2.5% base slippage
+
+    // If impact_frac > 0.015 (swap > 1.5% of pool reserve): increase slippage buffer proportionally up to 500u32
+    if impact_frac > 0.015 {
+        let extra_bps = ((impact_frac - 0.015) / 0.035 * 250.0).round() as u32;
+        allowed_bps = (allowed_bps + extra_bps).min(500);
+    }
+
+    // CRITICAL SHIELD: If reserve_drain_pct_5s < -0.15 (pool drained by > 15% in last 5 seconds):
+    // Clamp max allowed slippage to 150u32 (1.5%) rather than widening it.
+    if reserve_drain_pct_5s < -0.15 {
+        allowed_bps = allowed_bps.min(150);
+    }
+
+    allowed_bps
+}
+
 fn default_position_tip_lamports() -> u64 { 10_000 }
 fn default_position_execution_priority() -> String { "STANDARD_ROUTINE".to_string() }
 
@@ -96,15 +183,26 @@ pub fn is_emergency_risk_exit(rule_label: &str) -> bool {
         || lower.contains("early_abort")
 }
 
-pub fn resolve_exit_tip(rule_label: &str, pnl_sol: f64, _cfg: &RiskConfig) -> u64 {
+pub fn resolve_exit_tip(
+    rule_label: &str,
+    pnl_sol: f64,
+    cluster_congestion_multiplier: f64,
+    _cfg: &RiskConfig,
+) -> u64 {
+    let mult = cluster_congestion_multiplier.clamp(1.0, 3.0);
     if is_emergency_risk_exit(rule_label) || pnl_sol <= 0.0 {
-        // Defensive exits (Stop-Loss, Early Abort, Flash Dump, Max Slippage) and any PnL <= 0: return 10_000 lamports
-        10_000
+        // Defensive exits (Stop-Loss, Early Abort, Flash Dump):
+        // tip = (10_000.0 * cluster_congestion_multiplier.min(1.5)) as u64;
+        // Keeps loss overhead floored at 10,000–15,000 lamports while preventing dropped packets during high network traffic.
+        (10_000.0 * mult.min(1.5)) as u64
     } else {
-        // Profitable exits (TP1, TP2, Dynamic Ratchet): scale tip dynamically:
-        // max(10_000, min(150_000, (pnl_sol * 1e9 * 0.08) as u64))
-        let scaled = (pnl_sol * 1e9 * 0.08) as u64;
-        scaled.clamp(10_000, 150_000)
+        // Profitable exits (TP1, TP2, Dynamic Ratchet, Hawkes Decay):
+        // let base_tip = (pnl_sol * 1e9 * 0.08) as f64;
+        // let scaled_tip = (base_tip * cluster_congestion_multiplier) as u64;
+        // scaled_tip.clamp(10_000, 200_000)
+        let base_tip = (pnl_sol * 1e9 * 0.08) as f64;
+        let scaled_tip = (base_tip * mult) as u64;
+        scaled_tip.clamp(10_000, 200_000)
     }
 }
 
@@ -112,6 +210,16 @@ pub fn evaluate_position_exit(
     pos: &mut ActivePosition,
     current_price: f64,
     now_epoch: u64,
+    cfg: &RiskConfig,
+) -> ExitAction {
+    evaluate_position_exit_with_congestion(pos, current_price, now_epoch, 1.0, cfg)
+}
+
+pub fn evaluate_position_exit_with_congestion(
+    pos: &mut ActivePosition,
+    current_price: f64,
+    now_epoch: u64,
+    cluster_congestion_multiplier: f64,
     cfg: &RiskConfig,
 ) -> ExitAction {
     let pnl_pct = (((current_price - pos.entry_price) / pos.entry_price) * 100.0 * 1e6).round() / 1e6;
@@ -133,7 +241,7 @@ pub fn evaluate_position_exit(
     // 1. Max Adverse Slippage Cutoff (Emergency defensive exit: floored at 10k)
     if pnl_pct <= cfg.max_slippage_loss_pct {
         let rule_label = format!("Max Slippage Loss ({:.0}%)", cfg.max_slippage_loss_pct);
-        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
         return ExitAction::FullExit {
             rule_label,
             is_toxic: true,
@@ -144,7 +252,7 @@ pub fn evaluate_position_exit(
     // 2. Hard Stop-Loss (Emergency defensive exit: floored at 10k)
     if pnl_pct <= cfg.stop_loss_pct {
         let rule_label = format!("Stop-Loss ({:.0}%)", cfg.stop_loss_pct);
-        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
         return ExitAction::FullExit {
             rule_label,
             is_toxic: true,
@@ -155,7 +263,7 @@ pub fn evaluate_position_exit(
     // 3. Flash Dump Circuit Breaker (Emergency defensive exit: floored at 10k)
     if tick_drop_pct <= cfg.flash_dump_tick_pct && pnl_pct <= cfg.flash_dump_max_pnl_pct {
         let rule_label = format!("Flash Dump Breaker ({:.0}%)", cfg.flash_dump_tick_pct);
-        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
         return ExitAction::FullExit {
             rule_label,
             is_toxic: true,
@@ -166,7 +274,7 @@ pub fn evaluate_position_exit(
     // 3b. Early Fail-Fast Abort for Dead-on-Arrival Entries (Emergency defensive exit: floored at 10k)
     if !pos.tp1_executed && elapsed_secs >= cfg.early_abort_window_secs && pos.peak_pnl_pct < cfg.early_abort_max_peak_pct && pnl_pct <= cfg.early_abort_loss_pct {
         let rule_label = format!("Early Abort ({:.0}%)", cfg.early_abort_loss_pct);
-        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
         return ExitAction::FullExit {
             rule_label,
             is_toxic: true,
@@ -181,7 +289,7 @@ pub fn evaluate_position_exit(
         pos.remaining_size_sol = (pos.remaining_size_sol - sol_closed).max(0.0);
         let rule_label = format!("TP1 Scale-Out (+{:.0}%)", cfg.tp1_trigger_pct);
         let est_pnl_sol = sol_closed * (pnl_pct / 100.0);
-        let tip_lamports = resolve_exit_tip(&rule_label, est_pnl_sol, cfg);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_pnl_sol, cluster_congestion_multiplier, cfg);
 
         return ExitAction::PartialSell {
             sell_fraction_of_remaining: cfg.tp1_sell_fraction,
@@ -199,7 +307,7 @@ pub fn evaluate_position_exit(
         pos.remaining_size_sol = (pos.remaining_size_sol - sol_closed).max(0.0);
         let rule_label = format!("TP2 Scale-Out (+{:.0}%)", cfg.tp2_trigger_pct);
         let est_pnl_sol = sol_closed * (pnl_pct / 100.0);
-        let tip_lamports = resolve_exit_tip(&rule_label, est_pnl_sol, cfg);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_pnl_sol, cluster_congestion_multiplier, cfg);
 
         return ExitAction::PartialSell {
             sell_fraction_of_remaining: fraction_of_current.min(1.0),
@@ -262,7 +370,7 @@ pub fn evaluate_position_exit(
                     "{} (-{:.1}% from +{:.1}% Peak | Floor +{:.1}%)",
                     rule_prefix, effective_delta, pos.peak_pnl_pct, effective_floor
                 );
-                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
                 return ExitAction::FullExit {
                     rule_label,
                     is_toxic: false,
@@ -285,7 +393,7 @@ pub fn evaluate_position_exit(
                     "{} (-{:.0}% from +{:.1}% Peak)",
                     rule_prefix, effective_trail, pos.peak_pnl_pct
                 );
-                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
                 return ExitAction::FullExit {
                     rule_label,
                     is_toxic: false,
@@ -304,7 +412,7 @@ pub fn evaluate_position_exit(
                     "CVD Absorption Ratchet Floor (+{:.1}% from +{:.1}% Peak)",
                     absorption_floor, pos.peak_pnl_pct
                 );
-                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
                 return ExitAction::FullExit {
                     rule_label,
                     is_toxic: false,
@@ -317,7 +425,7 @@ pub fn evaluate_position_exit(
                     "Dynamic Ratchet Floor (+{:.1}% from +{:.1}% Peak)",
                     band.dynamic_floor, pos.peak_pnl_pct
                 );
-                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+                let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
                 return ExitAction::FullExit {
                     rule_label,
                     is_toxic: false,
@@ -333,7 +441,7 @@ pub fn evaluate_position_exit(
         && pnl_pct <= cfg.breakeven_floor_pct
     {
         let rule_label = format!("Breakeven Guard (+{:.0}%)", cfg.breakeven_floor_pct);
-        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
         return ExitAction::FullExit {
             rule_label,
             is_toxic: false,
@@ -349,7 +457,7 @@ pub fn evaluate_position_exit(
         && pnl_pct <= cfg.stagnation_band_max_pct
     {
         let rule_label = "Stagnation TTL Exit".to_string();
-        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cfg);
+        let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
         return ExitAction::FullExit {
             rule_label,
             is_toxic: false,
@@ -506,7 +614,7 @@ pub fn compute_net_realized_sol_for_exit(
     cfg: &RiskConfig,
 ) -> f64 {
     let gross_sol = basis_sol * (gross_pnl_pct / 100.0);
-    let tip = resolve_exit_tip(rule_label, gross_sol, cfg);
+    let tip = resolve_exit_tip(rule_label, gross_sol, 1.0, cfg);
     compute_net_realized_sol_with_tip(basis_sol, gross_pnl_pct, cfg, tip)
 }
 
@@ -692,7 +800,7 @@ mod tests {
                 assert!((sol_basis_closed - 0.04).abs() < 1e-6);
                 assert!((pos.remaining_size_sol - 0.06).abs() < 1e-6);
                 assert!(pos.tp1_executed);
-                assert_eq!(tip_lamports, 150_000);
+                assert_eq!(tip_lamports, 200_000);
             },
             _ => panic!("Expected TP1 PartialSell"),
         }
@@ -704,7 +812,7 @@ mod tests {
                 assert!((sol_basis_closed - 0.035).abs() < 1e-6);
                 assert!((pos.remaining_size_sol - 0.025).abs() < 1e-6); // 25% moonbag runner
                 assert!(pos.tp2_executed);
-                assert_eq!(tip_lamports, 150_000);
+                assert_eq!(tip_lamports, 200_000);
             },
             _ => panic!("Expected TP2 PartialSell"),
         }
@@ -727,7 +835,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Trailing Runner (-18% from +60.0% Peak)"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, 150_000);
+                assert_eq!(tip_lamports, 200_000);
             }
             _ => panic!("Expected Trailing Runner exit"),
         }
@@ -750,7 +858,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Breakeven Guard"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, 150_000);
+                assert_eq!(tip_lamports, 200_000);
             }
             _ => panic!("Expected Breakeven Guard exit"),
         }
@@ -782,7 +890,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Dynamic Ratchet Floor"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, 150_000);
+                assert_eq!(tip_lamports, 200_000);
             }
             _ => panic!("Expected Dynamic Ratchet Floor exit"),
         }
@@ -799,7 +907,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("Dynamic Trailing Runner"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, 150_000);
+                assert_eq!(tip_lamports, 200_000);
             }
             _ => panic!("Expected Dynamic Trailing Runner exit"),
         }
@@ -851,7 +959,7 @@ mod tests {
             ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
                 assert!(rule_label.contains("CVD Absorption Ratchet Runner"));
                 assert!(!is_toxic);
-                assert_eq!(tip_lamports, 150_000);
+                assert_eq!(tip_lamports, 200_000);
             }
             _ => panic!("Expected CVD Absorption Ratchet Runner exit, got {:?}", action),
         }
@@ -1069,18 +1177,53 @@ mod tests {
     #[test]
     fn test_emergency_tip_resolution() {
         let cfg = RiskConfig::default();
-        // Defensive risk exits floor at 10,000 lamports (saving 86.7% overhead)
-        assert_eq!(resolve_exit_tip("Stop-Loss (-20%)", -0.010, &cfg), 10_000);
-        assert_eq!(resolve_exit_tip("Flash Dump Breaker (-15%)", -0.008, &cfg), 10_000);
-        assert_eq!(resolve_exit_tip("Max Slippage Loss (-25%)", -0.015, &cfg), 10_000);
-        assert_eq!(resolve_exit_tip("Early Abort (-10%)", -0.005, &cfg), 10_000);
+        // Defensive risk exits floor at 10,000 lamports at 1.0 congestion multiplier
+        assert_eq!(resolve_exit_tip("Stop-Loss (-20%)", -0.010, 1.0, &cfg), 10_000);
+        assert_eq!(resolve_exit_tip("Flash Dump Breaker (-15%)", -0.008, 1.0, &cfg), 10_000);
+        assert_eq!(resolve_exit_tip("Max Slippage Loss (-25%)", -0.015, 1.0, &cfg), 10_000);
+        assert_eq!(resolve_exit_tip("Early Abort (-10%)", -0.005, 1.0, &cfg), 10_000);
 
-        // Profitable exits scale tip dynamically: max(10_000, min(150_000, pnl_sol * 1e9 * 0.08))
-        assert_eq!(resolve_exit_tip("TP1 Scale-Out (+45%)", 0.0001, &cfg), 10_000);
-        assert_eq!(resolve_exit_tip("TP2 Scale-Out (+90%)", 0.0010, &cfg), 80_000);
-        assert_eq!(resolve_exit_tip("Trailing Runner (-18% from +50.0% Peak)", 0.010, &cfg), 150_000);
-        assert_eq!(resolve_exit_tip("Breakeven Guard (+8%)", 0.0005, &cfg), 40_000);
-        assert_eq!(resolve_exit_tip("Stagnation TTL Exit", 0.0000, &cfg), 10_000);
+        // Defensive exits with 2.0 congestion multiplier: capped at 1.5x (15,000 lamports)
+        assert_eq!(resolve_exit_tip("Stop-Loss (-20%)", -0.010, 2.0, &cfg), 15_000);
+        assert_eq!(resolve_exit_tip("Early Abort (-10%)", -0.005, 3.0, &cfg), 15_000);
+
+        // Profitable exits scale tip dynamically: base * mult, clamped between 10k and 200k
+        assert_eq!(resolve_exit_tip("TP1 Scale-Out (+45%)", 0.0001, 1.0, &cfg), 10_000);
+        assert_eq!(resolve_exit_tip("TP2 Scale-Out (+90%)", 0.0010, 1.0, &cfg), 80_000);
+        assert_eq!(resolve_exit_tip("TP2 Scale-Out (+90%)", 0.0010, 2.0, &cfg), 160_000);
+        assert_eq!(resolve_exit_tip("Trailing Runner (-18% from +50.0% Peak)", 0.010, 1.0, &cfg), 200_000);
+        assert_eq!(resolve_exit_tip("Breakeven Guard (+8%)", 0.0005, 1.0, &cfg), 40_000);
+        assert_eq!(resolve_exit_tip("Stagnation TTL Exit", 0.0000, 1.0, &cfg), 10_000);
+    }
+
+    #[test]
+    fn test_compute_adaptive_slippage_and_reserve_tracker() {
+        let mut tracker = ReserveTracker::new();
+        // 1. Stable reserve at 100 SOL across 15 seconds
+        tracker.record_reserve_snapshot(100.0, 100.0);
+        tracker.record_reserve_snapshot(100.0, 105.0);
+        tracker.record_reserve_snapshot(100.0, 110.0);
+        assert_eq!(tracker.compute_reserve_drain_rate_5s(110.0), 0.0);
+
+        // Normal pool depth ($50k pool, SOL price $150 -> reserve = 25k / 150 = 166.6 SOL)
+        // Small swap 0.1 SOL -> impact_frac = 0.1 / 166.7 = 0.0006 < 0.015 -> base slippage 250 bps
+        let slippage = compute_adaptive_slippage_bps(0.1, 50_000.0, 150.0, 0.0);
+        assert_eq!(slippage, 250);
+
+        // Larger swap > 1.5% of pool reserve (e.g. 5 SOL on 166.6 SOL pool -> 5 / 171.6 = 2.91%)
+        let large_slippage = compute_adaptive_slippage_bps(5.0, 50_000.0, 150.0, 0.0);
+        assert!(large_slippage > 250);
+        assert!(large_slippage <= 500);
+
+        // 2. Rapidly draining reserve: drop from 100 SOL to 75 SOL in 5 seconds (-25% drain)
+        tracker.record_reserve_snapshot(75.0, 115.0);
+        let drain_rate = tracker.compute_reserve_drain_rate_5s(115.0);
+        assert!((drain_rate - (-0.25)).abs() < 1e-6);
+        assert!(drain_rate < -0.15);
+
+        // CRITICAL SHIELD: under -25% drain rate, slippage must clamp to 150 bps even for large swaps
+        let clamped_slippage = compute_adaptive_slippage_bps(5.0, 50_000.0, 150.0, drain_rate);
+        assert_eq!(clamped_slippage, 150);
     }
 
     #[test]

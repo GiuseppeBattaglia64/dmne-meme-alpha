@@ -181,6 +181,12 @@ pub struct Position {
     pub execution_priority: String,
     #[serde(default)]
     pub cvd_tracker: orderflow::RollingCvdTracker,
+    #[serde(default)]
+    pub reserve_tracker: risk::ReserveTracker,
+    #[serde(default)]
+    pub vpin_calculator: orderflow::VpinCalculator,
+    #[serde(default)]
+    pub toxic_vpin_consecutive_buckets: u32,
 }
 
 impl Position {
@@ -193,6 +199,7 @@ impl Position {
 
     pub fn record_trade_tick(&mut self, timestamp: f64, volume_sol: f64, is_buy: bool) {
         self.cvd_tracker.record_trade(timestamp, volume_sol, is_buy);
+        self.vpin_calculator.add_trade(is_buy, volume_sol);
     }
 }
 
@@ -246,6 +253,8 @@ pub struct BotState {
     pub rejection_tracker: RollingRejectionTracker,
     #[serde(default)]
     pub stage2_audit_log: Stage2AuditRingBuffer,
+    #[serde(default = "default_standard_jito_tip")]
+    pub jito_tip_lamports: u64,
 }
 
 impl BotState {
@@ -274,7 +283,18 @@ impl BotState {
             rejected_candidates: std::collections::HashMap::new(),
             rejection_tracker: RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY),
             stage2_audit_log: Stage2AuditRingBuffer::new(STAGE2_AUDIT_LOG_CAPACITY),
+            jito_tip_lamports: 10_000,
         }
+    }
+
+    pub fn cluster_congestion_multiplier(&self) -> f64 {
+        let base = 10_000.0;
+        let tip = if self.jito_tip_lamports > 0 {
+            self.jito_tip_lamports as f64
+        } else {
+            self.effective_risk_cfg.jito_tip_lamports as f64
+        };
+        (tip / base).clamp(1.0, 3.0)
     }
 
     pub fn record_stage2_audit(
@@ -687,7 +707,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let historical_trades = db::fetch_settled_trades_for_reconcile(&pg).await;
         for (mint, symbol, size, pnl_sol, pnl_pct, rule, epoch, db_toxic) in historical_trades {
             let is_toxic = db_toxic || risk::is_historical_exit_toxic(pnl_pct, &config.risk);
-            let tip = risk::resolve_exit_tip(&rule, pnl_sol, &config.risk);
+            let tip = risk::resolve_exit_tip(&rule, pnl_sol, 1.0, &config.risk);
             let priority = if risk::is_emergency_risk_exit(&rule) {
                 "HIGH_URGENCY_EMERGENCY".to_string()
             } else {
@@ -797,7 +817,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else {
                             risk::is_historical_exit_toxic(pnl_pct, &config.risk)
                         };
-                        let tip = risk::resolve_exit_tip(&reason, pnl_sol, &config.risk);
+                        let tip = risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk);
                         let priority = if risk::is_emergency_risk_exit(&reason) {
                             "HIGH_URGENCY_EMERGENCY".to_string()
                         } else {
@@ -1753,6 +1773,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             arrival_timestamps: arrivals,
                             genesis_profile,
                             holder_records,
+                            vpin_calculator: None,
                         };
 
                         let admission_res = admission::evaluate_candidate_admission(
@@ -1966,6 +1987,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     jito_tip_lamports: eval_cfg.risk.jito_tip_lamports,
                                     execution_priority: "STANDARD_ROUTINE".to_string(),
                                     cvd_tracker: initial_cvd,
+                                    reserve_tracker: risk::ReserveTracker::default(),
+                                    vpin_calculator: orderflow::VpinCalculator::default(),
+                                    toxic_vpin_consecutive_buckets: 0,
                                 });
                                 let log_msg = format!("SNIPED CONFIRMED TOKEN: {} ({}) at {:.4e} SOL", candidate.symbol, &candidate.token_mint[..8.min(candidate.token_mint.len())], final_confirmed_spot);
                                 state.recent_onchain_events.insert(0, log_msg);
@@ -2056,6 +2080,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Evaluate dynamic exit rules
             let mut guard = eval_state.write().await;
             guard.effective_risk_cfg = effective_risk_cfg.clone();
+            let cluster_congestion_mult = guard.cluster_congestion_multiplier();
             let mut closed_indices = Vec::new();
             let state = &mut *guard;
             let now_epoch = chrono::Utc::now().timestamp() as u64;
@@ -2084,6 +2109,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     cvd_tracker: pos.cvd_tracker.clone(),
                 };
 
+                let sol_price_usd = eval_cfg.sol_reference_price_usd.max(1.0);
+                pos.reserve_tracker.record_reserve_snapshot((pos.liquidity_usd / 2.0) / sol_price_usd, now_epoch as f64);
+                let reserve_drain_5s = pos.reserve_tracker.compute_reserve_drain_rate_5s(now_epoch as f64);
+
+                let is_vpin_toxic = pos.vpin_calculator.is_toxic_sell_dominated();
+                if is_vpin_toxic {
+                    pos.toxic_vpin_consecutive_buckets = pos.toxic_vpin_consecutive_buckets.max(pos.vpin_calculator.toxic_consecutive_buckets).max(1);
+                } else {
+                    pos.toxic_vpin_consecutive_buckets = 0;
+                }
+                let has_toxic_vpin = pos.toxic_vpin_consecutive_buckets >= 2;
+
                 let hold_secs = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
                 let hawkes_eval = hawkes::HawkesEvaluator::new(eval_cfg.hawkes.clone());
                 let arrivals = active_arrivals.get(&pos.token_mint).map(|v| v.as_slice()).unwrap_or(&[]);
@@ -2092,24 +2129,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     && pos.pnl_pct < 15.0
                     && hawkes_eval.evaluate_inflight_decay(arrivals, now_epoch as f64);
 
-                let action = if has_hawkes_decay {
+                let action = if has_toxic_vpin {
+                    println!(
+                        "[CRUISE] Trade #{} {} Toxic VPIN dominance detected (>= 2 buckets). Exiting immediately.",
+                        pos.id, pos.symbol
+                    );
+                    let tip = risk::resolve_exit_tip("Dynamic Exit (Toxic VPIN Dominance)", 0.0, cluster_congestion_mult, &effective_risk_cfg);
+                    risk::ExitAction::FullExit {
+                        rule_label: "Dynamic Exit (Toxic VPIN Dominance)".to_string(),
+                        is_toxic: true,
+                        tip_lamports: tip,
+                    }
+                } else if has_hawkes_decay {
                     println!(
                         "[CRUISE] Trade #{} {} Hawkes arrival intensity collapsed. Locking gain early.",
                         pos.id, pos.symbol
                     );
+                    let est_pnl_sol = pos.size_sol * (pos.pnl_pct / 100.0);
+                    let tip = risk::resolve_exit_tip("Dynamic Exit (Hawkes Decay)", est_pnl_sol, cluster_congestion_mult, &effective_risk_cfg);
                     risk::ExitAction::FullExit {
                         rule_label: "Dynamic Exit (Hawkes Decay)".to_string(),
                         is_toxic: false,
-                        tip_lamports: effective_risk_cfg.jito_tip_lamports,
+                        tip_lamports: tip,
                     }
                 } else {
-                    risk::evaluate_position_exit(
+                    risk::evaluate_position_exit_with_congestion(
                         &mut active_pos,
                         pos.current_price_sol,
                         now_epoch,
+                        cluster_congestion_mult,
                         &effective_risk_cfg,
                     )
                 };
+
+                let allowed_slippage_bps = risk::compute_adaptive_slippage_bps(
+                    pos.size_sol,
+                    pos.liquidity_usd,
+                    sol_price_usd,
+                    reserve_drain_5s,
+                );
+                if reserve_drain_5s < -0.15 && pos.pnl_pct < -15.0 {
+                    println!(
+                        "[SAFETY SHIELD] {}: Pool {} drained by {:.1}% in 5s. Halting swap to avoid dumping into bottomed curve.",
+                        risk::REJECT_SWAP_EMPTYING_POOL, pos.symbol, reserve_drain_5s * 100.0
+                    );
+                } else if action != risk::ExitAction::Hold {
+                    println!(
+                        "[SLIPPAGE ENGINE] Adaptive Slippage for {}: {} bps | 5s Drain: {:+.1}%",
+                        pos.symbol, allowed_slippage_bps, reserve_drain_5s * 100.0
+                    );
+                }
 
                 match action {
                     risk::ExitAction::PartialSell { sol_basis_closed, rule_label, tip_lamports, .. } => {
@@ -2540,6 +2609,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             arrival_timestamps,
                                             genesis_profile,
                                             holder_records,
+                                            vpin_calculator: None,
                                         };
 
                                         if let Err(rejection) = admission::evaluate_candidate_admission(&telemetry, &scanner_cfg, Some(&scanner_funder)) {
