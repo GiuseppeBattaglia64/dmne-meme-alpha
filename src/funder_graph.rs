@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::sync::{Arc, RwLock, OnceLock};
+use std::time::{Instant, Duration};
 use serde::{Deserialize, Serialize};
 
 /// Strongly typed configuration for Deep Funder Graph analysis
@@ -222,25 +224,88 @@ pub fn evaluate_holder_entropy(holders: &[HolderRecord]) -> Result<(), String> {
     Ok(())
 }
 
-/// Resolves token holder records via Solana JSON-RPC `getTokenLargestAccounts`
+/// Thread-safe in-memory cache for token holder records (60-second TTL)
+#[derive(Clone)]
+pub struct HolderCache {
+    inner: Arc<RwLock<HashMap<String, (Instant, Vec<TokenHolderRecord>)>>>,
+}
+
+impl Default for HolderCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HolderCache {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn get(&self, mint: &str) -> Option<Vec<TokenHolderRecord>> {
+        let cache = self.inner.read().ok()?;
+        if let Some((inserted_at, records)) = cache.get(mint) {
+            if inserted_at.elapsed() < Duration::from_secs(60) {
+                return Some(records.clone());
+            }
+        }
+        None
+    }
+
+    pub fn insert(&self, mint: String, records: Vec<TokenHolderRecord>) {
+        if let Ok(mut cache) = self.inner.write() {
+            cache.insert(mint, (Instant::now(), records));
+            // Evict stale entries if cache size exceeds 1000 items
+            if cache.len() > 1000 {
+                cache.retain(|_, (ts, _)| ts.elapsed() < Duration::from_secs(120));
+            }
+        }
+    }
+}
+
+static GLOBAL_HOLDER_CACHE: OnceLock<HolderCache> = OnceLock::new();
+
+pub fn get_global_holder_cache() -> &'static HolderCache {
+    GLOBAL_HOLDER_CACHE.get_or_init(HolderCache::new)
+}
+
+/// Resolves token holder records via Solana JSON-RPC `getTokenLargestAccounts` (backed by 60s cache)
 pub async fn fetch_holders_from_rpc(
     client: &reqwest::Client,
     rpc_url: &str,
     mint: &str,
     timeout_secs: u64,
 ) -> Vec<TokenHolderRecord> {
+    fetch_holders_from_rpc_with_cache(client, rpc_url, mint, timeout_secs, get_global_holder_cache()).await
+}
+
+pub async fn fetch_holders_from_rpc_with_cache(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    mint: &str,
+    timeout_secs: u64,
+    cache: &HolderCache,
+) -> Vec<TokenHolderRecord> {
+    if let Some(cached) = cache.get(mint) {
+        return cached;
+    }
+
     let (shares, _) = crate::shadow_logger::fetch_rpc_holder_distribution(client, rpc_url, mint, timeout_secs).await;
     if shares.is_empty() {
         return Vec::new();
     }
-    shares.into_iter().enumerate().map(|(i, pct)| {
+    let records: Vec<TokenHolderRecord> = shares.into_iter().enumerate().map(|(i, pct)| {
         TokenHolderRecord {
             holder_address: format!("Holder_{}_{}", &mint[..6.min(mint.len())], i),
             supply_pct: pct,
             is_liquidity_pool: i == 0 && pct > 45.0,
             funding_source: None,
         }
-    }).collect()
+    }).collect();
+
+    cache.insert(mint.to_string(), records.clone());
+    records
 }
 
 impl FunderGraphEvaluator {
@@ -804,6 +869,44 @@ mod tests {
             make_holder("HOLDER_2", 10.0, false),
         ];
         assert!(evaluate_holder_entropy(&small_holders).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_holder_cache_hit_within_60s() {
+        let cache = HolderCache::new();
+        let records = vec![
+            TokenHolderRecord {
+                holder_address: "HolderA".to_string(),
+                supply_pct: 12.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "HolderB".to_string(),
+                supply_pct: 8.0,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+        ];
+
+        cache.insert("TestMint123".to_string(), records.clone());
+
+        // First retrieval should hit cache
+        let cached = cache.get("TestMint123");
+        assert!(cached.is_some());
+        assert_eq!(cached.unwrap().len(), 2);
+
+        // Repeated query within 60s returns from cache without re-invoking network
+        let client = reqwest::Client::new();
+        let res = fetch_holders_from_rpc_with_cache(
+            &client,
+            "http://invalid-dead-endpoint.example.com",
+            "TestMint123",
+            1,
+            &cache,
+        ).await;
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0].holder_address, "HolderA");
     }
 }
 

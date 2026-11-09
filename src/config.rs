@@ -543,6 +543,7 @@ impl SandboxConfig {
 }
 
 pub const DEFAULT_HELIUS_RPC_URL: &str = "https://mainnet.helius-rpc.com/?api-key=1eadb81c-7820-4e10-9fe8-3328a837ec80";
+pub const DEFAULT_PUBLIC_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
 
 pub fn default_solana_rpc_url() -> String {
     if let Ok(env_url) = std::env::var("SOLANA_RPC_URL") {
@@ -554,16 +555,29 @@ pub fn default_solana_rpc_url() -> String {
     DEFAULT_HELIUS_RPC_URL.to_string()
 }
 
+pub fn default_public_rpc_url() -> String {
+    if let Ok(env_url) = std::env::var("SOLANA_PUBLIC_RPC_URL") {
+        let trimmed = env_url.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    DEFAULT_PUBLIC_RPC_URL.to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SolanaConfig {
     #[serde(default = "default_solana_rpc_url")]
     pub rpc_url: String,
+    #[serde(default = "default_public_rpc_url")]
+    pub public_rpc_url: String,
 }
 
 impl Default for SolanaConfig {
     fn default() -> Self {
         Self {
             rpc_url: default_solana_rpc_url(),
+            public_rpc_url: default_public_rpc_url(),
         }
     }
 }
@@ -686,6 +700,12 @@ impl EngineConfig {
                             sol.rpc_url = trimmed.to_string();
                         }
                     }
+                    if let Ok(env_url) = std::env::var("SOLANA_PUBLIC_RPC_URL") {
+                        let trimmed = env_url.trim();
+                        if !trimmed.is_empty() {
+                            sol.public_rpc_url = trimmed.to_string();
+                        }
+                    }
                     cfg.default_rpc_url = sol.rpc_url.clone();
                     cfg.solana = sol;
                 } else {
@@ -694,6 +714,12 @@ impl EngineConfig {
                         let trimmed = env_url.trim();
                         if !trimmed.is_empty() {
                             sol.rpc_url = trimmed.to_string();
+                        }
+                    }
+                    if let Ok(env_url) = std::env::var("SOLANA_PUBLIC_RPC_URL") {
+                        let trimmed = env_url.trim();
+                        if !trimmed.is_empty() {
+                            sol.public_rpc_url = trimmed.to_string();
                         }
                     }
                     cfg.default_rpc_url = sol.rpc_url.clone();
@@ -829,12 +855,15 @@ mod tests {
     fn test_solana_config_defaults_and_deserialization() {
         let default_cfg = SolanaConfig::default();
         assert!(default_cfg.rpc_url.contains("helius-rpc.com") || std::env::var("SOLANA_RPC_URL").is_ok());
+        assert_eq!(default_cfg.public_rpc_url, "https://api.mainnet-beta.solana.com");
 
         let toml_str = r#"
             rpc_url = "https://custom-rpc.example.com"
+            public_rpc_url = "https://custom-public-rpc.example.com"
         "#;
         let parsed: SolanaConfig = toml::from_str(toml_str).expect("Failed to deserialize SolanaConfig");
         assert_eq!(parsed.rpc_url, "https://custom-rpc.example.com");
+        assert_eq!(parsed.public_rpc_url, "https://custom-public-rpc.example.com");
     }
 }
 

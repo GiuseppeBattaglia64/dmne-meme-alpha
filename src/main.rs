@@ -892,7 +892,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "method": "getBalance",
                 "params": [pubkey]
             });
-            if let Ok(res) = balance_client.post(&balance_cfg.solana.rpc_url)
+            if let Ok(res) = balance_client.post(&balance_cfg.solana.public_rpc_url)
                 .json(&req_body)
                 .timeout(Duration::from_millis(3000))
                 .send()
