@@ -10,6 +10,10 @@ import re
 from pathlib import Path
 
 REQUIRED_HOTPATH_GATES = {
+    "gate_0_caller_filter": [
+        r"late_caller|caller_delta|LateCallerDistribution",
+        r"caller_max_delta_seconds"
+    ],
     "liquidity_floor": [
         r"min_entry_liquidity_usd",
         r"liquidity.*<.*min_entry_liquidity"
@@ -54,6 +58,7 @@ def audit_semantic_loop():
         "main.rs": inspect_file(src_dir / "main.rs"),
         "risk.rs": inspect_file(src_dir / "risk.rs"),
         "discovery.rs": inspect_file(src_dir / "discovery.rs"),
+        "admission.rs": inspect_file(src_dir / "admission.rs"),
     }
 
     combined_hotpath = "\n".join(hotpath_sources.values())
