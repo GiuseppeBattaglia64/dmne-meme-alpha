@@ -106,6 +106,10 @@ pub struct RiskConfig {
 
     #[serde(default = "default_stagnation_ttl_secs")]
     pub stagnation_ttl_secs: u64,
+    #[serde(default = "default_positive_stagnation_ttl_secs")]
+    pub positive_stagnation_ttl_secs: u64,
+    #[serde(default = "default_stagnation_scratch_band_pct")]
+    pub stagnation_scratch_band_pct: f64,
     #[serde(default, alias = "stagnation_timeout_secs")]
     pub stagnation_timeout_sec: Option<u64>,
     #[serde(default = "default_cruise_baseline_ttl_secs")]
@@ -372,6 +376,8 @@ fn default_min_entry_sol() -> f64 { 0.010 }
 fn default_max_entry_sol() -> f64 { 0.060 }
 fn default_stop_loss_pct() -> f64 { -20.0 }
 fn default_stagnation_ttl_secs() -> u64 { 160 }
+fn default_positive_stagnation_ttl_secs() -> u64 { 60 }
+fn default_stagnation_scratch_band_pct() -> f64 { 4.0 }
 fn default_min_gas_reserve_sol() -> f64 { 0.030 }
 fn default_base_position_size_sol() -> f64 { 0.045 }
 fn default_base_position_pct_nav() -> f64 { 0.045 }
@@ -397,6 +403,8 @@ impl Default for RiskConfig {
             min_runner_trailing_drop_pct: 12.0,
             max_runner_trailing_drop_pct: 25.0,
             stagnation_ttl_secs: 160,
+            positive_stagnation_ttl_secs: 60,
+            stagnation_scratch_band_pct: 4.0,
             stagnation_timeout_sec: None,
             cruise_baseline_ttl_secs: 240,
             min_stagnation_ttl_secs: 120,

@@ -511,14 +511,23 @@ pub fn evaluate_position_exit_with_congestion(
         };
     }
 
-    // 8. Conditional Stagnation TTL
+    // 8. Conditional Stagnation TTL (Asymmetric)
+    let is_stagnant = is_stagnation_exit_due(
+        pnl_pct,
+        elapsed_secs,
+        cfg.stagnation_scratch_band_pct,
+        cfg.stagnation_ttl_secs,
+        cfg.positive_stagnation_ttl_secs,
+    );
     if !pos.tp1_executed
-        && elapsed_secs >= cfg.stagnation_ttl_secs
+        && is_stagnant
         && pos.peak_pnl_pct < cfg.stagnation_max_peak_pct
-        && pnl_pct >= cfg.stagnation_band_min_pct
-        && pnl_pct <= cfg.stagnation_band_max_pct
     {
-        let rule_label = "Stagnation TTL Exit".to_string();
+        let rule_label = if pnl_pct > 0.0 {
+            "Stagnation TTL Exit (Green Timeout)".to_string()
+        } else {
+            "Stagnation TTL Exit (Red Cut)".to_string()
+        };
         let tip_lamports = resolve_exit_tip(&rule_label, est_full_pnl_sol, cluster_congestion_multiplier, cfg);
         return ExitAction::FullExit {
             rule_label,
@@ -528,6 +537,27 @@ pub fn evaluate_position_exit_with_congestion(
     }
 
     ExitAction::Hold
+}
+
+pub fn is_stagnation_exit_due(
+    pnl_pct: f64,
+    elapsed_secs: u64,
+    stagnation_scratch_band_pct: f64,
+    base_stagnation_ttl_secs: u64,
+    positive_stagnation_ttl_secs: u64,
+) -> bool {
+    // Only evaluate positions within the scratch / stagnation band
+    if pnl_pct < -stagnation_scratch_band_pct || pnl_pct > stagnation_scratch_band_pct {
+        return false;
+    }
+
+    let required_ttl = if pnl_pct > 0.0 {
+        positive_stagnation_ttl_secs // 60s for green positions to develop secondary breakout
+    } else {
+        base_stagnation_ttl_secs     // 25s for flat/negative positions to purge dead liquidity
+    };
+
+    elapsed_secs >= required_ttl
 }
 
 pub fn is_historical_exit_toxic(exit_pnl_pct: f64, cfg: &RiskConfig) -> bool {
@@ -1056,6 +1086,25 @@ mod tests {
             }
             _ => panic!("Expected Stagnation TTL exit"),
         }
+    }
+
+    #[test]
+    fn test_asymmetric_stagnation_ttk_evaluator() {
+        let base_ttl = 25;
+        let positive_ttl = 60;
+        let scratch_band = 4.0;
+
+        // 1. Green trade (+2.0%) at 30s elapsed -> false (runway preserved)
+        assert!(!is_stagnation_exit_due(2.0, 30, scratch_band, base_ttl, positive_ttl));
+
+        // 2. Green trade (+2.0%) at 61s elapsed -> true (timed out)
+        assert!(is_stagnation_exit_due(2.0, 61, scratch_band, base_ttl, positive_ttl));
+
+        // 3. Red trade (-2.0%) at 26s elapsed -> true (controlled scratch cut)
+        assert!(is_stagnation_exit_due(-2.0, 26, scratch_band, base_ttl, positive_ttl));
+
+        // 4. Trade above scratch band (+5.0%) at 65s -> false (handled by Hawkes take-profit)
+        assert!(!is_stagnation_exit_due(5.0, 65, scratch_band, base_ttl, positive_ttl));
     }
 
     #[test]

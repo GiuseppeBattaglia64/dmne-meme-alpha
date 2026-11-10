@@ -29,7 +29,10 @@ max_runner_trailing_drop_pct = 25.0
 
 # 3. TIME-TO-KILL (TTK) ON STAGNATION
 # If PnL is between -4% and +4% after 25 seconds, force exit at scratch.
+# If PnL is positive (> 0%), extend runway up to 60 seconds for secondary breakout.
 stagnation_ttl_secs = 25
+positive_stagnation_ttl_secs = 60
+stagnation_scratch_band_pct = 4.0
 stagnation_timeout_sec = 25
 cruise_baseline_ttl_secs = 35
 min_stagnation_ttl_secs = 15

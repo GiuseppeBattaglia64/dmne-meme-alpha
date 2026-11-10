@@ -1452,7 +1452,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }.to_string();
 
                                 let hold_time_secs = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
-                                let ttl_secs = guard.effective_risk_cfg.stagnation_ttl_secs;
+                                let ttl_secs = if pos.pnl_pct > 0.0 {
+                                    guard.effective_risk_cfg.positive_stagnation_ttl_secs
+                                } else {
+                                    guard.effective_risk_cfg.stagnation_ttl_secs
+                                };
                                 let ttl_remaining_secs = ttl_secs.saturating_sub(hold_time_secs);
                                 let emergency_tip_lamports = guard.effective_risk_cfg.emergency_jito_tip_lamports;
 
@@ -2212,6 +2216,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         is_toxic: false,
                         tip_lamports: tip,
                     }
+                } else if !pos.tranche_1_taken
+                    && peak_pct < effective_risk_cfg.stagnation_max_peak_pct
+                    && risk::is_stagnation_exit_due(
+                        pos.pnl_pct,
+                        hold_secs,
+                        effective_risk_cfg.stagnation_scratch_band_pct,
+                        effective_risk_cfg.stagnation_ttl_secs,
+                        effective_risk_cfg.positive_stagnation_ttl_secs,
+                    )
+                {
+                    let rule_label = if pos.pnl_pct > 0.0 {
+                        "Stagnation TTL Exit (Green Timeout)".to_string()
+                    } else {
+                        "Stagnation TTL Exit (Red Cut)".to_string()
+                    };
+                    let est_pnl_sol = pos.size_sol * (pos.pnl_pct / 100.0);
+                    let tip = risk::resolve_exit_tip(&rule_label, est_pnl_sol, cluster_congestion_mult, &effective_risk_cfg);
+                    risk::ExitAction::FullExit {
+                        rule_label,
+                        is_toxic: false,
+                        tip_lamports: tip,
+                    }
                 } else {
                     risk::evaluate_position_exit_with_congestion(
                         &mut active_pos,
@@ -2345,6 +2371,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "[EMERGENCY_EXIT] Token: {}, PnL: {:.2}%, Velocity: {:.2}%/s, Escalated Tip: {} lamports",
                                 pos.symbol, exit_pnl, velocity, escalated_tip
                             );
+                        } else if rule_label.contains("Stagnation") {
+                            if exit_pnl <= 0.0 {
+                                println!(
+                                    "[STAGNATION_RED_CUT] Trade #{} {} closed at scratch/loss ({:+.2}%) after {}s elapsed (TTL: {}s). Purged dead liquidity.",
+                                    pos.id, pos.symbol, exit_pnl, elapsed_secs as u64, effective_risk_cfg.stagnation_ttl_secs
+                                );
+                            } else {
+                                println!(
+                                    "[STAGNATION_GREEN_TIMEOUT] Trade #{} {} closed at profit ({:+.2}%) after {}s elapsed (Positive TTL: {}s). Runway expired.",
+                                    pos.id, pos.symbol, exit_pnl, elapsed_secs as u64, effective_risk_cfg.positive_stagnation_ttl_secs
+                                );
+                            }
                         }
                         let realized = risk::compute_net_realized_sol_with_tip(pos.size_sol, exit_pnl, &effective_risk_cfg, tip_lamports);
                         let net_exit_pnl_pct = risk::compute_net_pnl_pct(pos.size_sol, realized);
