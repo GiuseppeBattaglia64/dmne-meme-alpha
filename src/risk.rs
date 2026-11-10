@@ -738,6 +738,20 @@ pub fn resolve_kelly_fraction_pct(tier: ConvictionTier, cfg: &RiskConfig) -> f64
     }
 }
 
+/// Dynamically scales Kelly fraction based on caller reputation ledger
+pub fn adjust_kelly_fraction_for_caller(base_kelly_pct: f64, reputation_score: f64, is_blacklisted: bool) -> f64 {
+    if is_blacklisted || reputation_score < 25.0 {
+        return 0.0;
+    }
+    if reputation_score >= 70.0 {
+        (base_kelly_pct * 1.20).min(8.5)
+    } else if reputation_score <= 40.0 {
+        (base_kelly_pct * 0.70).max(3.0)
+    } else {
+        base_kelly_pct
+    }
+}
+
 /// Dynamic Conviction-Tiered Kelly Sizing with floating NAV-relative cap
 pub fn compute_dynamic_entry_size_sol(
     bankroll_sol: f64,
@@ -1435,5 +1449,30 @@ mod tests {
         // Count-based helper
         assert!((calculate_effective_win_rate_from_counts(3, 2) - 0.60).abs() < 1e-6);
         assert_eq!(calculate_effective_win_rate_from_counts(0, 0), 0.0);
+    }
+
+    #[test]
+    fn test_adjust_kelly_fraction_for_caller() {
+        let base_kelly = 6.5;
+
+        // 1. High reputation (80.0 >= 70.0): 20% boost -> 7.8%
+        let boosted = adjust_kelly_fraction_for_caller(base_kelly, 80.0, false);
+        assert!((boosted - 7.8).abs() < 1e-4);
+
+        // 2. High reputation capped at 8.5%
+        let max_boosted = adjust_kelly_fraction_for_caller(8.0, 95.0, false);
+        assert_eq!(max_boosted, 8.5);
+
+        // 3. Neutral reputation (50.0): unadjusted base
+        let neutral = adjust_kelly_fraction_for_caller(base_kelly, 50.0, false);
+        assert_eq!(neutral, base_kelly);
+
+        // 4. Degraded reputation (35.0 <= 40.0): 30% reduction -> 4.55%
+        let dampened = adjust_kelly_fraction_for_caller(base_kelly, 35.0, false);
+        assert!((dampened - 4.55).abs() < 1e-4);
+
+        // 5. Blacklisted or score < 25.0: zero allocation (rejection)
+        assert_eq!(adjust_kelly_fraction_for_caller(base_kelly, 20.0, false), 0.0);
+        assert_eq!(adjust_kelly_fraction_for_caller(base_kelly, 80.0, true), 0.0);
     }
 }

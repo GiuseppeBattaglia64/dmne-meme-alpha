@@ -854,3 +854,51 @@ pub async fn fetch_recent_autopsies(
     Ok(reports)
 }
 
+/// Records or updates caller channel activity upon receiving a social signal
+pub async fn record_caller_signal(client: &Client, channel_id: i64, channel_title: &str) {
+    let stmt = "
+        INSERT INTO caller_channels (channel_id, channel_title, total_calls, last_call_at)
+        VALUES ($1, $2, 1, NOW())
+        ON CONFLICT (channel_id) DO UPDATE SET
+            channel_title = EXCLUDED.channel_title,
+            total_calls = caller_channels.total_calls + 1,
+            last_call_at = NOW()
+    ";
+    let _ = client.execute(stmt, &[&channel_id, &channel_title]).await;
+}
+
+/// Fetches caller reputation score and blacklist flag
+pub async fn fetch_caller_reputation(client: &Client, channel_id: i64) -> Option<(f64, bool)> {
+    let stmt = "SELECT reputation_score::float8, is_blacklisted FROM caller_channels WHERE channel_id = $1";
+    if let Ok(rows) = client.query(stmt, &[&channel_id]).await {
+        if let Some(row) = rows.first() {
+            let score: f64 = row.get(0);
+            let blacklisted: bool = row.get(1);
+            return Some((score, blacklisted));
+        }
+    }
+    None
+}
+
+/// Updates caller channel performance upon trade settlement
+pub async fn record_caller_settled_trade(client: &Client, channel_id: i64, outcome_str: &str, pnl_sol: f64) {
+    let (is_win, is_scratch, is_loss) = match outcome_str {
+        "WIN" => (1i32, 0i32, 0i32),
+        "SCRATCH" => (0i32, 1i32, 0i32),
+        _ => (0i32, 0i32, 1i32),
+    };
+    let stmt = "
+        UPDATE caller_channels
+        SET 
+            wins = wins + $2,
+            scratches = scratches + $3,
+            losses = losses + $4,
+            net_pnl_sol = net_pnl_sol + $5::numeric,
+            reputation_score = GREATEST(0.0, LEAST(100.0, 50.0 + ((wins + $2) * 5.0) - ((losses + $4) * 7.0) + ((net_pnl_sol + $5::numeric) * 100.0))),
+            is_blacklisted = CASE WHEN (50.0 + ((wins + $2) * 5.0) - ((losses + $4) * 7.0) + ((net_pnl_sol + $5::numeric) * 100.0)) < 25.0 THEN TRUE ELSE is_blacklisted END
+        WHERE channel_id = $1
+    ";
+    let _ = client.execute(stmt, &[&channel_id, &is_win, &is_scratch, &is_loss, &pnl_sol]).await;
+}
+
+

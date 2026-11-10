@@ -26,6 +26,16 @@ pub fn calculate_string_entropy(s: &str) -> f64 {
 }
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SocialSignalMetadata {
+    pub channel_id: i64,
+    pub channel_title: String,
+    pub message_timestamp_utc: i64,
+    pub source: String,
+    pub caller_reputation_score: f64,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RadarCandidate {
     pub symbol: String,
@@ -37,6 +47,8 @@ pub struct RadarCandidate {
     pub mint_authority_revoked: bool,
     pub freeze_authority_revoked: bool,
     pub cu_consumed: u64,
+    #[serde(default)]
+    pub social_signal: Option<SocialSignalMetadata>,
 }
 
 mod config;
@@ -56,6 +68,7 @@ mod genesis_guard;
 mod admission;
 mod cold_path;
 mod harness;
+mod social_ipc;
 
 pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
 
@@ -232,6 +245,7 @@ fn default_closed_trade_outcome() -> String {
 }
 
 pub type SettledTrade = ClosedTrade;
+pub type EngineState = tokio::sync::RwLock<BotState>;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BotState {
@@ -709,6 +723,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         g.solana_config = config.solana.clone();
         g.effective_risk_cfg = config.risk.clone();
     }
+    // Spawn Social IPC Receiver to ingest real-time MTProto calls from dmne-social-daemon
+    social_ipc::spawn_social_ipc_receiver(Arc::clone(&state), social_ipc::DEFAULT_SOCIAL_SOCKET_PATH);
     let db_audit_tx = db::spawn_db_audit_worker(db::DEFAULT_DB_URL);
     let funder_cache = funder_graph::FunderGraphEvaluator::load_cache(&config.funder_graph.cache_path).unwrap_or_default();
     let funder_evaluator = Arc::new(funder_graph::FunderGraphEvaluator::new(config.funder_graph.clone(), funder_cache));
@@ -1815,6 +1831,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             genesis_profile,
                             holder_records,
                             vpin_calculator: None,
+                            caller_msg_timestamp_utc: candidate.social_signal.as_ref().map(|s| s.message_timestamp_utc),
+                            pool_creation_timestamp_utc: None,
+                            caller_delta_seconds: None,
                         };
 
                         let admission_res = admission::evaluate_candidate_admission(
@@ -2689,6 +2708,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             genesis_profile,
                                             holder_records,
                                             vpin_calculator: None,
+                                            caller_msg_timestamp_utc: None,
+                                            pool_creation_timestamp_utc: None,
+                                            caller_delta_seconds: None,
                                         };
 
                                         if let Err(rejection) = admission::evaluate_candidate_admission(&telemetry, &scanner_cfg, Some(&scanner_funder)) {
@@ -2893,6 +2915,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     mint_authority_revoked: true,
                                                     freeze_authority_revoked: true,
                                                     cu_consumed: sim.optimized_cu_limit as u64,
+                                                    social_signal: None,
                                                 };
                                                 {
                                                     let mut g = scanner_state.write().await;

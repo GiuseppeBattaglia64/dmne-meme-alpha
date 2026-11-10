@@ -42,11 +42,21 @@ pub struct CandidateTelemetry {
     pub holder_records: Option<Vec<TokenHolderRecord>>,
     #[serde(default)]
     pub vpin_calculator: Option<crate::orderflow::VpinCalculator>,
+    #[serde(default)]
+    pub caller_msg_timestamp_utc: Option<i64>,
+    #[serde(default)]
+    pub pool_creation_timestamp_utc: Option<i64>,
+    #[serde(default)]
+    pub caller_delta_seconds: Option<i64>,
 }
 
 /// Typed rejection reason returned when a candidate fails any admission gate
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RejectionReason {
+    LateCallerDistribution {
+        delta_seconds: i64,
+        max_seconds: i64,
+    },
     LowLiquidity {
         current_usd: f64,
         required_usd: f64,
@@ -73,6 +83,7 @@ impl RejectionReason {
     /// Maps the rejection reason to the corresponding dashboard gauge category
     pub fn category(&self) -> RejectionCategory {
         match self {
+            RejectionReason::LateCallerDistribution { .. } => RejectionCategory::LowConviction,
             RejectionReason::LowLiquidity { .. } => RejectionCategory::LowLiquidity,
             RejectionReason::GenesisGuard { .. } => RejectionCategory::DevCluster,
             RejectionReason::HawkesWash { .. } => RejectionCategory::HawkesWash,
@@ -84,6 +95,9 @@ impl RejectionReason {
     /// Formats the primary human-readable rejection reason string
     pub fn reason_str(&self) -> String {
         match self {
+            RejectionReason::LateCallerDistribution { delta_seconds, max_seconds } => {
+                format!("Late caller distribution ({}s > {}s)", delta_seconds, max_seconds)
+            }
             RejectionReason::LowLiquidity { current_usd, required_usd } => {
                 format!("Liquidity ${:.0} below threshold ${:.0}", current_usd, required_usd)
             }
@@ -97,6 +111,9 @@ impl RejectionReason {
     /// Key metric string formatted for Stage 2 Deep Audit display
     pub fn metric_label(&self) -> String {
         match self {
+            RejectionReason::LateCallerDistribution { delta_seconds, max_seconds } => {
+                format!("delta: {}s (>{}s)", delta_seconds, max_seconds)
+            }
             RejectionReason::LowLiquidity { current_usd, required_usd } => {
                 format!("${:.1}k (<${:.0}k)", current_usd / 1000.0, required_usd / 1000.0)
             }
@@ -112,6 +129,7 @@ impl RejectionReason {
     /// Formatted verdict string for Stage 2 audit entry
     pub fn stage2_verdict(&self) -> String {
         match self {
+            RejectionReason::LateCallerDistribution { .. } => "REJECT: LATE_CALLER_DISTRIBUTION".to_string(),
             RejectionReason::LowLiquidity { .. } => "REJECT: LOW_LIQUIDITY".to_string(),
             RejectionReason::GenesisGuard { .. } => "REJECT: GENESIS_GUARD".to_string(),
             RejectionReason::HawkesWash { .. } => "REJECT: HAWKES_WASH".to_string(),
@@ -135,6 +153,24 @@ pub fn evaluate_candidate_admission(
     cfg: &EngineConfig,
     funder_evaluator: Option<&FunderGraphEvaluator>,
 ) -> Result<(), RejectionReason> {
+    // 0. Gate 0: Late Caller Distribution Filter
+    // Delta t = t_caller_msg - t_pool_creation
+    // If the token originates from a social signal and Delta t > 60s, reject immediately with REJECT: LATE_CALLER_DISTRIBUTION
+    let max_delta = cfg.risk.caller_max_delta_seconds;
+    let delta_opt = if let (Some(t_caller), Some(t_pool)) = (candidate.caller_msg_timestamp_utc, candidate.pool_creation_timestamp_utc) {
+        Some(t_caller - t_pool)
+    } else {
+        candidate.caller_delta_seconds
+    };
+    if let Some(delta) = delta_opt {
+        if delta > max_delta {
+            return Err(RejectionReason::LateCallerDistribution {
+                delta_seconds: delta,
+                max_seconds: max_delta,
+            });
+        }
+    }
+
     // 1. Liquidity Floor Gate
     let min_liquidity = cfg.risk.min_entry_liquidity_usd;
     if candidate.liquidity_usd < min_liquidity {
@@ -384,6 +420,9 @@ mod tests {
                 },
             ]),
             vpin_calculator: None,
+            caller_msg_timestamp_utc: None,
+            pool_creation_timestamp_utc: None,
+            caller_delta_seconds: None,
         }
     }
 
@@ -756,6 +795,33 @@ mod tests {
                 assert!(metric_label.contains("Toxic"));
             }
             _ => panic!("Expected OrderflowCvd HIGH_VPIN_TOXICITY error, got: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_admission_gate_0_late_caller_distribution() {
+        let mut candidate = make_test_candidate();
+        let cfg = EngineConfig::default();
+
+        // 1. Social call within 60s window (delta = 25s <= 60s) -> passes Gate 0
+        candidate.caller_msg_timestamp_utc = Some(1794290025);
+        candidate.pool_creation_timestamp_utc = Some(1794290000);
+        let res_pass = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res_pass.is_ok());
+
+        // 2. Social call after 60s window (delta = 85s > 60s) -> rejected at Gate 0
+        candidate.caller_msg_timestamp_utc = Some(1794290085);
+        candidate.pool_creation_timestamp_utc = Some(1794290000);
+        let res_fail = evaluate_candidate_admission(&candidate, &cfg, None);
+        assert!(res_fail.is_err());
+        let err = res_fail.unwrap_err();
+        assert_eq!(err.stage2_verdict(), "REJECT: LATE_CALLER_DISTRIBUTION");
+        match err {
+            RejectionReason::LateCallerDistribution { delta_seconds, max_seconds } => {
+                assert_eq!(delta_seconds, 85);
+                assert_eq!(max_seconds, 60);
+            }
+            _ => panic!("Expected LateCallerDistribution, got {:?}", err),
         }
     }
 }

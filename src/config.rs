@@ -185,6 +185,8 @@ pub struct RiskConfig {
     pub emergency_stop_max_tip_lamports: u64,
     #[serde(default = "default_atomic_drain_threshold_pct_per_sec")]
     pub atomic_drain_threshold_pct_per_sec: f64,
+    #[serde(default = "default_caller_max_delta_seconds")]
+    pub caller_max_delta_seconds: i64,
     #[serde(default = "default_min_entry_sol")]
     pub min_entry_sol: f64,
     #[serde(default = "default_max_entry_sol")]
@@ -365,6 +367,7 @@ fn default_emergency_jito_tip_lamports() -> u64 { 75000 }
 fn default_emergency_stop_base_tip_lamports() -> u64 { 100_000 }
 fn default_emergency_stop_max_tip_lamports() -> u64 { 250_000 }
 fn default_atomic_drain_threshold_pct_per_sec() -> f64 { -0.50 }
+fn default_caller_max_delta_seconds() -> i64 { 60 }
 fn default_min_entry_sol() -> f64 { 0.010 }
 fn default_max_entry_sol() -> f64 { 0.060 }
 fn default_stop_loss_pct() -> f64 { -20.0 }
@@ -434,6 +437,7 @@ impl Default for RiskConfig {
             emergency_stop_base_tip_lamports: 100_000,
             emergency_stop_max_tip_lamports: 250_000,
             atomic_drain_threshold_pct_per_sec: -0.50,
+            caller_max_delta_seconds: 60,
             min_entry_sol: 0.010,
             max_entry_sol: default_max_entry_sol(),
             min_gas_reserve_sol: 0.030,
@@ -917,6 +921,7 @@ mod tests {
         assert_eq!(engine_cfg.risk.emergency_stop_base_tip_lamports, 100_000);
         assert_eq!(engine_cfg.risk.emergency_stop_max_tip_lamports, 250_000);
         assert_eq!(engine_cfg.risk.atomic_drain_threshold_pct_per_sec, -0.50);
+        assert_eq!(engine_cfg.risk.caller_max_delta_seconds, 60);
     }
 }
 
