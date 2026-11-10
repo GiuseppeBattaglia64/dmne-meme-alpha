@@ -7,6 +7,15 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, RwLock};
+pub use crate::risk::{classify_trade_outcome, TradeOutcome};
+
+pub fn tag_settled_trade_outcome(pnl_pct: f64) -> &'static str {
+    match classify_trade_outcome(pnl_pct) {
+        TradeOutcome::Win => "WIN",
+        TradeOutcome::Scratch => "SCRATCH",
+        TradeOutcome::Loss => "LOSS",
+    }
+}
 
 pub const DEFAULT_SHADOW_LOG_PATH: &str = "logs/shadow_microstructure.jsonl";
 pub const DEFAULT_SOLANA_RPC_URL: &str = "https://mainnet.helius-rpc.com/?api-key=1eadb81c-7820-4e10-9fe8-3328a837ec80";

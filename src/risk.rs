@@ -206,6 +206,67 @@ pub fn resolve_exit_tip(
     }
 }
 
+pub fn calculate_emergency_stop_tip(
+    pnl_pct: f64,
+    elapsed_secs: f64,
+    cfg: &RiskConfig,
+) -> u64 {
+    if elapsed_secs <= 0.0 {
+        return cfg.emergency_stop_base_tip_lamports;
+    }
+    let velocity = pnl_pct / elapsed_secs.max(1.0);
+    if velocity <= cfg.atomic_drain_threshold_pct_per_sec {
+        // Rapid waterfall drain: escalate tip to ceiling to secure immediate block inclusion
+        cfg.emergency_stop_max_tip_lamports
+    } else {
+        cfg.emergency_stop_base_tip_lamports
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TradeOutcome {
+    Win,
+    Scratch,
+    Loss,
+}
+
+pub fn classify_trade_outcome(pnl_pct: f64) -> TradeOutcome {
+    if pnl_pct > 2.0 {
+        TradeOutcome::Win
+    } else if pnl_pct < -2.0 {
+        TradeOutcome::Loss
+    } else {
+        TradeOutcome::Scratch
+    }
+}
+
+pub fn calculate_effective_win_rate(outcomes: &[TradeOutcome]) -> f64 {
+    let mut wins = 0usize;
+    let mut losses = 0usize;
+    for o in outcomes {
+        match o {
+            TradeOutcome::Win => wins += 1,
+            TradeOutcome::Loss => losses += 1,
+            TradeOutcome::Scratch => {} // Excluded from denominator to prevent win-rate inflation
+        }
+    }
+    let decisive = wins + losses;
+    if decisive == 0 {
+        0.0
+    } else {
+        (wins as f64) / (decisive as f64)
+    }
+}
+
+pub fn calculate_effective_win_rate_from_counts(wins: usize, losses: usize) -> f64 {
+    let decisive = wins + losses;
+    if decisive == 0 {
+        0.0
+    } else {
+        (wins as f64) / (decisive as f64)
+    }
+}
+
 pub fn evaluate_position_exit(
     pos: &mut ActivePosition,
     current_price: f64,
@@ -1320,5 +1381,59 @@ mod tests {
         let insolvent_bankroll = 0.032; // only 0.002 available above reserve < 0.010 min entry
         let insolvent_size = compute_dynamic_entry_size_sol(insolvent_bankroll, ConvictionTier::HighConviction, 0, &cfg);
         assert_eq!(insolvent_size, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_emergency_stop_tip_thresholds() {
+        let cfg = RiskConfig::default();
+
+        // 1. Zero or negative elapsed time: base tip
+        assert_eq!(calculate_emergency_stop_tip(-8.0, 0.0, &cfg), 100_000);
+        assert_eq!(calculate_emergency_stop_tip(-8.0, -5.0, &cfg), 100_000);
+
+        // 2. Slow bleed: -8.0% over 40s = -0.20%/s (> -0.50%/s) -> Base tip
+        assert_eq!(calculate_emergency_stop_tip(-8.0, 40.0, &cfg), 100_000);
+
+        // 3. Fast waterfall drain: -8.0% over 10s = -0.80%/s (<= -0.50%/s) -> Max escalated tip
+        assert_eq!(calculate_emergency_stop_tip(-8.0, 10.0, &cfg), 250_000);
+
+        // 4. Exact threshold boundary: -0.50%/s -> Max escalated tip
+        assert_eq!(calculate_emergency_stop_tip(-5.0, 10.0, &cfg), 250_000);
+
+        // 5. Positive or mild drawdown: base tip
+        assert_eq!(calculate_emergency_stop_tip(5.0, 10.0, &cfg), 100_000);
+    }
+
+    #[test]
+    fn test_classify_trade_outcome_and_effective_win_rate() {
+        // Outcome classification thresholds
+        assert_eq!(classify_trade_outcome(5.5), TradeOutcome::Win);
+        assert_eq!(classify_trade_outcome(2.01), TradeOutcome::Win);
+        assert_eq!(classify_trade_outcome(2.0), TradeOutcome::Scratch);
+        assert_eq!(classify_trade_outcome(0.5), TradeOutcome::Scratch);
+        assert_eq!(classify_trade_outcome(0.0), TradeOutcome::Scratch);
+        assert_eq!(classify_trade_outcome(-1.99), TradeOutcome::Scratch);
+        assert_eq!(classify_trade_outcome(-2.0), TradeOutcome::Scratch);
+        assert_eq!(classify_trade_outcome(-2.01), TradeOutcome::Loss);
+        assert_eq!(classify_trade_outcome(-8.0), TradeOutcome::Loss);
+
+        // Win rate excluding scratches
+        let outcomes = vec![
+            TradeOutcome::Win,
+            TradeOutcome::Win,
+            TradeOutcome::Win,
+            TradeOutcome::Scratch,
+            TradeOutcome::Scratch,
+            TradeOutcome::Scratch,
+            TradeOutcome::Loss,
+            TradeOutcome::Loss,
+        ];
+        // 3 wins, 2 losses, 3 scratches -> win rate = 3 / (3 + 2) = 0.60 (60%)
+        let win_rate = calculate_effective_win_rate(&outcomes);
+        assert!((win_rate - 0.60).abs() < 1e-6);
+
+        // Count-based helper
+        assert!((calculate_effective_win_rate_from_counts(3, 2) - 0.60).abs() < 1e-6);
+        assert_eq!(calculate_effective_win_rate_from_counts(0, 0), 0.0);
     }
 }

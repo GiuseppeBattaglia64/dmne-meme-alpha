@@ -91,7 +91,11 @@ fn append_comprehensive_trade_log(
         let pnl_eur = exit_pnl_sol * eur_rate;
         let mfe_pnl_pct = ((pos.peak_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
         let mae_pnl_pct = ((pos.trough_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
-        let outcome = if exit_pnl_sol > 0.0001 { "WIN" } else if exit_pnl_sol < -0.0001 { "LOSS" } else { "BREAKEVEN" };
+        let outcome = match risk::classify_trade_outcome(exit_pnl_pct) {
+            risk::TradeOutcome::Win => "WIN",
+            risk::TradeOutcome::Scratch => "SCRATCH",
+            risk::TradeOutcome::Loss => "LOSS",
+        };
         let simulated_fee = 0.00105; // 0.001 Jito tip + priority fees
         let dex_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
 
@@ -219,6 +223,12 @@ pub struct ClosedTrade {
     pub jito_tip_lamports: u64,
     #[serde(default = "default_execution_priority")]
     pub execution_priority: String,
+    #[serde(default = "default_closed_trade_outcome")]
+    pub outcome: String,
+}
+
+fn default_closed_trade_outcome() -> String {
+    "SCRATCH".to_string()
 }
 
 pub type SettledTrade = ClosedTrade;
@@ -235,6 +245,8 @@ pub struct BotState {
     pub total_trades: usize,
     pub wins: usize,
     pub losses: usize,
+    #[serde(default)]
+    pub scratches: usize,
     pub active_positions: Vec<Position>,
     pub radar_candidates: Vec<RadarCandidate>,
     pub candidate_queue: Vec<RadarCandidate>,
@@ -273,6 +285,7 @@ impl BotState {
             total_trades: 0,
             wins: 0,
             losses: 0,
+            scratches: 0,
             active_positions: Vec::new(),
             radar_candidates: Vec::new(),
             candidate_queue: Vec::new(),
@@ -722,6 +735,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 "STANDARD_ROUTINE".to_string()
             };
+            let outcome = match risk::classify_trade_outcome(pnl_pct) {
+                risk::TradeOutcome::Win => "WIN",
+                risk::TradeOutcome::Scratch => "SCRATCH",
+                risk::TradeOutcome::Loss => "LOSS",
+            }.to_string();
             g.closed_trades.push(ClosedTrade {
                 token_mint: mint,
                 symbol,
@@ -733,6 +751,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 is_toxic,
                 jito_tip_lamports: tip,
                 execution_priority: priority,
+                outcome,
             });
         }
         println!("[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Rejections: {} | Restored Closed Trades: {}", 
@@ -838,6 +857,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if !symbol.is_empty() {
                             g.banned_tokens.insert(symbol.clone());
                         }
+                        let outcome = match risk::classify_trade_outcome(pnl_pct) {
+                            risk::TradeOutcome::Win => "WIN",
+                            risk::TradeOutcome::Scratch => "SCRATCH",
+                            risk::TradeOutcome::Loss => "LOSS",
+                        }.to_string();
                         g.closed_trades.push(ClosedTrade {
                             token_mint,
                             symbol,
@@ -849,6 +873,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             is_toxic,
                             jito_tip_lamports: tip,
                             execution_priority: priority,
+                            outcome,
                         });
                     }
                 }
@@ -956,6 +981,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "total_trades": pg_total,
                                         "wins": pg_wins,
                                         "losses": pg_total - pg_wins,
+                                        "scratches": guard.scratches,
+                                        "effective_win_rate_pct": if (guard.wins + guard.losses) > 0 {
+                                            (guard.wins as f64 / (guard.wins + guard.losses) as f64) * 100.0
+                                        } else {
+                                            0.0
+                                        },
                                         "rejections_count": pg_rejections,
                                         "active_positions": guard.active_positions,
                                         "radar_candidates": guard.radar_candidates,
@@ -1000,6 +1031,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "total_trades": pg_total,
                                 "wins": pg_wins,
                                 "losses": pg_total - pg_wins,
+                                "scratches": guard.scratches,
+                                "effective_win_rate_pct": if (guard.wins + guard.losses) > 0 {
+                                    (guard.wins as f64 / (guard.wins + guard.losses) as f64) * 100.0
+                                } else {
+                                    0.0
+                                },
                                 "rejections_count": pg_rejections,
                                 "active_positions": guard.active_positions,
                                 "radar_candidates": guard.radar_candidates,
@@ -2204,9 +2241,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         pos.size_sol = active_pos.remaining_size_sol;
                         pos.tranche_1_taken = active_pos.tp1_executed;
                         pos.tranche_2_taken = active_pos.tp2_executed;
-                        if realized > 0.0 {
-                            state.wins += 1;
-                            state.consecutive_losses = 0;
+                        let outcome = risk::classify_trade_outcome(net_exit_pnl_pct);
+                        match outcome {
+                            risk::TradeOutcome::Win => {
+                                state.wins += 1;
+                                state.consecutive_losses = 0;
+                            }
+                            risk::TradeOutcome::Scratch => {
+                                state.scratches += 1;
+                            }
+                            risk::TradeOutcome::Loss => {
+                                state.losses += 1;
+                                state.consecutive_losses += 1;
+                            }
                         }
                         println!(
                             "[CRUISE CONTROL] {} on {} (Net: {:+.1}%, Gross: {:+.1}%): Recaptured capital + {:.5} SOL gain.",
@@ -2261,10 +2308,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             is_toxic: false,
                             jito_tip_lamports: tip_lamports,
                             execution_priority: priority_tag.to_string(),
+                            outcome: match outcome {
+                                risk::TradeOutcome::Win => "WIN",
+                                risk::TradeOutcome::Scratch => "SCRATCH",
+                                risk::TradeOutcome::Loss => "LOSS",
+                            }.to_string(),
                         });
                     }
-                    risk::ExitAction::FullExit { rule_label, is_toxic, tip_lamports } => {
+                    risk::ExitAction::FullExit { rule_label, is_toxic, mut tip_lamports } => {
                         let exit_pnl = pos.pnl_pct;
+                        let elapsed_secs = (now_epoch.saturating_sub(pos.entry_timestamp_epoch)) as f64;
+                        if rule_label.contains("Stop-Loss") || exit_pnl <= -effective_risk_cfg.stop_loss_pct.abs() {
+                            let velocity = exit_pnl / elapsed_secs.max(1.0);
+                            let escalated_tip = risk::calculate_emergency_stop_tip(exit_pnl, elapsed_secs, &effective_risk_cfg);
+                            tip_lamports = escalated_tip;
+                            println!(
+                                "[EMERGENCY_EXIT] Token: {}, PnL: {:.2}%, Velocity: {:.2}%/s, Escalated Tip: {} lamports",
+                                pos.symbol, exit_pnl, velocity, escalated_tip
+                            );
+                        }
                         let realized = risk::compute_net_realized_sol_with_tip(pos.size_sol, exit_pnl, &effective_risk_cfg, tip_lamports);
                         let net_exit_pnl_pct = risk::compute_net_pnl_pct(pos.size_sol, realized);
                         let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_jito_tip_lamports {
@@ -2298,12 +2360,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 state.current_bankroll_sol += pnl_sol;
                 state.total_realized_pnl_sol += pnl_sol;
                 let bankroll_after = state.current_bankroll_sol;
-                if pnl_sol > 0.0 {
-                    state.wins += 1;
-                    state.consecutive_losses = 0;
-                } else {
-                    state.losses += 1;
-                    state.consecutive_losses += 1;
+                let outcome = risk::classify_trade_outcome(pnl_pct);
+                match outcome {
+                    risk::TradeOutcome::Win => {
+                        state.wins += 1;
+                        state.consecutive_losses = 0;
+                    }
+                    risk::TradeOutcome::Scratch => {
+                        state.scratches += 1;
+                    }
+                    risk::TradeOutcome::Loss => {
+                        state.losses += 1;
+                        state.consecutive_losses += 1;
+                    }
                 }
                 let is_toxic_exit = is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk);
                 // Lifetime One-Shot Policy: permanently ban ANY settled mint/symbol from ever re-entering
@@ -2342,6 +2411,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         ).await;
                     }
                 });
+                let outcome_tag = match outcome {
+                    risk::TradeOutcome::Win => "WIN",
+                    risk::TradeOutcome::Scratch => "SCRATCH",
+                    risk::TradeOutcome::Loss => "LOSS",
+                }.to_string();
                 state.closed_trades.push(ClosedTrade {
                     token_mint: pos.token_mint,
                     symbol: pos.symbol,
@@ -2353,6 +2427,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     is_toxic: is_toxic_exit,
                     jito_tip_lamports: tip_lamports,
                     execution_priority: priority_tag,
+                    outcome: outcome_tag,
                 });
             }
         }
