@@ -880,6 +880,20 @@ pub async fn fetch_caller_reputation(client: &Client, channel_id: i64) -> Option
     None
 }
 
+/// Fetches caller reputation score, blacklist flag, and total calls count
+pub async fn fetch_caller_reputation_and_calls(client: &Client, channel_id: i64) -> Option<(f64, bool, u64)> {
+    let stmt = "SELECT reputation_score::float8, is_blacklisted, total_calls FROM caller_channels WHERE channel_id = $1";
+    if let Ok(rows) = client.query(stmt, &[&channel_id]).await {
+        if let Some(row) = rows.first() {
+            let score: f64 = row.get(0);
+            let blacklisted: bool = row.get(1);
+            let total_calls: i32 = row.get(2);
+            return Some((score, blacklisted, total_calls.max(0) as u64));
+        }
+    }
+    None
+}
+
 /// Updates caller channel performance upon trade settlement
 pub async fn record_caller_settled_trade(client: &Client, channel_id: i64, outcome_str: &str, pnl_sol: f64) {
     let (is_win, is_scratch, is_loss) = match outcome_str {

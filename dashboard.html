@@ -2261,7 +2261,7 @@ sudo systemctl restart dmne-alpha.service</code></pre>
         const baseKelly = rc.base_kelly_fraction_nav_pct !== undefined ? rc.base_kelly_fraction_nav_pct : 6.5;
         const maxKelly = rc.max_kelly_fraction_nav_pct !== undefined ? rc.max_kelly_fraction_nav_pct : 8.5;
         const stdTip = rc.jito_tip_lamports !== undefined ? rc.jito_tip_lamports : 10000;
-        const emerTip = rc.emergency_jito_tip_lamports !== undefined ? rc.emergency_jito_tip_lamports : 75000;
+        const emerTip = rc.emergency_stop_base_tip_lamports || rc.emergency_jito_tip_lamports || 100000;
 
         const currentBankroll = (window.lastState && window.lastState.current_bankroll_sol) || (window.lastCurrentBankroll || 0.5556);
         const posSize = parseFloat(p.initial_size_sol || p.size_sol || 0.0417);
@@ -2713,10 +2713,10 @@ sudo systemctl restart dmne-alpha.service</code></pre>
         const tipLamports = parseInt(t.jito_tip_lamports || 0);
         const priorityTag = t.execution_priority || "";
         const rc = window.activeRiskConfig || {};
-        const emerTip = rc.emergency_jito_tip_lamports || 75000;
+        const emerTip = rc.emergency_stop_base_tip_lamports || rc.emergency_jito_tip_lamports || 100000;
         const ruleLower = rawRule.toLowerCase();
         const isEmergency = (tipLamports >= emerTip) || (ruleLower.includes("stop-loss") || ruleLower.includes("stop loss") || ruleLower.includes("flash dump") || ruleLower.includes("slippage") || ruleLower.includes("early abort") || ruleLower.includes("panic"));
-        const tipText = isEmergency ? "75k TIP" : "10k TIP";
+        const tipText = tipLamports > 0 ? `${Math.round(tipLamports / 1000)}k TIP` : (isEmergency ? "100k TIP" : "10k TIP");
 
         return `
           <tr class="h-[30px] py-1"
@@ -2851,7 +2851,7 @@ sudo systemctl restart dmne-alpha.service</code></pre>
       document.getElementById("tdm-rule-val").innerText = exitRule || "Closed";
 
       const rc = window.activeRiskConfig || {};
-      const emerTip = rc.emergency_jito_tip_lamports || 75000;
+      const emerTip = rc.emergency_stop_base_tip_lamports || rc.emergency_jito_tip_lamports || 100000;
       const stdTip = rc.jito_tip_lamports || 10000;
       const tipValBox = document.getElementById("tdm-tip-val");
       if (tipValBox) {
@@ -3757,7 +3757,7 @@ sudo systemctl restart dmne-alpha.service</code></pre>
 
         if (data.recent_onchain_events) {
           const rc = window.activeRiskConfig || {};
-          const emerTip = (rc.emergency_jito_tip_lamports !== undefined ? rc.emergency_jito_tip_lamports : 75000).toLocaleString();
+          const emerTip = (rc.emergency_stop_base_tip_lamports || rc.emergency_jito_tip_lamports || 100000).toLocaleString();
           const routineTip = (rc.jito_tip_lamports !== undefined ? rc.jito_tip_lamports : 10000).toLocaleString();
 
           data.recent_onchain_events.forEach(ev => {

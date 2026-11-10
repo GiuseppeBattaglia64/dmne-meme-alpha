@@ -181,6 +181,7 @@ pub struct RiskConfig {
     pub dex_roundtrip_fee_pct: f64,
     #[serde(default = "default_jito_tip_lamports")]
     pub jito_tip_lamports: u64,
+    #[deprecated(note = "Legacy field; use emergency_stop_base_tip_lamports and emergency_stop_max_tip_lamports")]
     #[serde(default = "default_emergency_jito_tip_lamports")]
     pub emergency_jito_tip_lamports: u64,
     #[serde(default = "default_emergency_stop_base_tip_lamports")]
@@ -341,7 +342,7 @@ fn default_min_stagnation_ttl_secs() -> u64 { 120 }
 fn default_max_stagnation_ttl_secs() -> u64 { 360 }
 fn default_reentry_cooldown_secs() -> u64 { 3600 }
 fn default_toxic_exit_permanent_ban() -> bool { true }
-fn default_min_entry_liquidity_usd() -> f64 { 25000.0 }
+fn default_min_entry_liquidity_usd() -> f64 { 32000.0 }
 fn default_min_entry_price_change_pct() -> f64 { 1.5 }
 fn default_max_entry_price_change_pct() -> f64 { 85.0 }
 fn default_min_entry_buy_sell_ratio() -> f64 { 1.25 }
@@ -415,7 +416,7 @@ impl Default for RiskConfig {
             min_take_profit_activation_pct: 10.0,
             reentry_cooldown_secs: 3600,
             toxic_exit_permanent_ban: true,
-            min_entry_liquidity_usd: 25000.0,
+            min_entry_liquidity_usd: 32000.0,
             min_entry_price_change_pct: 1.5,
             max_entry_price_change_pct: 85.0,
             min_entry_buy_sell_ratio: 1.25,

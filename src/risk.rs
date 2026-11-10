@@ -782,6 +782,75 @@ pub fn adjust_kelly_fraction_for_caller(base_kelly_pct: f64, reputation_score: f
     }
 }
 
+/// Standardized Kelly fraction resolution across Public Radar & Social signals:
+/// - Unverified Public Radar Candidates: Cap at Base Half-Kelly (4.5% NAV floor).
+/// - Public candidates with liquidity between $25,000 and $35,000 must be restricted to 3.0% NAV to mitigate bonding curve slippage.
+/// - Only verified Social Signals with reputation_score >= 70.0 (and >= 5 calls) qualify for the expanded 8.5% NAV ceiling.
+pub fn resolve_standardized_kelly_allocation(
+    is_social: bool,
+    reputation_score: f64,
+    caller_total_calls: u64,
+    liquidity_usd: f64,
+    cfg: &RiskConfig,
+) -> (ConvictionTier, f64) {
+    if !is_social {
+        if liquidity_usd >= 25_000.0 && liquidity_usd <= 35_000.0 {
+            // Public candidate with bonding curve slippage risk: restricted to 3.0% NAV
+            (ConvictionTier::LowVelocity, 3.0)
+        } else {
+            // Unverified Public Radar Candidates: Cap at Base Half-Kelly (4.5% NAV floor)
+            (ConvictionTier::LowVelocity, cfg.min_kelly_fraction_nav_pct)
+        }
+    } else {
+        // Social caller signals
+        if reputation_score >= 70.0 && caller_total_calls >= 5 {
+            // Only verified Social Signals with reputation_score >= 70.0 (and >= 5 calls) qualify for expanded 8.5% NAV ceiling
+            (ConvictionTier::HighConviction, cfg.max_kelly_fraction_nav_pct)
+        } else if reputation_score >= 50.0 {
+            (ConvictionTier::Baseline, cfg.base_kelly_fraction_nav_pct)
+        } else if reputation_score >= 25.0 {
+            (ConvictionTier::LowVelocity, cfg.min_kelly_fraction_nav_pct)
+        } else {
+            (ConvictionTier::LowVelocity, 0.0)
+        }
+    }
+}
+
+/// Dynamic Conviction-Tiered Kelly Sizing from explicit fraction percentage
+pub fn compute_dynamic_entry_size_sol_from_fraction(
+    bankroll_sol: f64,
+    fraction_pct: f64,
+    active_slots_used: usize,
+    cfg: &RiskConfig,
+) -> f64 {
+    // Headroom guard: if maximum active slots are already full, no new position can be opened
+    if active_slots_used >= cfg.max_active_slots {
+        return 0.0;
+    }
+
+    // Solvency guard: ensure minimum operational gas reserve remains untouched
+    let available_capital = (bankroll_sol - cfg.min_gas_reserve_sol).max(0.0);
+    if available_capital < 0.010 || fraction_pct <= 0.0 {
+        return 0.0;
+    }
+
+    let dynamic_fraction = fraction_pct / 100.0;
+    let unconstrained_sol = bankroll_sol * dynamic_fraction;
+    let floating_cap = bankroll_sol * cfg.max_position_pct_nav;
+    let absolute_cap = cfg.max_entry_sol.min(0.10);
+    let final_cap = floating_cap.min(absolute_cap);
+
+    let size = unconstrained_sol.min(final_cap).max(0.010);
+    if available_capital < size {
+        if available_capital < 0.010 {
+            return 0.0;
+        }
+        available_capital.min(final_cap)
+    } else {
+        size
+    }
+}
+
 /// Dynamic Conviction-Tiered Kelly Sizing with floating NAV-relative cap
 pub fn compute_dynamic_entry_size_sol(
     bankroll_sol: f64,
@@ -1158,60 +1227,60 @@ mod tests {
     #[test]
     fn test_validate_entry_gates() {
         let cfg = RiskConfig::default();
-        // Passing valid baseline (liq $30k >= $20k, ratio 1.5 >= 1.25, conviction 75% >= 55%)
-        assert!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg).is_ok());
+        // Passing valid baseline (liq $35k >= $32k, ratio 1.5 >= 1.25, conviction 75% >= 55%)
+        assert!(validate_entry_gates(35_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg).is_ok());
 
         // 0. Conviction below floor (45% < 55%)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 45.0, &cfg), Err("CONVICTION_BELOW_FLOOR"));
+        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 45.0, &cfg), Err("CONVICTION_BELOW_FLOOR"));
 
-        // 1. Liquidity below floor ($15,000 < $20,000)
+        // 1. Liquidity below floor ($15,000 < $32,000)
         assert_eq!(validate_entry_gates(15_000.0, 100_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
 
-        // 2. FDV to Liquidity ratio exceeded (FDV $500,000 / Liq $30,000 = 16.6x > 15.0x)
-        assert_eq!(validate_entry_gates(30_000.0, 500_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+        // 2. FDV to Liquidity ratio exceeded (FDV $600,000 / Liq $35,000 = 17.1x > 15.0x)
+        assert_eq!(validate_entry_gates(35_000.0, 600_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
 
         // 3. Entry momentum below threshold (+0.5% < +1.5%)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 0.5, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
+        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 0.5, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
 
         // 4. Entry momentum overextended (+90.0% > +85.0%)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 90.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("ENTRY_MOMENTUM_OVEREXTENDED"));
+        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 90.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("ENTRY_MOMENTUM_OVEREXTENDED"));
 
         // 5. H1 trend bearish (-12.0% < -10.0%)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, -12.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("H1_TREND_BEARISH"));
+        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, -12.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("H1_TREND_BEARISH"));
 
         // 6. Buy/sell ratio below threshold (1.15 < 1.25)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.15, 25, 5_000.0, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
+        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, 2.0, 1.15, 25, 5_000.0, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
 
         // 7. M5 txns below floor (10 < 15)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 10, 5_000.0, 75.0, &cfg), Err("M5_TXNS_BELOW_FLOOR"));
+        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, 2.0, 1.5, 10, 5_000.0, 75.0, &cfg), Err("M5_TXNS_BELOW_FLOOR"));
 
         // 8. M5 volume below floor ($1,000 < $2,500)
-        assert_eq!(validate_entry_gates(30_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 1_000.0, 75.0, &cfg), Err("M5_VOLUME_BELOW_FLOOR"));
+        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, 2.0, 1.5, 25, 1_000.0, 75.0, &cfg), Err("M5_VOLUME_BELOW_FLOOR"));
     }
 
     #[test]
     fn test_validate_queue_pop_snapshot() {
         let cfg = RiskConfig::default();
-        // Valid baseline: liq $25,000 >= $20,000, FDV/liq = 4x <= 15x, m5 = +2.5% >= 1.5%, h1 = +5% >= -10%, ratio = 1.5 >= 1.25, conviction = 75% >= 55%
-        assert!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 2.5, 5.0, 1.5, 75.0, &cfg).is_ok());
+        // Valid baseline: liq $35,000 >= $32,000, FDV/liq = 2.8x <= 15x, m5 = +2.5% >= 1.5%, h1 = +5% >= -10%, ratio = 1.5 >= 1.25, conviction = 75% >= 55%
+        assert!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 2.5, 5.0, 1.5, 75.0, &cfg).is_ok());
 
         // 0. Conviction below floor (45% < 55%)
-        assert_eq!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 2.5, 5.0, 1.5, 45.0, &cfg), Err("CONVICTION_BELOW_FLOOR"));
+        assert_eq!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 2.5, 5.0, 1.5, 45.0, &cfg), Err("CONVICTION_BELOW_FLOOR"));
 
-        // 1. Liquidity below floor ($15,000 < $20,000)
+        // 1. Liquidity below floor ($15,000 < $32,000)
         assert_eq!(validate_queue_pop_snapshot(15_000.0, 100_000.0, 2.5, 5.0, 1.5, 75.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
 
-        // 2. FDV to Liquidity ratio exceeded (FDV $400,000 / Liq $25,000 = 16x > 15x)
-        assert_eq!(validate_queue_pop_snapshot(25_000.0, 400_000.0, 2.5, 5.0, 1.5, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+        // 2. FDV to Liquidity ratio exceeded (FDV $600,000 / Liq $35,000 = 17.1x > 15x)
+        assert_eq!(validate_queue_pop_snapshot(35_000.0, 600_000.0, 2.5, 5.0, 1.5, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
 
         // 3. M5 momentum below threshold (+0.5% < +1.5%)
-        assert_eq!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 0.5, 5.0, 1.5, 75.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
+        assert_eq!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 0.5, 5.0, 1.5, 75.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
 
         // 4. H1 trend bearish (-12.0% < -10.0%)
-        assert_eq!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 2.5, -12.0, 1.5, 75.0, &cfg), Err("H1_TREND_BEARISH"));
+        assert_eq!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 2.5, -12.0, 1.5, 75.0, &cfg), Err("H1_TREND_BEARISH"));
 
         // 5. Buy/sell ratio below threshold (1.15 < 1.25)
-        assert_eq!(validate_queue_pop_snapshot(25_000.0, 100_000.0, 2.5, 5.0, 1.15, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
+        assert_eq!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 2.5, 5.0, 1.15, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
     }
 
     #[test]
@@ -1523,5 +1592,39 @@ mod tests {
         // 5. Blacklisted or score < 25.0: zero allocation (rejection)
         assert_eq!(adjust_kelly_fraction_for_caller(base_kelly, 20.0, false), 0.0);
         assert_eq!(adjust_kelly_fraction_for_caller(base_kelly, 80.0, true), 0.0);
+    }
+
+    #[test]
+    fn test_standardized_kelly_allocation() {
+        let cfg = RiskConfig::default();
+
+        // 1. Unverified Public Radar Candidate with liquidity between $25k-$35k -> restricted to 3.0% NAV
+        let (tier1, pct1) = resolve_standardized_kelly_allocation(false, 0.0, 0, 28000.0, &cfg);
+        assert_eq!(tier1, ConvictionTier::LowVelocity);
+        assert_eq!(pct1, 3.0);
+
+        // 2. Unverified Public Radar Candidate with liquidity > $35k -> capped at Base Half-Kelly (4.5% NAV floor)
+        let (tier2, pct2) = resolve_standardized_kelly_allocation(false, 0.0, 0, 50000.0, &cfg);
+        assert_eq!(tier2, ConvictionTier::LowVelocity);
+        assert_eq!(pct2, 4.5);
+
+        // 3. Verified Social Signal with reputation_score >= 70.0 AND >= 5 calls -> 8.5% NAV ceiling
+        let (tier3, pct3) = resolve_standardized_kelly_allocation(true, 75.0, 6, 30000.0, &cfg);
+        assert_eq!(tier3, ConvictionTier::HighConviction);
+        assert_eq!(pct3, 8.5);
+
+        // 4. Social Signal with high score (75.0) but < 5 calls -> capped at Baseline (6.5% NAV)
+        let (tier4, pct4) = resolve_standardized_kelly_allocation(true, 75.0, 3, 30000.0, &cfg);
+        assert_eq!(tier4, ConvictionTier::Baseline);
+        assert_eq!(pct4, 6.5);
+
+        // 5. Social Signal with degraded score (30.0) -> LowVelocity (4.5% NAV)
+        let (tier5, pct5) = resolve_standardized_kelly_allocation(true, 30.0, 10, 30000.0, &cfg);
+        assert_eq!(tier5, ConvictionTier::LowVelocity);
+        assert_eq!(pct5, 4.5);
+
+        // 6. Social Signal with toxic score (< 25.0) -> 0.0%
+        let (_, pct6) = resolve_standardized_kelly_allocation(true, 20.0, 10, 30000.0, &cfg);
+        assert_eq!(pct6, 0.0);
     }
 }

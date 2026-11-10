@@ -36,6 +36,22 @@ pub fn spawn_social_ipc_receiver(state: Arc<EngineState>, socket_path: &str) {
                                 "[SOCIAL IPC] Ingested social signal for mint {} from channel '{}', prioritizing in candidate radar queue",
                                 signal.mint, signal.channel_title
                             );
+
+                            let (rep_score, total_calls) = if let Ok(pg_client) = crate::db::establish_connection(crate::db::DEFAULT_DB_URL).await {
+                                crate::db::record_caller_signal(&pg_client, signal.channel_id, &signal.channel_title).await;
+                                if let Some((score, blacklisted, calls)) = crate::db::fetch_caller_reputation_and_calls(&pg_client, signal.channel_id).await {
+                                    if blacklisted || score < 25.0 {
+                                        println!("[SOCIAL IPC] Rejecting blacklisted/low-rep caller channel {} '{}' (score: {:.1})", signal.channel_id, signal.channel_title, score);
+                                        continue;
+                                    }
+                                    (score, calls)
+                                } else {
+                                    (50.0, 1)
+                                }
+                            } else {
+                                (50.0, 1)
+                            };
+
                             let candidate = RadarCandidate {
                                 symbol: format!("CALL:{}", signal.channel_title),
                                 token_mint: signal.mint.clone(),
@@ -51,7 +67,8 @@ pub fn spawn_social_ipc_receiver(state: Arc<EngineState>, socket_path: &str) {
                                     channel_title: signal.channel_title.clone(),
                                     message_timestamp_utc: signal.message_timestamp_utc,
                                     source: signal.source.clone(),
-                                    caller_reputation_score: 50.0,
+                                    caller_reputation_score: rep_score,
+                                    caller_total_calls: total_calls,
                                 }),
                             };
 

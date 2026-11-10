@@ -34,6 +34,8 @@ pub struct SocialSignalMetadata {
     pub message_timestamp_utc: i64,
     pub source: String,
     pub caller_reputation_score: f64,
+    #[serde(default)]
+    pub caller_total_calls: u64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -80,6 +82,7 @@ fn append_comprehensive_trade_log(
     bankroll_before: f64,
     bankroll_after: f64,
     is_toxic: bool,
+    realized_tip_lamports: u64,
 ) {
     use std::io::Write;
     use std::fs::OpenOptions;
@@ -89,7 +92,7 @@ fn append_comprehensive_trade_log(
 
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
         if !file_exists {
-            let header = "timestamp_exit_utc,timestamp_entry_utc,hold_duration_secs,token_symbol,token_mint,pair_address,dex_url,size_sol,entry_price_sol,peak_price_sol,trough_price_sol,exit_price_sol,mfe_pnl_pct,mae_pnl_pct,realized_pnl_pct,realized_pnl_sol,realized_pnl_eur,liquidity_usd,fdv_usd,exit_rule,outcome,simulated_fee_sol,bankroll_before_sol,bankroll_after_sol,is_toxic\n";
+            let header = "timestamp_exit_utc,timestamp_entry_utc,hold_duration_secs,token_symbol,token_mint,pair_address,dex_url,size_sol,entry_price_sol,peak_price_sol,trough_price_sol,exit_price_sol,mfe_pnl_pct,mae_pnl_pct,realized_pnl_pct,realized_pnl_sol,realized_pnl_eur,liquidity_usd,fdv_usd,exit_rule,outcome,actual_fee_sol,bankroll_before_sol,bankroll_after_sol,is_toxic,exit_tip_lamports\n";
             let _ = file.write_all(header.as_bytes());
         }
 
@@ -109,11 +112,11 @@ fn append_comprehensive_trade_log(
             risk::TradeOutcome::Scratch => "SCRATCH",
             risk::TradeOutcome::Loss => "LOSS",
         };
-        let simulated_fee = 0.00105; // 0.001 Jito tip + priority fees
+        let actual_fee_sol = (realized_tip_lamports as f64 / 1_000_000_000.0) + 0.000005; // tip + base signature fee
         let dex_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
 
         let row = format!(
-            "{},{},{},{},{},{},{},{:.4},{:.10e},{:.10e},{:.10e},{:.10e},{:.2},{:.2},{:.2},{:.6},{:.2},{:.2},{:.2},\"{}\",{},{:.5},{:.4},{:.4},{}\n",
+            "{},{},{},{},{},{},{},{:.4},{:.10e},{:.10e},{:.10e},{:.10e},{:.2},{:.2},{:.2},{:.6},{:.2},{:.2},{:.2},\"{}\",{},{:.6},{:.4},{:.4},{},{}\n",
             now_utc,
             pos.entry_time_iso,
             hold_duration,
@@ -135,10 +138,11 @@ fn append_comprehensive_trade_log(
             pos.fdv_usd,
             exit_reason,
             outcome,
-            simulated_fee,
+            actual_fee_sol,
             bankroll_before,
             bankroll_after,
-            is_toxic
+            is_toxic,
+            realized_tip_lamports
         );
         let _ = file.write_all(row.as_bytes());
     }
@@ -861,7 +865,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else {
                             risk::is_historical_exit_toxic(pnl_pct, &config.risk)
                         };
-                        let tip = risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk);
+                        let tip = if cols.len() > 25 {
+                            cols[25].trim().parse::<u64>().unwrap_or_else(|_| risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk))
+                        } else {
+                            risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk)
+                        };
                         let priority = if risk::is_emergency_risk_exit(&reason) {
                             "HIGH_URGENCY_EMERGENCY".to_string()
                         } else {
@@ -1199,10 +1207,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         let headers: Vec<&str> = lines[0].split(',').map(|s| s.trim()).collect();
                                         for line in lines.iter().skip(1) {
                                             let fields: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
-                                            if fields.len() == headers.len() {
+                                            if fields.len() >= 20 {
                                                 let mut obj = serde_json::Map::new();
-                                                for (h, f) in headers.iter().zip(fields.iter()) {
-                                                    obj.insert(h.to_string(), serde_json::Value::String(f.to_string()));
+                                                for (i, h) in headers.iter().enumerate() {
+                                                    let val = fields.get(i).unwrap_or(&"");
+                                                    obj.insert(h.to_string(), serde_json::Value::String(val.to_string()));
                                                 }
                                                 trades.push(serde_json::Value::Object(obj));
                                             }
@@ -1458,7 +1467,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     guard.effective_risk_cfg.stagnation_ttl_secs
                                 };
                                 let ttl_remaining_secs = ttl_secs.saturating_sub(hold_time_secs);
-                                let emergency_tip_lamports = guard.effective_risk_cfg.emergency_jito_tip_lamports;
+                                let emergency_stop_base_tip_lamports = guard.effective_risk_cfg.emergency_stop_base_tip_lamports;
+                                let emergency_stop_max_tip_lamports = guard.effective_risk_cfg.emergency_stop_max_tip_lamports;
 
                                 adaptive_exits::CruisePositionTelemetry {
                                     symbol: pos.symbol.clone(),
@@ -1475,7 +1485,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     cvd_divergence_state,
                                     hold_time_secs,
                                     ttl_remaining_secs,
-                                    emergency_tip_lamports,
+                                    emergency_tip_lamports: emergency_stop_base_tip_lamports,
+                                    emergency_stop_base_tip_lamports,
+                                    emergency_stop_max_tip_lamports,
                                 }
                             }).collect();
 
@@ -1972,16 +1984,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             } else if state.active_positions.len() < eval_cfg.risk.max_active_slots {
                                 let current_nav = state.current_bankroll_sol;
-                                let tier = risk::evaluate_conviction_tier(
-                                    final_snap.buy_sell_ratio,
-                                    conviction_pct,
-                                    final_snap.m5_buys + final_snap.m5_sells,
-                                    final_snap.m5_volume_usd,
+                                let is_social = candidate.social_signal.is_some();
+                                let (rep_score, total_calls) = if let Some(ref s) = candidate.social_signal {
+                                    (s.caller_reputation_score, s.caller_total_calls)
+                                } else {
+                                    (0.0, 0)
+                                };
+                                let (tier, fraction_pct) = risk::resolve_standardized_kelly_allocation(
+                                    is_social,
+                                    rep_score,
+                                    total_calls,
+                                    final_snap.liquidity_usd,
                                     &eval_cfg.risk,
                                 );
-                                let dynamic_entry_sol = risk::compute_dynamic_entry_size_sol(
+                                let dynamic_entry_sol = risk::compute_dynamic_entry_size_sol_from_fraction(
                                     current_nav,
-                                    tier,
+                                    fraction_pct,
                                     state.active_positions.len(),
                                     &eval_cfg.risk,
                                 );
@@ -2002,7 +2020,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let now_iso = chrono::Utc::now().to_rfc3339();
                                 let final_confirmed_spot = *prices.last().unwrap();
                                 println!("[CANONICAL ENTRY] Opened position on CONFIRMED candidate: {} ({}) | Tier: {} (Kelly: {:.1}%) | Confirmed Spot: {:.10e} | Ticks: {:?} | Sized: {:.4} SOL", 
-                                    candidate.symbol, candidate.token_mint, tier.label(), risk::resolve_kelly_fraction_pct(tier, &eval_cfg.risk), final_confirmed_spot, prices, dynamic_entry_sol);
+                                    candidate.symbol, candidate.token_mint, tier.label(), fraction_pct, final_confirmed_spot, prices, dynamic_entry_sol);
                                 
                                 eval_shadow.log_evaluation(
                                     &candidate.token_mint,
@@ -2270,7 +2288,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     risk::ExitAction::PartialSell { sol_basis_closed, rule_label, tip_lamports, .. } => {
                         let realized = risk::compute_net_realized_sol_with_tip(sol_basis_closed, pos.pnl_pct, &effective_risk_cfg, tip_lamports);
                         let net_exit_pnl_pct = risk::compute_net_pnl_pct(sol_basis_closed, realized);
-                        let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_jito_tip_lamports {
+                        let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_stop_base_tip_lamports {
                             "HIGH_URGENCY_EMERGENCY"
                         } else {
                             "STANDARD_ROUTINE"
@@ -2316,6 +2334,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             bankroll_before,
                             bankroll_after,
                             false,
+                            tip_lamports,
                         );
 
                         // 2. Persist to PostgreSQL (db.rs)
@@ -2386,7 +2405,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         let realized = risk::compute_net_realized_sol_with_tip(pos.size_sol, exit_pnl, &effective_risk_cfg, tip_lamports);
                         let net_exit_pnl_pct = risk::compute_net_pnl_pct(pos.size_sol, realized);
-                        let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_jito_tip_lamports {
+                        let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_stop_base_tip_lamports {
                             "HIGH_URGENCY_EMERGENCY"
                         } else {
                             "STANDARD_ROUTINE"
@@ -2447,6 +2466,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bankroll_before,
                     bankroll_after,
                     is_toxic_exit,
+                    tip_lamports,
                 );
                 let db_mint = pos.token_mint.clone();
                 let db_sym = pos.symbol.clone();

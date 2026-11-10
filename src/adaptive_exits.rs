@@ -289,6 +289,8 @@ pub struct CruisePositionTelemetry {
     pub hold_time_secs: u64,
     pub ttl_remaining_secs: u64,
     pub emergency_tip_lamports: u64,
+    pub emergency_stop_base_tip_lamports: u64,
+    pub emergency_stop_max_tip_lamports: u64,
 }
 
 /// Historical protection and circuit breaker execution stats.
@@ -602,7 +604,9 @@ mod tests {
                 cvd_divergence_state: "BULLISH_EXPANSION".to_string(),
                 hold_time_secs: 45,
                 ttl_remaining_secs: 115,
-                emergency_tip_lamports: 75000,
+                emergency_tip_lamports: 100000,
+                emergency_stop_base_tip_lamports: 100000,
+                emergency_stop_max_tip_lamports: 250000,
             }],
             supervisor_status: "MONITORING_ACTIVE".to_string(),
             historical_protection_stats: None,

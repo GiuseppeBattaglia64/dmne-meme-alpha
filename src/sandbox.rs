@@ -678,10 +678,10 @@ mod tests {
         low_liq.liquidity_usd = 15000.0;
         assert_eq!(gate.validate_pre_entry(&low_liq, &risk_cfg, &sandbox_cfg), Err("LIQUIDITY_BELOW_MIN"));
 
-        // FDV to Liquidity ratio exceeded ($400,000 / $26,000 = 15.4x > 15.0x)
+        // FDV to Liquidity ratio exceeded ($600,000 / $35,000 = 17.1x > 15.0x)
         let mut high_fdv = ctx.clone();
-        high_fdv.liquidity_usd = 26000.0;
-        high_fdv.fdv_usd = 400000.0;
+        high_fdv.liquidity_usd = 35000.0;
+        high_fdv.fdv_usd = 600000.0;
         assert_eq!(gate.validate_pre_entry(&high_fdv, &risk_cfg, &sandbox_cfg), Err("FDV_TO_LIQUIDITY_RATIO_EXCEEDED"));
 
         // Danger zone: FDV $64,000 on $69k target = 92.7%
