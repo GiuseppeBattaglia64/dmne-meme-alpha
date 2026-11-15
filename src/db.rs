@@ -32,17 +32,18 @@ pub async fn record_pre_trade_audit(
     lp_verified: bool,
     admitted: bool,
     reason: &str,
-) {
+) -> Result<(), Error> {
     let stmt = "
         INSERT INTO pre_trade_audits (
             token_mint, pool_address, dex_id, liquidity_usd, hhi_concentration,
             freeze_authority_null, mint_authority_null, lp_burn_verified, admitted, rejection_reason
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     ";
-    let _ = client.execute(
+    client.execute(
         stmt,
         &[&mint, &pool_address, &dex_id, &liquidity_usd, &hhi, &freeze_null, &mint_null, &lp_verified, &admitted, &reason]
-    ).await;
+    ).await?;
+    Ok(())
 }
 
 /// Logs a closed position settlement into PostgreSQL
@@ -416,17 +417,33 @@ pub struct AuditLogPayload {
     pub rejection_reason: String,
 }
 
-/// Spawns an asynchronous dedicated database worker with a single persistent connection
+/// Spawns an asynchronous dedicated database worker with auto-reconnecting persistent connection
 pub fn spawn_db_audit_worker(db_url: &'static str) -> mpsc::UnboundedSender<AuditLogPayload> {
     let (tx, mut rx) = mpsc::unbounded_channel::<AuditLogPayload>();
 
     tokio::spawn(async move {
+        let mut pending_audit: Option<AuditLogPayload> = None;
+
         loop {
             match establish_connection(db_url).await {
                 Ok(client) => {
                     println!("[DB WORKER] Persistent audit connection established.");
-                    while let Some(audit) = rx.recv().await {
-                        let _ = record_pre_trade_audit(
+                    loop {
+                        let audit = match pending_audit.take() {
+                            Some(pending) => pending,
+                            None => match rx.recv().await {
+                                Some(next) => next,
+                                None => return,
+                            },
+                        };
+
+                        if client.is_closed() {
+                            eprintln!("[DB AUDIT WORKER] Connection lost (client closed), reconnecting...");
+                            pending_audit = Some(audit);
+                            break;
+                        }
+
+                        if let Err(e) = record_pre_trade_audit(
                             &client,
                             &audit.token_mint,
                             &audit.pair_address,
@@ -438,9 +455,12 @@ pub fn spawn_db_audit_worker(db_url: &'static str) -> mpsc::UnboundedSender<Audi
                             audit.lp_burned,
                             audit.admitted,
                             &audit.rejection_reason,
-                        ).await;
+                        ).await {
+                            eprintln!("[DB AUDIT WORKER] Connection lost ({}), reconnecting...", e);
+                            pending_audit = Some(audit);
+                            break;
+                        }
                     }
-                    break;
                 }
                 Err(e) => {
                     eprintln!("[DB WORKER] Connection failed: {}. Retrying in 3s...", e);
