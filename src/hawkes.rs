@@ -333,10 +333,16 @@ pub fn evaluate_hawkes_filter(
         let discrete_disp = evaluate_discrete_orderflow_dispersion_with_config(&counts, cfg);
 
         // 1. Robotic clocking check: continuous deterministic periodicity or discrete underdispersion
+        // Account for Solana 1s integer blockTime quantization (rapid organic swaps at mean_dt <= 2.0s)
+        let is_integer_second_quantized = sorted_ts.iter().all(|&t| (t - t.round()).abs() < 1e-6);
+        let block_quantization_exempt = is_integer_second_quantized && mean_dt <= 2.0;
         if discrete_disp.is_underdispersed_robotic {
             is_wash = true;
             reason = discrete_disp.rejection_reason;
-        } else if mean_dt <= cfg.max_robotic_interval_secs && cv < cfg.min_cv_periodicity_threshold {
+        } else if !block_quantization_exempt
+            && mean_dt <= cfg.max_robotic_interval_secs
+            && cv < cfg.min_cv_periodicity_threshold
+        {
             is_wash = true;
             reason = Some(format!(
                 "ROBOTIC_PERIODICITY: CV {:.3} < floor {:.2} at mean dt {:.2}s",
@@ -929,5 +935,77 @@ mod tests {
             collapsed.push(now - 5.1 - (i as f64 * 1.5));
         }
         assert!(evaluator.evaluate_inflight_decay(&collapsed, now));
+    }
+
+    #[test]
+    fn test_onchain_blocktime_quantization_vs_metronomic_bot() {
+        let cfg = HawkesConfig::default();
+        let base = 1_763_290_000.0;
+
+        // 1. Real on-chain integer-second blockTime arrivals (rapid 1s quantized organic swaps)
+        // must NOT trigger ROBOTIC_PERIODICITY regardless of 5.3s scanner polling cadence.
+        let organic_block_times = vec![
+            base + 1.0,
+            base + 2.0,
+            base + 3.0,
+            base + 4.0,
+            base + 5.0,
+            base + 6.0,
+            base + 7.0,
+        ];
+        let organic_metrics = evaluate_hawkes_filter(&organic_block_times, base + 8.0, &cfg);
+        assert!(
+            !organic_metrics
+                .rejection_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("ROBOTIC_PERIODICITY"),
+            "1s quantized integer blockTimes should not false-positive ROBOTIC_PERIODICITY, got {:?}",
+            organic_metrics.rejection_reason
+        );
+
+        // 2. Organic irregular on-chain arrivals spread across 30s
+        let organic_irregular = vec![
+            base + 1.0,
+            base + 2.0,
+            base + 5.0,
+            base + 6.0,
+            base + 13.0,
+            base + 14.0,
+            base + 22.0,
+            base + 27.0,
+        ];
+        let irregular_metrics = evaluate_hawkes_filter(&organic_irregular, base + 28.0, &cfg);
+        assert!(
+            !irregular_metrics
+                .rejection_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("ROBOTIC_PERIODICITY"),
+            "Organic irregular arrivals should not trigger ROBOTIC_PERIODICITY, got {:?}",
+            irregular_metrics.rejection_reason
+        );
+
+        // 3. Synthetic 5.3s metronomic bot stream MUST still trigger ROBOTIC_PERIODICITY
+        let synthetic_bot = vec![
+            base + 0.0,
+            base + 5.3,
+            base + 10.6,
+            base + 15.9,
+            base + 21.2,
+            base + 26.5,
+            base + 31.8,
+        ];
+        let bot_metrics = evaluate_hawkes_filter(&synthetic_bot, base + 32.0, &cfg);
+        assert!(bot_metrics.is_wash_trading);
+        assert!(
+            bot_metrics
+                .rejection_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("ROBOTIC_PERIODICITY"),
+            "Synthetic 5.3s metronomic stream must trigger ROBOTIC_PERIODICITY, got {:?}",
+            bot_metrics.rejection_reason
+        );
     }
 }

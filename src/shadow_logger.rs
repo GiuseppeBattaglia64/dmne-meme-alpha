@@ -160,6 +160,100 @@ impl HawkesArrivalTracker {
     }
 }
 
+async fn post_rpc_with_retry(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    payload: &serde_json::Value,
+    timeout: std::time::Duration,
+) -> Option<serde_json::Value> {
+    for attempt in 0..2 {
+        match client.post(rpc_url).timeout(timeout).json(payload).send().await {
+            Ok(res) => {
+                let status = res.status();
+                if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+                    if attempt == 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        continue;
+                    }
+                    return None;
+                }
+                if let Ok(json) = res.json::<serde_json::Value>().await {
+                    let is_rate_limited = json
+                        .get("error")
+                        .and_then(|e| e.get("code"))
+                        .and_then(|c| c.as_i64())
+                        == Some(-32429);
+                    if is_rate_limited && attempt == 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        continue;
+                    }
+                    return Some(json);
+                }
+            }
+            Err(_) => {
+                if attempt == 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    continue;
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Queries Solana JSON-RPC `getSignaturesForAddress` for real on-chain `blockTime` values (sorted ascending in seconds)
+pub async fn fetch_rpc_arrival_timestamps_secs(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    pair_address: &str,
+    mint: &str,
+    limit: usize,
+    timeout_secs: u64,
+) -> Vec<f64> {
+    if timeout_secs == 0 || rpc_url.is_empty() {
+        return Vec::new();
+    }
+    let target = if !pair_address.is_empty() {
+        pair_address
+    } else if !mint.is_empty() {
+        mint
+    } else {
+        return Vec::new();
+    };
+
+    let timeout = std::time::Duration::from_secs(timeout_secs);
+    let payload = serde_json::json!({
+        "jsonrpc": JSONRPC_VERSION,
+        "id": 1,
+        "method": "getSignaturesForAddress",
+        "params": [
+            target,
+            {
+                "limit": limit,
+                "commitment": RPC_COMMITMENT_CONFIRMED
+            }
+        ]
+    });
+
+    let mut timestamps = Vec::new();
+    if let Ok(res) = client.post(rpc_url).timeout(timeout).json(&payload).send().await {
+        if let Ok(json) = res.json::<serde_json::Value>().await {
+            if let Some(entries) = json.get("result").and_then(|r| r.as_array()) {
+                for entry in entries {
+                    if let Some(bt) = entry.get("blockTime").and_then(|v| v.as_i64()) {
+                        if bt > 0 {
+                            timestamps.push(bt as f64);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    timestamps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    timestamps
+}
+
 /// Queries Solana JSON-RPC for token largest accounts and total supply, returning top 10 shares and Shannon entropy
 pub async fn fetch_rpc_holder_distribution(
     client: &reqwest::Client,
@@ -170,7 +264,11 @@ pub async fn fetch_rpc_holder_distribution(
     if timeout_secs == 0 || rpc_url.is_empty() || mint.is_empty() {
         return (Vec::new(), 0.0);
     }
-    let timeout = std::time::Duration::from_secs(timeout_secs);
+    let timeout = if timeout_secs <= 3 {
+        std::time::Duration::from_millis(3500)
+    } else {
+        std::time::Duration::from_secs(timeout_secs)
+    };
 
     // 1. Fetch largest token accounts
     let accounts_payload = serde_json::json!({
@@ -183,27 +281,18 @@ pub async fn fetch_rpc_holder_distribution(
         ]
     });
 
-    let accounts_res = client
-        .post(rpc_url)
-        .timeout(timeout)
-        .json(&accounts_payload)
-        .send()
-        .await;
-
     let mut ui_amounts: Vec<f64> = Vec::new();
 
-    if let Ok(res) = accounts_res {
-        if let Ok(json) = res.json::<serde_json::Value>().await {
-            if let Some(accounts) = json
-                .get("result")
-                .and_then(|r| r.get("value"))
-                .and_then(|v| v.as_array())
-            {
-                for a in accounts.iter().take(MAX_TOP_HOLDERS_COUNT) {
-                    if let Some(amt) = a.get("uiAmount").and_then(|v| v.as_f64()) {
-                        if amt > 0.0 {
-                            ui_amounts.push(amt);
-                        }
+    if let Some(json) = post_rpc_with_retry(client, rpc_url, &accounts_payload, timeout).await {
+        if let Some(accounts) = json
+            .get("result")
+            .and_then(|r| r.get("value"))
+            .and_then(|v| v.as_array())
+        {
+            for a in accounts.iter().take(MAX_TOP_HOLDERS_COUNT) {
+                if let Some(amt) = a.get("uiAmount").and_then(|v| v.as_f64()) {
+                    if amt > 0.0 {
+                        ui_amounts.push(amt);
                     }
                 }
             }
@@ -225,25 +314,16 @@ pub async fn fetch_rpc_holder_distribution(
         ]
     });
 
-    let supply_res = client
-        .post(rpc_url)
-        .timeout(timeout)
-        .json(&supply_payload)
-        .send()
-        .await;
-
     let mut total_supply: f64 = 0.0;
-    if let Ok(res) = supply_res {
-        if let Ok(json) = res.json::<serde_json::Value>().await {
-            if let Some(s) = json
-                .get("result")
-                .and_then(|r| r.get("value"))
-                .and_then(|v| v.get("uiAmount"))
-                .and_then(|v| v.as_f64())
-            {
-                if s > 0.0 {
-                    total_supply = s;
-                }
+    if let Some(json) = post_rpc_with_retry(client, rpc_url, &supply_payload, timeout).await {
+        if let Some(s) = json
+            .get("result")
+            .and_then(|r| r.get("value"))
+            .and_then(|v| v.get("uiAmount"))
+            .and_then(|v| v.as_f64())
+        {
+            if s > 0.0 {
+                total_supply = s;
             }
         }
     }

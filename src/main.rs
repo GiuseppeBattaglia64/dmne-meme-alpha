@@ -1781,6 +1781,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             state.rejected_candidates.insert(candidate.symbol.clone(), now_epoch);
                         }
                         state.rejections_count += 1;
+                        state.record_stage2_audit(
+                            &candidate.symbol,
+                            &candidate.token_mint,
+                            candidate.liquidity_usd,
+                            "Confirm: Fetch Fail".to_string(),
+                            "REJECT: CONFIRM_FETCH_FAIL".to_string(),
+                            false,
+                            RejectionCategory::LowConviction,
+                        );
                         state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                         state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                     } else {
@@ -1801,7 +1810,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &eval_cfg.risk,
                         );
 
-                        let arrivals = eval_shadow.get_arrival_timestamps_secs(&candidate.token_mint).await;
+                        let rpc_arrivals = shadow_logger::fetch_rpc_arrival_timestamps_secs(
+                            &eval_client,
+                            &eval_cfg.solana.rpc_url,
+                            &final_snap.pair_address,
+                            &candidate.token_mint,
+                            25,
+                            2,
+                        ).await;
+                        let arrivals = if !rpc_arrivals.is_empty() {
+                            rpc_arrivals
+                        } else {
+                            eval_shadow.get_arrival_timestamps_secs(&candidate.token_mint).await
+                        };
                         let genesis_profile = if eval_cfg.genesis_guard.enabled {
                             Some(genesis_guard::inspect_candidate_genesis(
                                 &eval_client,
@@ -2006,6 +2027,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 if dynamic_entry_sol < eval_cfg.risk.min_entry_sol {
                                     println!("[SOLVENCY GUARD] Dynamic entry size {:.4} SOL below min entry floor ({:.4} SOL); skipping entry on {}",
                                         dynamic_entry_sol, eval_cfg.risk.min_entry_sol, candidate.symbol);
+                                    state.record_stage2_audit(
+                                        &candidate.symbol,
+                                        &candidate.token_mint,
+                                        final_snap.liquidity_usd,
+                                        format!("Size: {:.4} SOL", dynamic_entry_sol),
+                                        "REJECT: SOLVENCY_FLOOR".to_string(),
+                                        false,
+                                        RejectionCategory::LowConviction,
+                                    );
                                     state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
                                     state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                                     continue;
@@ -2092,6 +2122,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     admitted: true,
                                     rejection_reason: "Admitted (Multi-Tick Confirmed)".to_string(),
                                 });
+                            } else {
+                                let slots_used = state.active_positions.len();
+                                println!("[SLOT FULL RACE] Active slots ({}/{}) filled during confirmation for {} ({})",
+                                    slots_used, eval_cfg.risk.max_active_slots, candidate.symbol, candidate.token_mint);
+                                state.record_stage2_audit(
+                                    &candidate.symbol,
+                                    &candidate.token_mint,
+                                    final_snap.liquidity_usd,
+                                    format!("Slots: {}/{}", slots_used, eval_cfg.risk.max_active_slots),
+                                    "SKIP: SLOTS_FULL".to_string(),
+                                    false,
+                                    RejectionCategory::LowConviction,
+                                );
+                                state.radar_candidates.retain(|c| c.token_mint != candidate.token_mint);
+                                state.candidate_queue.retain(|c| c.token_mint != candidate.token_mint);
                             }
                         }
                     }
@@ -2713,7 +2758,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                         
                                         // Article 31.28 Canonical Admission Evaluation
-                                        let arrival_timestamps = scanner_shadow.get_arrival_timestamps_secs(&mint).await;
+                                        let rpc_arrivals = shadow_logger::fetch_rpc_arrival_timestamps_secs(
+                                            &scanner_client,
+                                            rpc_endpoint,
+                                            &pair_addr,
+                                            &mint,
+                                            25,
+                                            2,
+                                        ).await;
+                                        let arrival_timestamps = if !rpc_arrivals.is_empty() {
+                                            rpc_arrivals
+                                        } else {
+                                            scanner_shadow.get_arrival_timestamps_secs(&mint).await
+                                        };
                                         let genesis_profile = if scanner_cfg.genesis_guard.enabled {
                                             Some(genesis_guard::inspect_candidate_genesis(
                                                 &scanner_client,
