@@ -1810,9 +1810,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &eval_cfg.risk,
                         );
 
-                        let rpc_arrivals = shadow_logger::fetch_rpc_arrival_timestamps_secs(
+                        let rpc_arrivals = shadow_logger::fetch_rpc_arrival_timestamps_secs_with_fallback(
                             &eval_client,
                             &eval_cfg.solana.rpc_url,
+                            Some(&eval_cfg.solana.public_rpc_url),
                             &final_snap.pair_address,
                             &candidate.token_mint,
                             25,
@@ -1834,17 +1835,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             None
                         };
 
+                        let mut eval_holder_fetch_failed = false;
                         let holder_records: Option<Vec<funder_graph::TokenHolderRecord>> = if let Some(cached) = eval_funder.cache.get(&candidate.token_mint) {
                             Some(cached.clone())
                         } else {
-                            let holders = funder_graph::fetch_holders_from_rpc(
+                            let dist = shadow_logger::fetch_rpc_holder_distribution_detailed(
                                 &eval_client,
                                 &eval_cfg.solana.rpc_url,
+                                Some(&eval_cfg.solana.public_rpc_url),
                                 &candidate.token_mint,
-                                2,
+                                &final_snap.pair_address,
+                                3,
                             ).await;
-                            if !holders.is_empty() {
-                                Some(holders)
+                            if !dist.rpc_succeeded {
+                                eval_holder_fetch_failed = true;
+                                None
+                            } else if !dist.accounts.is_empty() {
+                                Some(dist.accounts.into_iter().enumerate().map(|(i, acct)| {
+                                    funder_graph::TokenHolderRecord {
+                                        holder_address: if acct.token_account.is_empty() {
+                                            format!("Holder_{}_{}", &candidate.token_mint[..6.min(candidate.token_mint.len())], i)
+                                        } else {
+                                            acct.token_account
+                                        },
+                                        supply_pct: acct.share_pct,
+                                        is_liquidity_pool: acct.is_liquidity_pool,
+                                        funding_source: None,
+                                    }
+                                }).collect())
                             } else {
                                 None
                             }
@@ -1867,6 +1885,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             arrival_timestamps: arrivals,
                             genesis_profile,
                             holder_records,
+                            holder_fetch_failed: eval_holder_fetch_failed,
                             vpin_calculator: None,
                             caller_msg_timestamp_utc: candidate.social_signal.as_ref().map(|s| s.message_timestamp_utc),
                             pool_creation_timestamp_utc: None,
@@ -2724,7 +2743,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 dynamic_hhi = hhi;
                                             }
                                         }
-                                        if !institutional::evaluate_holder_hhi(&scanner_client, rpc_endpoint, &mint, dynamic_hhi).await {
+                                        if !institutional::evaluate_holder_hhi_with_fallback(
+                                            &scanner_client,
+                                            rpc_endpoint,
+                                            Some(&scanner_cfg.solana.public_rpc_url),
+                                            &mint,
+                                            &pair_addr,
+                                            dynamic_hhi,
+                                        ).await {
                                             {
                                                 let mut g = scanner_state.write().await;
                                                 g.rejections_count += 1;
@@ -2758,9 +2784,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                         
                                         // Article 31.28 Canonical Admission Evaluation
-                                        let rpc_arrivals = shadow_logger::fetch_rpc_arrival_timestamps_secs(
+                                        let rpc_arrivals = shadow_logger::fetch_rpc_arrival_timestamps_secs_with_fallback(
                                             &scanner_client,
                                             rpc_endpoint,
+                                            Some(&scanner_cfg.solana.public_rpc_url),
                                             &pair_addr,
                                             &mint,
                                             25,
@@ -2782,21 +2809,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             None
                                         };
 
+                                        let mut scanner_holder_fetch_failed = false;
                                         let holder_records: Option<Vec<funder_graph::TokenHolderRecord>> = if let Some(cached) = scanner_funder.cache.get(&mint) {
                                             Some(cached.clone())
                                         } else {
-                                            let (shares, _) = shadow_logger::fetch_rpc_holder_distribution(
+                                            let dist = shadow_logger::fetch_rpc_holder_distribution_detailed(
                                                 &scanner_client,
                                                 rpc_endpoint,
+                                                Some(&scanner_cfg.solana.public_rpc_url),
                                                 &mint,
-                                                2,
+                                                &pair_addr,
+                                                3,
                                             ).await;
-                                            if !shares.is_empty() {
-                                                Some(shares.into_iter().enumerate().map(|(i, pct)| {
+                                            if !dist.rpc_succeeded {
+                                                scanner_holder_fetch_failed = true;
+                                                None
+                                            } else if !dist.accounts.is_empty() {
+                                                Some(dist.accounts.into_iter().enumerate().map(|(i, acct)| {
                                                     funder_graph::TokenHolderRecord {
-                                                        holder_address: format!("Holder_{}_{}", &mint[..6.min(mint.len())], i),
-                                                        supply_pct: pct,
-                                                        is_liquidity_pool: i == 0 && pct > 45.0,
+                                                        holder_address: if acct.token_account.is_empty() {
+                                                            format!("Holder_{}_{}", &mint[..6.min(mint.len())], i)
+                                                        } else {
+                                                            acct.token_account
+                                                        },
+                                                        supply_pct: acct.share_pct,
+                                                        is_liquidity_pool: acct.is_liquidity_pool,
                                                         funding_source: None,
                                                     }
                                                 }).collect())
@@ -2822,6 +2859,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             arrival_timestamps,
                                             genesis_profile,
                                             holder_records,
+                                            holder_fetch_failed: scanner_holder_fetch_failed,
                                             vpin_calculator: None,
                                             caller_msg_timestamp_utc: None,
                                             pool_creation_timestamp_utc: None,

@@ -160,40 +160,138 @@ impl HawkesArrivalTracker {
     }
 }
 
-async fn post_rpc_with_retry(
+const RPC_CACHE_TTL_SECS: u64 = 15;
+
+pub const KNOWN_DEX_POOL_AUTHORITIES: &[&str] = &[
+    "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1", // Raydium Authority V4
+    "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL", // Raydium CPMM
+    "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",  // PumpSwap AMM
+    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",  // Orca Whirlpool
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",  // Meteora
+];
+
+pub fn is_dex_pool_authority(owner: &str, pair_address: &str) -> bool {
+    KNOWN_DEX_POOL_AUTHORITIES.contains(&owner) || (!pair_address.is_empty() && owner == pair_address)
+}
+
+#[derive(Debug, Clone)]
+pub struct HolderAccountShare {
+    pub token_account: String,
+    pub owner: Option<String>,
+    pub share_pct: f64,
+    pub is_liquidity_pool: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct HolderDistributionResult {
+    pub accounts: Vec<HolderAccountShare>,
+    pub entropy: f64,
+    pub rpc_succeeded: bool,
+}
+
+static HOLDER_RPC_CACHE: std::sync::OnceLock<
+    std::sync::Mutex<HashMap<String, (std::time::Instant, HolderDistributionResult)>>,
+> = std::sync::OnceLock::new();
+
+static ARRIVAL_RPC_CACHE: std::sync::OnceLock<
+    std::sync::Mutex<HashMap<String, (std::time::Instant, Vec<f64>)>>,
+> = std::sync::OnceLock::new();
+
+fn holder_rpc_cache() -> &'static std::sync::Mutex<HashMap<String, (std::time::Instant, HolderDistributionResult)>> {
+    HOLDER_RPC_CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+fn arrival_rpc_cache() -> &'static std::sync::Mutex<HashMap<String, (std::time::Instant, Vec<f64>)>> {
+    ARRIVAL_RPC_CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+fn parse_retry_after_ms(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    headers
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|secs| secs.saturating_mul(1000).min(1500))
+}
+
+fn jittered_backoff_ms(base_ms: u64) -> u64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(0);
+    (base_ms + (nanos % 150)).min(1500)
+}
+
+pub async fn post_rpc_with_retry(
     client: &reqwest::Client,
-    rpc_url: &str,
+    primary_rpc_url: &str,
+    fallback_rpc_url: Option<&str>,
     payload: &serde_json::Value,
     timeout: std::time::Duration,
 ) -> Option<serde_json::Value> {
-    for attempt in 0..2 {
-        match client.post(rpc_url).timeout(timeout).json(payload).send().await {
-            Ok(res) => {
-                let status = res.status();
-                if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+    let mut endpoints: Vec<&str> = Vec::with_capacity(2);
+    if !primary_rpc_url.is_empty() {
+        endpoints.push(primary_rpc_url);
+    }
+    if let Some(fb) = fallback_rpc_url {
+        if !fb.is_empty() && fb != primary_rpc_url {
+            endpoints.push(fb);
+        }
+    }
+
+    for (idx, endpoint) in endpoints.iter().enumerate() {
+        let has_fallback = idx + 1 < endpoints.len();
+        for attempt in 0..2 {
+            match client.post(*endpoint).timeout(timeout).json(payload).send().await {
+                Ok(res) => {
+                    let status = res.status();
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        // Fail over immediately to public_rpc_url when primary Helius returns 429
+                        if idx == 0 && has_fallback {
+                            break;
+                        }
+                        if attempt == 0 {
+                            let wait_ms = parse_retry_after_ms(res.headers())
+                                .unwrap_or_else(|| jittered_backoff_ms(250));
+                            tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
+                            continue;
+                        }
+                        break;
+                    }
+                    if status.is_server_error() {
+                        if attempt == 0 {
+                            let wait_ms = parse_retry_after_ms(res.headers())
+                                .unwrap_or_else(|| jittered_backoff_ms(250));
+                            tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
+                            continue;
+                        }
+                        break;
+                    }
+                    if let Ok(json) = res.json::<serde_json::Value>().await {
+                        let is_rate_limited = json
+                            .get("error")
+                            .and_then(|e| e.get("code"))
+                            .and_then(|c| c.as_i64())
+                            == Some(-32429);
+                        if is_rate_limited {
+                            if idx == 0 && has_fallback {
+                                break;
+                            }
+                            if attempt == 0 {
+                                tokio::time::sleep(std::time::Duration::from_millis(jittered_backoff_ms(250))).await;
+                                continue;
+                            }
+                            break;
+                        }
+                        if json.get("result").is_some() {
+                            return Some(json);
+                        }
+                    }
+                }
+                Err(_) => {
                     if attempt == 0 {
-                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(jittered_backoff_ms(250))).await;
                         continue;
                     }
-                    return None;
-                }
-                if let Ok(json) = res.json::<serde_json::Value>().await {
-                    let is_rate_limited = json
-                        .get("error")
-                        .and_then(|e| e.get("code"))
-                        .and_then(|c| c.as_i64())
-                        == Some(-32429);
-                    if is_rate_limited && attempt == 0 {
-                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                        continue;
-                    }
-                    return Some(json);
-                }
-            }
-            Err(_) => {
-                if attempt == 0 {
-                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                    continue;
                 }
             }
         }
@@ -202,15 +300,17 @@ async fn post_rpc_with_retry(
 }
 
 /// Queries Solana JSON-RPC `getSignaturesForAddress` for real on-chain `blockTime` values (sorted ascending in seconds)
-pub async fn fetch_rpc_arrival_timestamps_secs(
+/// with 15-second TTL cache and primary -> public RPC failover.
+pub async fn fetch_rpc_arrival_timestamps_secs_with_fallback(
     client: &reqwest::Client,
-    rpc_url: &str,
+    primary_rpc_url: &str,
+    fallback_rpc_url: Option<&str>,
     pair_address: &str,
     mint: &str,
     limit: usize,
     timeout_secs: u64,
 ) -> Vec<f64> {
-    if timeout_secs == 0 || rpc_url.is_empty() {
+    if timeout_secs == 0 || primary_rpc_url.is_empty() {
         return Vec::new();
     }
     let target = if !pair_address.is_empty() {
@@ -220,6 +320,14 @@ pub async fn fetch_rpc_arrival_timestamps_secs(
     } else {
         return Vec::new();
     };
+
+    if let Ok(cache) = arrival_rpc_cache().lock() {
+        if let Some((cached_at, cached_ts)) = cache.get(target) {
+            if cached_at.elapsed().as_secs() < RPC_CACHE_TTL_SECS {
+                return cached_ts.clone();
+            }
+        }
+    }
 
     let timeout = std::time::Duration::from_secs(timeout_secs);
     let payload = serde_json::json!({
@@ -236,14 +344,12 @@ pub async fn fetch_rpc_arrival_timestamps_secs(
     });
 
     let mut timestamps = Vec::new();
-    if let Ok(res) = client.post(rpc_url).timeout(timeout).json(&payload).send().await {
-        if let Ok(json) = res.json::<serde_json::Value>().await {
-            if let Some(entries) = json.get("result").and_then(|r| r.as_array()) {
-                for entry in entries {
-                    if let Some(bt) = entry.get("blockTime").and_then(|v| v.as_i64()) {
-                        if bt > 0 {
-                            timestamps.push(bt as f64);
-                        }
+    if let Some(json) = post_rpc_with_retry(client, primary_rpc_url, fallback_rpc_url, &payload, timeout).await {
+        if let Some(entries) = json.get("result").and_then(|r| r.as_array()) {
+            for entry in entries {
+                if let Some(bt) = entry.get("blockTime").and_then(|v| v.as_i64()) {
+                    if bt > 0 {
+                        timestamps.push(bt as f64);
                     }
                 }
             }
@@ -251,19 +357,74 @@ pub async fn fetch_rpc_arrival_timestamps_secs(
     }
 
     timestamps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    if !timestamps.is_empty() {
+        if let Ok(mut cache) = arrival_rpc_cache().lock() {
+            if cache.len() > 512 {
+                let ttl = std::time::Duration::from_secs(RPC_CACHE_TTL_SECS);
+                cache.retain(|_, (t, _)| t.elapsed() < ttl);
+            }
+            cache.insert(target.to_string(), (std::time::Instant::now(), timestamps.clone()));
+        }
+    }
     timestamps
 }
 
-/// Queries Solana JSON-RPC for token largest accounts and total supply, returning top 10 shares and Shannon entropy
-pub async fn fetch_rpc_holder_distribution(
+pub async fn fetch_rpc_arrival_timestamps_secs(
     client: &reqwest::Client,
     rpc_url: &str,
+    pair_address: &str,
     mint: &str,
+    limit: usize,
     timeout_secs: u64,
-) -> (Vec<f64>, f64) {
-    if timeout_secs == 0 || rpc_url.is_empty() || mint.is_empty() {
-        return (Vec::new(), 0.0);
+) -> Vec<f64> {
+    fetch_rpc_arrival_timestamps_secs_with_fallback(
+        client,
+        rpc_url,
+        None,
+        pair_address,
+        mint,
+        limit,
+        timeout_secs,
+    ).await
+}
+
+/// Queries Solana JSON-RPC for token largest accounts, top-5 account owners (`getMultipleAccounts`), and total supply.
+/// Returns `share_pct` in `[0.0, 100.0]`, DEX pool exclusion flags, Shannon entropy, and `rpc_succeeded`,
+/// backed by a 15-second per-mint TTL cache and primary -> public RPC failover.
+pub async fn fetch_rpc_holder_distribution_detailed(
+    client: &reqwest::Client,
+    primary_rpc_url: &str,
+    fallback_rpc_url: Option<&str>,
+    mint: &str,
+    pair_address: &str,
+    timeout_secs: u64,
+) -> HolderDistributionResult {
+    if timeout_secs == 0 || primary_rpc_url.is_empty() || mint.is_empty() {
+        return HolderDistributionResult {
+            accounts: Vec::new(),
+            entropy: 0.0,
+            rpc_succeeded: false,
+        };
     }
+
+    if let Ok(cache) = holder_rpc_cache().lock() {
+        if let Some((cached_at, cached_res)) = cache.get(mint) {
+            if cached_at.elapsed().as_secs() < RPC_CACHE_TTL_SECS {
+                let mut res = cached_res.clone();
+                if !pair_address.is_empty() {
+                    for acct in &mut res.accounts {
+                        if let Some(ref owner) = acct.owner {
+                            if is_dex_pool_authority(owner, pair_address) {
+                                acct.is_liquidity_pool = true;
+                            }
+                        }
+                    }
+                }
+                return res;
+            }
+        }
+    }
+
     let timeout = if timeout_secs <= 3 {
         std::time::Duration::from_millis(3500)
     } else {
@@ -281,29 +442,94 @@ pub async fn fetch_rpc_holder_distribution(
         ]
     });
 
-    let mut ui_amounts: Vec<f64> = Vec::new();
+    let Some(accounts_json) = post_rpc_with_retry(
+        client,
+        primary_rpc_url,
+        fallback_rpc_url,
+        &accounts_payload,
+        timeout,
+    ).await else {
+        return HolderDistributionResult {
+            accounts: Vec::new(),
+            entropy: 0.0,
+            rpc_succeeded: false,
+        };
+    };
 
-    if let Some(json) = post_rpc_with_retry(client, rpc_url, &accounts_payload, timeout).await {
-        if let Some(accounts) = json
-            .get("result")
-            .and_then(|r| r.get("value"))
-            .and_then(|v| v.as_array())
-        {
-            for a in accounts.iter().take(MAX_TOP_HOLDERS_COUNT) {
-                if let Some(amt) = a.get("uiAmount").and_then(|v| v.as_f64()) {
-                    if amt > 0.0 {
-                        ui_amounts.push(amt);
+    let mut raw_accounts: Vec<(String, f64)> = Vec::new();
+    if let Some(accounts) = accounts_json
+        .get("result")
+        .and_then(|r| r.get("value"))
+        .and_then(|v| v.as_array())
+    {
+        for a in accounts.iter().take(MAX_TOP_HOLDERS_COUNT) {
+            if let Some(amt) = a.get("uiAmount").and_then(|v| v.as_f64()) {
+                if amt > 0.0 {
+                    let addr = a.get("address").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    raw_accounts.push((addr, amt));
+                }
+            }
+        }
+    }
+
+    if raw_accounts.is_empty() {
+        let empty_res = HolderDistributionResult {
+            accounts: Vec::new(),
+            entropy: 0.0,
+            rpc_succeeded: true,
+        };
+        if let Ok(mut cache) = holder_rpc_cache().lock() {
+            cache.insert(mint.to_string(), (std::time::Instant::now(), empty_res.clone()));
+        }
+        return empty_res;
+    }
+
+    // 2. Single batched getMultipleAccounts (jsonParsed) for top 5 token accounts to identify DEX pool owners
+    let top5_addrs: Vec<String> = raw_accounts
+        .iter()
+        .take(5)
+        .map(|(addr, _)| addr.clone())
+        .filter(|addr| !addr.is_empty())
+        .collect();
+    let mut owners: Vec<Option<String>> = vec![None; raw_accounts.len()];
+    if !top5_addrs.is_empty() {
+        let multi_payload = serde_json::json!({
+            "jsonrpc": JSONRPC_VERSION,
+            "id": 3,
+            "method": "getMultipleAccounts",
+            "params": [
+                top5_addrs,
+                { "encoding": "jsonParsed", "commitment": RPC_COMMITMENT_CONFIRMED }
+            ]
+        });
+        if let Some(multi_json) = post_rpc_with_retry(
+            client,
+            primary_rpc_url,
+            fallback_rpc_url,
+            &multi_payload,
+            timeout,
+        ).await {
+            if let Some(vals) = multi_json
+                .get("result")
+                .and_then(|r| r.get("value"))
+                .and_then(|v| v.as_array())
+            {
+                for (i, v) in vals.iter().enumerate() {
+                    if i < owners.len() {
+                        owners[i] = v
+                            .get("data")
+                            .and_then(|d| d.get("parsed"))
+                            .and_then(|p| p.get("info"))
+                            .and_then(|info| info.get("owner"))
+                            .and_then(|o| o.as_str())
+                            .map(|s| s.to_string());
                     }
                 }
             }
         }
     }
 
-    if ui_amounts.is_empty() {
-        return (Vec::new(), 0.0);
-    }
-
-    // 2. Fetch total token supply
+    // 3. Fetch total token supply
     let supply_payload = serde_json::json!({
         "jsonrpc": JSONRPC_VERSION,
         "id": 2,
@@ -315,7 +541,13 @@ pub async fn fetch_rpc_holder_distribution(
     });
 
     let mut total_supply: f64 = 0.0;
-    if let Some(json) = post_rpc_with_retry(client, rpc_url, &supply_payload, timeout).await {
+    if let Some(json) = post_rpc_with_retry(
+        client,
+        primary_rpc_url,
+        fallback_rpc_url,
+        &supply_payload,
+        timeout,
+    ).await {
         if let Some(s) = json
             .get("result")
             .and_then(|r| r.get("value"))
@@ -328,21 +560,56 @@ pub async fn fetch_rpc_holder_distribution(
         }
     }
 
-    // If total supply is unobserved or 0, fallback to the sum of top accounts
-    let base_supply = if total_supply > 0.0 {
-        total_supply
-    } else {
-        ui_amounts.iter().sum()
+    let ui_sum: f64 = raw_accounts.iter().map(|(_, amt)| *amt).sum();
+    let base_supply = if total_supply > 0.0 { total_supply } else { ui_sum };
+
+    let mut shares_0_to_1 = Vec::with_capacity(raw_accounts.len());
+    let mut accounts_out = Vec::with_capacity(raw_accounts.len());
+    for (i, (addr, amt)) in raw_accounts.into_iter().enumerate() {
+        let frac = if base_supply > 0.0 { amt / base_supply } else { 0.0 };
+        let share_pct = frac * 100.0;
+        let owner = owners.get(i).cloned().flatten();
+        let is_pool = owner
+            .as_deref()
+            .map(|o| is_dex_pool_authority(o, pair_address))
+            .unwrap_or(false);
+        shares_0_to_1.push(frac);
+        accounts_out.push(HolderAccountShare {
+            token_account: addr,
+            owner,
+            share_pct,
+            is_liquidity_pool: is_pool,
+        });
+    }
+
+    let entropy = compute_holder_shannon_entropy(&shares_0_to_1);
+    let result = HolderDistributionResult {
+        accounts: accounts_out,
+        entropy,
+        rpc_succeeded: true,
     };
 
-    let shares: Vec<f64> = if base_supply > 0.0 {
-        ui_amounts.iter().map(|&amt| amt / base_supply).collect()
-    } else {
-        Vec::new()
-    };
+    if let Ok(mut cache) = holder_rpc_cache().lock() {
+        if cache.len() > 512 {
+            let ttl = std::time::Duration::from_secs(RPC_CACHE_TTL_SECS);
+            cache.retain(|_, (t, _)| t.elapsed() < ttl);
+        }
+        cache.insert(mint.to_string(), (std::time::Instant::now(), result.clone()));
+    }
 
-    let entropy = compute_holder_shannon_entropy(&shares);
-    (shares, entropy)
+    result
+}
+
+/// Queries Solana JSON-RPC for token largest accounts and total supply, returning top 10 shares (0.0..1.0) and Shannon entropy
+pub async fn fetch_rpc_holder_distribution(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    mint: &str,
+    timeout_secs: u64,
+) -> (Vec<f64>, f64) {
+    let res = fetch_rpc_holder_distribution_detailed(client, rpc_url, None, mint, "", timeout_secs).await;
+    let shares: Vec<f64> = res.accounts.into_iter().map(|a| a.share_pct / 100.0).collect();
+    (shares, res.entropy)
 }
 
 /// Asynchronous handle for non-blocking shadow logging across bot routines

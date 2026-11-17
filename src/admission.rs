@@ -41,6 +41,8 @@ pub struct CandidateTelemetry {
     pub genesis_profile: Option<GenesisBundleProfile>,
     pub holder_records: Option<Vec<TokenHolderRecord>>,
     #[serde(default)]
+    pub holder_fetch_failed: bool,
+    #[serde(default)]
     pub vpin_calculator: Option<crate::orderflow::VpinCalculator>,
     #[serde(default)]
     pub caller_msg_timestamp_utc: Option<i64>,
@@ -283,8 +285,14 @@ pub fn evaluate_candidate_admission(
             (Some(h), _) if h.len() >= 5 => h,
             (_, Some(h)) if h.len() >= 5 => h,
             _ => {
+                if candidate.holder_fetch_failed {
+                    return Err(RejectionReason::DevCluster {
+                        reason: "RPC_HOLDER_FETCH_FAILED".to_string(),
+                        metric_label: "RPC: 429/Timeout".to_string(),
+                    });
+                }
                 return Err(RejectionReason::DevCluster {
-                    reason: "RPC_HOLDER_DATA_UNAVAILABLE".to_string(),
+                    reason: "HOLDERS_UNDER_5".to_string(),
                     metric_label: "Holders: <5".to_string(),
                 });
             }
@@ -429,6 +437,7 @@ mod tests {
                     funding_source: None,
                 },
             ]),
+            holder_fetch_failed: false,
             vpin_calculator: None,
             caller_msg_timestamp_utc: None,
             pool_creation_timestamp_utc: None,
@@ -635,20 +644,22 @@ mod tests {
     #[test]
     fn test_admission_rpc_holder_data_unavailable_rejection() {
         let mut candidate = make_test_candidate();
-        candidate.holder_records = None; // Missing holder records
+        candidate.holder_records = None; // RPC fetch failed (429 / timeout)
+        candidate.holder_fetch_failed = true;
         let cfg = EngineConfig::default();
         let res = evaluate_candidate_admission(&candidate, &cfg, None);
         assert!(res.is_err());
         let err = res.unwrap_err();
         match err {
             RejectionReason::DevCluster { reason, metric_label } => {
-                assert_eq!(reason, "RPC_HOLDER_DATA_UNAVAILABLE");
-                assert_eq!(metric_label, "Holders: <5");
+                assert_eq!(reason, "RPC_HOLDER_FETCH_FAILED");
+                assert_eq!(metric_label, "RPC: 429/Timeout");
             }
-            _ => panic!("Expected DevCluster RPC_HOLDER_DATA_UNAVAILABLE, got: {:?}", err),
+            _ => panic!("Expected DevCluster RPC_HOLDER_FETCH_FAILED, got: {:?}", err),
         }
 
-        // Also test < 5 holders
+        // Also test genuinely < 5 non-pool holders
+        candidate.holder_fetch_failed = false;
         candidate.holder_records = Some(vec![
             TokenHolderRecord {
                 holder_address: "H1".to_string(),
@@ -661,11 +672,133 @@ mod tests {
         assert!(res2.is_err());
         match res2.unwrap_err() {
             RejectionReason::DevCluster { reason, metric_label } => {
-                assert_eq!(reason, "RPC_HOLDER_DATA_UNAVAILABLE");
+                assert_eq!(reason, "HOLDERS_UNDER_5");
                 assert_eq!(metric_label, "Holders: <5");
             }
-            _ => panic!("Expected RPC_HOLDER_DATA_UNAVAILABLE"),
+            _ => panic!("Expected HOLDERS_UNDER_5"),
         }
+    }
+
+    #[test]
+    fn test_admission_dex_pool_vault_excluded_vs_non_dex_cluster() {
+        let mut cfg = EngineConfig::default();
+        cfg.genesis_guard.enabled = false;
+        cfg.hawkes.enabled = false;
+        cfg.orderflow.enabled = false;
+
+        // (a) Graduated PumpSwap/Raydium pool with a 20.7% DEX-owned vault (is_liquidity_pool: true)
+        // and dispersed human holders (<= 18% combined, each < 2.0%) passes Gate 5.
+        let mut pool_candidate = make_test_candidate();
+        pool_candidate.dex_id = "pumpswap".to_string();
+        pool_candidate.holder_records = Some(vec![
+            TokenHolderRecord {
+                holder_address: "PoolVault111".to_string(),
+                supply_pct: 20.7,
+                is_liquidity_pool: true,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "Human1".to_string(),
+                supply_pct: 1.8,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "Human2".to_string(),
+                supply_pct: 1.6,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "Human3".to_string(),
+                supply_pct: 1.5,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "Human4".to_string(),
+                supply_pct: 1.4,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+            TokenHolderRecord {
+                holder_address: "Human5".to_string(),
+                supply_pct: 1.2,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+        ]);
+        let res_pass = evaluate_candidate_admission(&pool_candidate, &cfg, None);
+        assert!(
+            res_pass.is_ok(),
+            "Graduated pool with 20.7% DEX vault and dispersed human holders should pass Gate 5, got: {:?}",
+            res_pass
+        );
+
+        // (b) A 20.7% non-DEX wallet cluster (is_liquidity_pool: false) MUST still be rejected by Gate 5.
+        let mut cluster_candidate = make_test_candidate();
+        cluster_candidate.holder_records = Some(vec![
+            TokenHolderRecord {
+                holder_address: "Sybil1".to_string(),
+                supply_pct: 5.5,
+                is_liquidity_pool: false,
+                funding_source: Some(HolderFundingSource {
+                    funder_address: "SharedFunderXYZ".to_string(),
+                    amount_sol: 1.0,
+                    timestamp_epoch: 1000,
+                    hop_depth: 1,
+                    tx_signature: Some("sig1".to_string()),
+                }),
+            },
+            TokenHolderRecord {
+                holder_address: "Sybil2".to_string(),
+                supply_pct: 5.2,
+                is_liquidity_pool: false,
+                funding_source: Some(HolderFundingSource {
+                    funder_address: "SharedFunderXYZ".to_string(),
+                    amount_sol: 1.0,
+                    timestamp_epoch: 1010,
+                    hop_depth: 1,
+                    tx_signature: Some("sig2".to_string()),
+                }),
+            },
+            TokenHolderRecord {
+                holder_address: "Sybil3".to_string(),
+                supply_pct: 5.0,
+                is_liquidity_pool: false,
+                funding_source: Some(HolderFundingSource {
+                    funder_address: "SharedFunderXYZ".to_string(),
+                    amount_sol: 1.0,
+                    timestamp_epoch: 1020,
+                    hop_depth: 1,
+                    tx_signature: Some("sig3".to_string()),
+                }),
+            },
+            TokenHolderRecord {
+                holder_address: "Sybil4".to_string(),
+                supply_pct: 5.0,
+                is_liquidity_pool: false,
+                funding_source: Some(HolderFundingSource {
+                    funder_address: "SharedFunderXYZ".to_string(),
+                    amount_sol: 1.0,
+                    timestamp_epoch: 1030,
+                    hop_depth: 1,
+                    tx_signature: Some("sig4".to_string()),
+                }),
+            },
+            TokenHolderRecord {
+                holder_address: "Human5".to_string(),
+                supply_pct: 1.2,
+                is_liquidity_pool: false,
+                funding_source: None,
+            },
+        ]);
+        let res_reject = evaluate_candidate_admission(&cluster_candidate, &cfg, None);
+        assert!(
+            matches!(res_reject, Err(RejectionReason::DevCluster { .. })),
+            "20.7% non-DEX wallet cluster must be rejected by Gate 5, got: {:?}",
+            res_reject
+        );
     }
 
     #[test]

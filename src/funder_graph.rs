@@ -291,15 +291,26 @@ pub async fn fetch_holders_from_rpc_with_cache(
         return cached;
     }
 
-    let (shares, _) = crate::shadow_logger::fetch_rpc_holder_distribution(client, rpc_url, mint, timeout_secs).await;
-    if shares.is_empty() {
+    let dist = crate::shadow_logger::fetch_rpc_holder_distribution_detailed(
+        client,
+        rpc_url,
+        None,
+        mint,
+        "",
+        timeout_secs,
+    ).await;
+    if !dist.rpc_succeeded || dist.accounts.is_empty() {
         return Vec::new();
     }
-    let records: Vec<TokenHolderRecord> = shares.into_iter().enumerate().map(|(i, pct)| {
+    let records: Vec<TokenHolderRecord> = dist.accounts.into_iter().enumerate().map(|(i, acct)| {
         TokenHolderRecord {
-            holder_address: format!("Holder_{}_{}", &mint[..6.min(mint.len())], i),
-            supply_pct: pct,
-            is_liquidity_pool: i == 0 && pct > 45.0,
+            holder_address: if acct.token_account.is_empty() {
+                format!("Holder_{}_{}", &mint[..6.min(mint.len())], i)
+            } else {
+                acct.token_account
+            },
+            supply_pct: acct.share_pct,
+            is_liquidity_pool: acct.is_liquidity_pool,
             funding_source: None,
         }
     }).collect();

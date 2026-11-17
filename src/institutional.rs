@@ -43,35 +43,52 @@ pub fn calculate_dynamic_size(bankroll_sol: f64, pool_liquidity_usd: f64, cfg: &
     computed.max(cfg.min_entry_sol)
 }
 
-/// Evaluates holder concentration via Herfindahl-Hirschman Index (HHI)
-pub async fn evaluate_holder_hhi(client: &Client, rpc_url: &str, mint: &str, ceiling: f64) -> bool {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getTokenLargestAccounts",
-        "params": [mint]
-    });
+/// Evaluates holder concentration via Herfindahl-Hirschman Index (HHI),
+/// excluding verified DEX AMM pool vaults and using primary -> public RPC failover.
+pub async fn evaluate_holder_hhi_with_fallback(
+    client: &Client,
+    primary_rpc_url: &str,
+    fallback_rpc_url: Option<&str>,
+    mint: &str,
+    pair_addr: &str,
+    ceiling: f64,
+) -> bool {
+    let dist = crate::shadow_logger::fetch_rpc_holder_distribution_detailed(
+        client,
+        primary_rpc_url,
+        fallback_rpc_url,
+        mint,
+        pair_addr,
+        3,
+    ).await;
 
-    if let Ok(res) = client.post(rpc_url).json(&payload).send().await {
-        if let Ok(json) = res.json::<Value>().await {
-            if let Some(accounts) = json.get("result").and_then(|r| r.get("value")).and_then(|v| v.as_array()) {
-                if !accounts.is_empty() {
-                    let amounts: Vec<f64> = accounts.iter()
-                        .filter_map(|a| a.get("uiAmount").and_then(|v| v.as_f64()))
-                        .collect();
-                    let sum: f64 = amounts.iter().sum();
-                    if sum > 0.0 {
-                        let hhi: f64 = amounts.iter().map(|&a| (a / sum).powi(2)).sum();
-                        if hhi > ceiling {
-                            println!("[GATE REJECT] Mint {}: HHI {:.3} exceeds threshold {:.3} (Concentrated dump risk)", mint, hhi, ceiling);
-                            return false;
-                        }
-                    }
-                }
-            }
+    if !dist.rpc_succeeded || dist.accounts.is_empty() {
+        return true;
+    }
+
+    let non_pool_shares: Vec<f64> = dist
+        .accounts
+        .iter()
+        .filter(|a| !a.is_liquidity_pool && a.share_pct > 0.0)
+        .map(|a| a.share_pct)
+        .collect();
+    let sum: f64 = non_pool_shares.iter().sum();
+    if sum > 0.0 {
+        let hhi: f64 = non_pool_shares.iter().map(|&a| (a / sum).powi(2)).sum();
+        if hhi > ceiling {
+            println!(
+                "[GATE REJECT] Mint {}: HHI {:.3} exceeds threshold {:.3} (Concentrated dump risk)",
+                mint, hhi, ceiling
+            );
+            return false;
         }
     }
     true
+}
+
+/// Evaluates holder concentration via Herfindahl-Hirschman Index (HHI)
+pub async fn evaluate_holder_hhi(client: &Client, rpc_url: &str, mint: &str, ceiling: f64) -> bool {
+    evaluate_holder_hhi_with_fallback(client, rpc_url, None, mint, "", ceiling).await
 }
 
 /// Pump.fun-aware LP Burn & Lock Verifier
