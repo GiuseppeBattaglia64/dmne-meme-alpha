@@ -436,6 +436,7 @@ pub struct LiveMarketSnapshot {
 
 #[derive(Deserialize)]
 struct TokenInfo {
+    address: Option<String>,
     symbol: Option<String>,
 }
 
@@ -499,51 +500,205 @@ async fn verify_token_security(client: &Client, rpc_url: &str, mint: &str) -> bo
     true
 }
 
+const PUMPSWAP_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+const RAYDIUM_V4_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
+const SOL_MINT_ADDR: &str = "So11111111111111111111111111111111111111112";
+const USDC_MINT_ADDR: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDT_MINT_ADDR: &str = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+
+fn parse_dex_pair_snapshot(pair: &DexPair, fallback_mint: &str) -> Option<LiveMarketSnapshot> {
+    let price_sol = pair.price_native.as_deref().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
+    if price_sol <= 0.0 {
+        return None;
+    }
+    let sym = pair.base_token.as_ref().and_then(|b| b.symbol.clone()).unwrap_or_else(|| "TOKEN".to_string());
+    let dex_id = pair.dex_id.clone().unwrap_or_else(|| {
+        if fallback_mint.ends_with("pump") { "pumpfun".to_string() } else { "raydium".to_string() }
+    });
+    let pair_addr = pair.pair_address.clone().unwrap_or_default();
+    let liq = pair.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+    let fdv = pair.fdv.unwrap_or(0.0);
+    let m5_change = pair.price_change.as_ref().and_then(|p| p.m5.or(p.h1)).unwrap_or(0.0);
+    let h1_change = pair.price_change.as_ref().and_then(|p| p.h1).unwrap_or(0.0);
+    let txns = pair.txns.as_ref().and_then(|t| t.m5.as_ref().or(t.h1.as_ref()));
+    let buys = txns.and_then(|t| t.buys).unwrap_or(0);
+    let sells = txns.and_then(|t| t.sells).unwrap_or(0);
+    let m5_txns = buys + sells;
+    let buy_sell_ratio = if sells > 0 { buys as f64 / sells as f64 } else if buys > 0 { 10.0 } else { 1.0 };
+    let m5_vol = pair.volume.as_ref().and_then(|v| v.m5.or(v.h1)).unwrap_or(0.0);
+
+    Some(LiveMarketSnapshot {
+        price_sol,
+        symbol: sym,
+        dex_id,
+        pair_address: pair_addr,
+        liquidity_usd: liq,
+        fdv_usd: fdv,
+        m5_price_change_pct: m5_change,
+        h1_price_change_pct: h1_change,
+        buy_sell_ratio,
+        m5_txns,
+        m5_buys: buys as u64,
+        m5_sells: sells as u64,
+        m5_volume_usd: m5_vol,
+    })
+}
+
 async fn fetch_live_price(client: &Client, token_mint: &str) -> Option<LiveMarketSnapshot> {
     let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", token_mint);
     if let Ok(res) = client.get(&url).timeout(Duration::from_millis(1500)).send().await {
         if let Ok(data) = res.json::<DexResponse>().await {
             if let Some(pairs) = data.pairs {
                 if let Some(best_pair) = pairs.first() {
-                    let price_sol = best_pair.price_native.as_deref().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
-                    let sym = best_pair.base_token.as_ref().and_then(|b| b.symbol.clone()).unwrap_or_else(|| "TOKEN".to_string());
-                    let dex_id = best_pair.dex_id.clone().unwrap_or_else(|| {
-                        if token_mint.ends_with("pump") { "pumpfun".to_string() } else { "raydium".to_string() }
-                    });
-                    if price_sol > 0.0 {
-                        let pair_addr = best_pair.pair_address.clone().unwrap_or_default();
-                        let liq = best_pair.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-                        let fdv = best_pair.fdv.unwrap_or(0.0);
-                        let m5_change = best_pair.price_change.as_ref().and_then(|p| p.m5.or(p.h1)).unwrap_or(0.0);
-                        let h1_change = best_pair.price_change.as_ref().and_then(|p| p.h1).unwrap_or(0.0);
-                        let txns = best_pair.txns.as_ref().and_then(|t| t.m5.as_ref().or(t.h1.as_ref()));
-                        let buys = txns.and_then(|t| t.buys).unwrap_or(0);
-                        let sells = txns.and_then(|t| t.sells).unwrap_or(0);
-                        let m5_txns = buys + sells;
-                        let buy_sell_ratio = if sells > 0 { buys as f64 / sells as f64 } else if buys > 0 { 10.0 } else { 1.0 };
-                        let m5_vol = best_pair.volume.as_ref().and_then(|v| v.m5.or(v.h1)).unwrap_or(0.0);
-
-                        return Some(LiveMarketSnapshot {
-                            price_sol,
-                            symbol: sym,
-                            dex_id,
-                            pair_address: pair_addr,
-                            liquidity_usd: liq,
-                            fdv_usd: fdv,
-                            m5_price_change_pct: m5_change,
-                            h1_price_change_pct: h1_change,
-                            buy_sell_ratio,
-                            m5_txns,
-                            m5_buys: buys as u64,
-                            m5_sells: sells as u64,
-                            m5_volume_usd: m5_vol,
-                        });
-                    }
+                    return parse_dex_pair_snapshot(best_pair, token_mint);
                 }
             }
         }
     }
     None
+}
+
+async fn fetch_batched_live_prices(
+    client: &Client,
+    mints: &[String],
+) -> std::collections::HashMap<String, LiveMarketSnapshot> {
+    let mut snapshots = std::collections::HashMap::new();
+    for chunk in mints.chunks(30) {
+        if chunk.is_empty() {
+            continue;
+        }
+        let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", chunk.join(","));
+        if let Ok(res) = client.get(&url).timeout(Duration::from_millis(2500)).send().await {
+            if let Ok(data) = res.json::<DexResponse>().await {
+                if let Some(pairs) = data.pairs {
+                    for pair in &pairs {
+                        let mint = match pair.base_token.as_ref().and_then(|b| b.address.as_ref()) {
+                            Some(addr) if !addr.is_empty() => addr.clone(),
+                            _ => continue,
+                        };
+                        if let Some(snap) = parse_dex_pair_snapshot(pair, &mint) {
+                            let replace = snapshots
+                                .get(&mint)
+                                .map(|existing: &LiveMarketSnapshot| snap.liquidity_usd > existing.liquidity_usd)
+                                .unwrap_or(true);
+                            if replace {
+                                snapshots.insert(mint, snap);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    snapshots
+}
+
+async fn fetch_dexscreener_solana_mints(client: &Client, url: &str) -> Vec<String> {
+    let mut mints = Vec::new();
+    if let Ok(res) = client.get(url).timeout(Duration::from_millis(2000)).send().await {
+        if let Ok(profiles) = res.json::<Vec<TokenProfile>>().await {
+            for profile in profiles {
+                if profile.chain_id.as_deref() == Some("solana") {
+                    if let Some(mint) = profile.token_address {
+                        if !mint.is_empty() {
+                            mints.push(mint);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    mints
+}
+
+async fn fetch_graduated_dex_mints(
+    client: &Client,
+    primary_rpc_url: &str,
+    fallback_rpc_url: Option<&str>,
+    program_id: &str,
+    seen_sigs: &std::sync::Mutex<std::collections::HashSet<String>>,
+) -> Vec<String> {
+    let sig_payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getSignaturesForAddress",
+        "params": [
+            program_id,
+            { "limit": 15, "commitment": "confirmed" }
+        ]
+    });
+    let timeout = Duration::from_millis(2500);
+    let Some(sig_json) = shadow_logger::post_rpc_with_retry(
+        client,
+        primary_rpc_url,
+        fallback_rpc_url,
+        &sig_payload,
+        timeout,
+    ).await else {
+        return Vec::new();
+    };
+
+    let mut new_sigs = Vec::new();
+    if let Some(entries) = sig_json.get("result").and_then(|r| r.as_array()) {
+        if let Ok(mut seen) = seen_sigs.lock() {
+            if seen.len() > 2000 {
+                seen.clear();
+            }
+            for entry in entries {
+                if entry.get("err").map(|e| !e.is_null()).unwrap_or(false) {
+                    continue;
+                }
+                if let Some(sig) = entry.get("signature").and_then(|s| s.as_str()) {
+                    if seen.insert(sig.to_string()) {
+                        new_sigs.push(sig.to_string());
+                        if new_sigs.len() >= 5 {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut mints = Vec::new();
+    for sig in new_sigs {
+        let tx_payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "getTransaction",
+            "params": [
+                sig,
+                {
+                    "encoding": "jsonParsed",
+                    "maxSupportedTransactionVersion": 0,
+                    "commitment": "confirmed"
+                }
+            ]
+        });
+        if let Some(tx_json) = shadow_logger::post_rpc_with_retry(
+            client,
+            primary_rpc_url,
+            fallback_rpc_url,
+            &tx_payload,
+            timeout,
+        ).await {
+            if let Some(balances) = tx_json
+                .get("result")
+                .and_then(|r| r.get("meta"))
+                .and_then(|m| m.get("postTokenBalances"))
+                .and_then(|b| b.as_array())
+            {
+                for bal in balances {
+                    if let Some(mint) = bal.get("mint").and_then(|m| m.as_str()) {
+                        if mint != SOL_MINT_ADDR && mint != USDC_MINT_ADDR && mint != USDT_MINT_ADDR {
+                            mints.push(mint.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    mints
 }
 
 const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
@@ -2574,7 +2729,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // 3. Ingestion Loop: Fetch Newly Launched Solana Tokens in Real-Time
+    // 3. Ingestion Loop: Multi-Feed Graduated Pool & Newly Launched Solana Token Discovery
     let scanner_state = Arc::clone(&state);
     let scanner_audit_tx = db_audit_tx.clone();
     let scanner_shadow = shadow_handle.clone();
@@ -2582,66 +2737,111 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scanner_cfg = Arc::clone(&config);
     let scanner_funder = Arc::clone(&funder_evaluator);
     tokio::spawn(async move {
+        let seen_pumpswap_sigs = std::sync::Mutex::new(std::collections::HashSet::<String>::new());
+        let seen_raydium_sigs = std::sync::Mutex::new(std::collections::HashSet::<String>::new());
         loop {
-            // Pull newly listed Solana tokens
-            if let Ok(res) = scanner_client.get("https://api.dexscreener.com/token-profiles/latest/v1")
-                .timeout(Duration::from_millis(2000))
-                .send()
-                .await 
-            {
-                if let Ok(profiles) = res.json::<Vec<TokenProfile>>().await {
-                    for profile in profiles {
-                        if profile.chain_id.as_deref() == Some("solana") {
-                            if let Some(mint) = profile.token_address {
-                                let guard = scanner_state.read().await;
-                                let is_active = guard.active_positions.iter().any(|p| p.token_mint == mint);
-                                let is_banned = guard.banned_tokens.contains(&mint);
-                                if is_banned {
-                                    continue;
-                                }
-                                let is_already_traded = guard.closed_trades.iter().any(|t| {
-                                    !t.token_mint.is_empty() && t.token_mint == mint
-                                });
-                                if is_already_traded {
-                                    continue;
-                                }
-                                let now_sec = chrono::Utc::now().timestamp() as u64;
-                                let is_rejected_mint = guard.rejected_candidates.get(&mint)
-                                    .map(|r| now_sec < r.saturating_add(scanner_cfg.risk.rejected_candidate_cooldown_secs))
-                                    .unwrap_or(false);
-                                if is_rejected_mint {
-                                    continue;
-                                }
+            // Concurrently poll:
+            // (a) token-profiles/latest/v1
+            // (b) token-boosts/latest/v1 (active tokens paying for visibility post-traction/graduation)
+            // (c) PumpSwap AMM pool creations/swaps
+            // (d) Raydium V4 pool creations/swaps
+            let (profiles_mints, boosts_mints, pumpswap_mints, raydium_mints) = tokio::join!(
+                fetch_dexscreener_solana_mints(&scanner_client, "https://api.dexscreener.com/token-profiles/latest/v1"),
+                fetch_dexscreener_solana_mints(&scanner_client, "https://api.dexscreener.com/token-boosts/latest/v1"),
+                fetch_graduated_dex_mints(
+                    &scanner_client,
+                    &scanner_cfg.solana.rpc_url,
+                    Some(&scanner_cfg.solana.public_rpc_url),
+                    PUMPSWAP_AMM_PROGRAM_ID,
+                    &seen_pumpswap_sigs,
+                ),
+                fetch_graduated_dex_mints(
+                    &scanner_client,
+                    &scanner_cfg.solana.rpc_url,
+                    Some(&scanner_cfg.solana.public_rpc_url),
+                    RAYDIUM_V4_PROGRAM_ID,
+                    &seen_raydium_sigs,
+                ),
+            );
 
-                                // Slot-blocking guard removed: Discovery worker audits 100% continuously
-                                if !is_active {
-                                    drop(guard);
-                                    if let Some(snap) = fetch_live_price(&scanner_client, &mint).await {
-                                        let sym = snap.symbol.clone();
-                                        {
-                                             let guard = scanner_state.read().await;
-                                             let is_active_sym = guard.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
-                                             if is_active_sym {
-                                                 continue;
-                                             }
-                                             let is_banned_sym = guard.banned_tokens.contains(&mint) || guard.banned_tokens.contains(&sym);
-                                             if is_banned_sym {
-                                                 continue;
-                                             }
-                                             let is_already_traded_sym = guard.closed_trades.iter().any(|t| {
-                                                 (!t.token_mint.is_empty() && t.token_mint == mint) || (!t.symbol.is_empty() && t.symbol == sym)
-                                             });
-                                             if is_already_traded_sym {
-                                                 continue;
-                                             }
-                                             let is_rejected_sym = guard.rejected_candidates.iter().any(|(k, rejected_at)| {
-                                                 (k == &mint || k == &sym)
-                                                     && now_sec < rejected_at.saturating_add(scanner_cfg.risk.rejected_candidate_cooldown_secs)
-                                             });
-                                             if is_rejected_sym {
-                                                 continue;
-                                             }
-                                         }
+            let mut seen_cycle = std::collections::HashSet::new();
+            let mut dex_origin_mints = std::collections::HashSet::new();
+            let mut candidate_mints = Vec::new();
+            for mint in pumpswap_mints.into_iter().chain(raydium_mints.into_iter()) {
+                if seen_cycle.insert(mint.clone()) {
+                    dex_origin_mints.insert(mint.clone());
+                    candidate_mints.push(mint);
+                }
+            }
+            for mint in boosts_mints.into_iter().chain(profiles_mints.into_iter()) {
+                if seen_cycle.insert(mint.clone()) {
+                    candidate_mints.push(mint);
+                }
+            }
+
+            let mut eligible_mints = Vec::new();
+            {
+                let guard = scanner_state.read().await;
+                let now_sec = chrono::Utc::now().timestamp() as u64;
+                for mint in candidate_mints {
+                    let is_active = guard.active_positions.iter().any(|p| p.token_mint == mint);
+                    if is_active {
+                        continue;
+                    }
+                    if guard.banned_tokens.contains(&mint) {
+                        continue;
+                    }
+                    let is_already_traded = guard.closed_trades.iter().any(|t| {
+                        !t.token_mint.is_empty() && t.token_mint == mint
+                    });
+                    if is_already_traded {
+                        continue;
+                    }
+                    let is_rejected_mint = guard.rejected_candidates.get(&mint)
+                        .map(|r| now_sec < r.saturating_add(scanner_cfg.risk.rejected_candidate_cooldown_secs))
+                        .unwrap_or(false);
+                    if is_rejected_mint {
+                        continue;
+                    }
+                    eligible_mints.push(mint);
+                }
+            }
+
+            let snapshots = fetch_batched_live_prices(&scanner_client, &eligible_mints).await;
+            let now_sec = chrono::Utc::now().timestamp() as u64;
+            for mint in eligible_mints {
+                if let Some(snap) = snapshots.get(&mint).cloned() {
+                    if dex_origin_mints.contains(&mint) && snap.liquidity_usd >= scanner_cfg.risk.min_entry_liquidity_usd {
+                        println!(
+                            "[DISCOVERY] Graduated DEX mint {} ({}) | dex={} | liq=${:.1}k",
+                            snap.symbol, mint, snap.dex_id, snap.liquidity_usd / 1000.0
+                        );
+                    }
+                    let sym = snap.symbol.clone();
+                    {
+                        let guard = scanner_state.read().await;
+                        let is_active_sym = guard.active_positions.iter().any(|p| p.token_mint == mint || p.symbol == sym);
+                        if is_active_sym {
+                            continue;
+                        }
+                        let is_banned_sym = guard.banned_tokens.contains(&mint) || guard.banned_tokens.contains(&sym);
+                        if is_banned_sym {
+                            continue;
+                        }
+                        let is_already_traded_sym = guard.closed_trades.iter().any(|t| {
+                            (!t.token_mint.is_empty() && t.token_mint == mint) || (!t.symbol.is_empty() && t.symbol == sym)
+                        });
+                        if is_already_traded_sym {
+                            continue;
+                        }
+                        let is_rejected_sym = guard.rejected_candidates.iter().any(|(k, rejected_at)| {
+                            (k == &mint || k == &sym)
+                                && now_sec < rejected_at.saturating_add(scanner_cfg.risk.rejected_candidate_cooldown_secs)
+                        });
+                        if is_rejected_sym {
+                            continue;
+                        }
+                    }
                                          let pair_addr = snap.pair_address.clone();
                                          let liq = snap.liquidity_usd;
                                          let fdv = snap.fdv_usd;
@@ -3154,11 +3354,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 continue;
                                             }
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
             }
             tokio::time::sleep(Duration::from_secs(4)).await;
