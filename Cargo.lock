@@ -1225,7 +1225,7 @@ dependencies = [
 
 [[package]]
 name = "dmne-meme-alpha"
-version = "1.0.0-beta"
+version = "2.0.0"
 dependencies = [
  "bincode",
  "bs58 0.5.1",

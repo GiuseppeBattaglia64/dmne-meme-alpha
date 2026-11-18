@@ -5,6 +5,39 @@
 use reqwest::Client;
 use serde_json::Value;
 use crate::config::EngineConfig;
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
+
+/// Pre-warmed Address Lookup Table (ALT) registry for Jito bundle packet compression.
+#[derive(Debug, Clone, Default)]
+pub struct AltPrewarmRegistry {
+    pub tables: Vec<Pubkey>,
+}
+
+impl AltPrewarmRegistry {
+    pub fn from_config(alt_addresses: &[String]) -> Self {
+        let tables = alt_addresses
+            .iter()
+            .filter_map(|s| Pubkey::from_str(s.trim()).ok())
+            .collect();
+        Self { tables }
+    }
+}
+
+/// Verifies serialized Jito bundle transaction fits strictly within Solana's UDP MTU ceiling.
+pub fn verify_jito_packet_mtu(serialized_bytes: &[u8], max_mtu_bytes: usize) -> Result<usize, String> {
+    let len = serialized_bytes.len();
+    if len == 0 {
+        return Err("Empty Jito transaction payload".to_string());
+    }
+    if len > max_mtu_bytes {
+        return Err(format!(
+            "Jito packet size {} bytes exceeds MTU limit {} bytes",
+            len, max_mtu_bytes
+        ));
+    }
+    Ok(len)
+}
 
 /// Dynamically discovers active Jito tip accounts from the Block Engine RPC
 pub async fn fetch_dynamic_tip_accounts(client: &Client, jito_url: &str) -> Vec<String> {
@@ -303,15 +336,18 @@ pub async fn simulate_dry_run_bundle(
     
     let tip_lamports = fetch_dynamic_tip_lamports(client, tip_floor_url, target_percentile).await;
 
-    // 2. Assemble test simulation transaction payload
+    // 2. Assemble test simulation transaction payload & verify UDP MTU ceiling
     // Using base64 dummy transfer instruction mimicking atomic bundle layout
+    let dummy_tx_b64 = "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAEDB5E7F9M1lD5+a8326WkWY9v+U8HkR4d31wW7F8m5P/4BAgIAAQwBAgAAAACAAAAA";
+    let _alt_registry = AltPrewarmRegistry::from_config(&cfg.gates.alt_addresses);
+    let _pkt_len = verify_jito_packet_mtu(dummy_tx_b64.as_bytes(), cfg.gates.max_jito_packet_bytes)?;
     let dummy_tx_payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "simulateTransaction",
         "params": [
             // Dummy serialized VersionedTransaction testing execution engine
-            "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAEDB5E7F9M1lD5+a8326WkWY9v+U8HkR4d31wW7F8m5P/4BAgIAAQwBAgAAAACAAAAA",
+            dummy_tx_b64,
             {
                 "sigVerify": false,
                 "replaceRecentBlockhash": true,

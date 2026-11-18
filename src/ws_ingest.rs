@@ -9,6 +9,43 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 pub const PUMP_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 
+/// Fail-closed Yellowstone gRPC / WebSocket slot sequence guard.
+/// Detects missing slots/sequence gaps and halts admission until explicitly resynced.
+#[derive(Debug, Clone, Default)]
+pub struct YellowstoneStreamGuard {
+    last_slot: Option<u64>,
+    gap_detected: bool,
+}
+
+impl YellowstoneStreamGuard {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn observe_slot(&mut self, slot: u64) -> Result<(), &'static str> {
+        if self.gap_detected {
+            return Err("YELLOWSTONE_SEQUENCE_GAP_UNRESYNCED");
+        }
+        if let Some(prev) = self.last_slot {
+            if slot > prev + 1 {
+                self.gap_detected = true;
+                return Err("YELLOWSTONE_SEQUENCE_GAP");
+            }
+        }
+        self.last_slot = Some(slot);
+        Ok(())
+    }
+
+    pub fn is_healthy(&self) -> bool {
+        !self.gap_detected
+    }
+
+    pub fn resync(&mut self, synced_slot: u64) {
+        self.last_slot = Some(synced_slot);
+        self.gap_detected = false;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct OnChainProgramEvent {
     pub signature: String,
@@ -81,5 +118,24 @@ pub async fn start_program_logs_stream(
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_yellowstone_sequence_gap_fail_closed() {
+        let mut guard = YellowstoneStreamGuard::new();
+        assert!(guard.observe_slot(100).is_ok());
+        assert!(guard.observe_slot(101).is_ok());
+        assert!(guard.is_healthy());
+        assert_eq!(guard.observe_slot(103), Err("YELLOWSTONE_SEQUENCE_GAP"));
+        assert!(!guard.is_healthy());
+        assert_eq!(guard.observe_slot(104), Err("YELLOWSTONE_SEQUENCE_GAP_UNRESYNCED"));
+        guard.resync(104);
+        assert!(guard.is_healthy());
+        assert!(guard.observe_slot(105).is_ok());
+    }
 }
 

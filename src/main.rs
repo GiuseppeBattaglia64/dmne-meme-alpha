@@ -2045,6 +2045,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             caller_msg_timestamp_utc: candidate.social_signal.as_ref().map(|s| s.message_timestamp_utc),
                             pool_creation_timestamp_utc: None,
                             caller_delta_seconds: None,
+                            quote_mint: None,
+                            bonding_curve_complete: None,
+                            wash_volume_eta: None,
+                            protocol_fee_ratio_phi: None,
+                            peak_liquidity_usd: None,
+                            sybil_ratio_rho: None,
+                            transfer_edges: None,
+                            deployer_address: None,
+                            token_security: None,
+                            holder_usd_values: None,
                         };
 
                         let admission_res = admission::evaluate_candidate_admission(
@@ -2729,55 +2739,122 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // 3. Ingestion Loop: Multi-Feed Graduated Pool & Newly Launched Solana Token Discovery
+    // 3. Decoupled Background Multi-Feed Discovery Worker -> Shared RwLock Buffer
+    let discovered_mints_buf: Arc<tokio::sync::RwLock<Vec<String>>> =
+        Arc::new(tokio::sync::RwLock::new(Vec::new()));
+    let dex_origin_mints_buf: Arc<tokio::sync::RwLock<std::collections::HashSet<String>>> =
+        Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new()));
+
+    {
+        let disc_mints = Arc::clone(&discovered_mints_buf);
+        let disc_dex_origins = Arc::clone(&dex_origin_mints_buf);
+        let disc_client = http_client.clone();
+        let disc_cfg = Arc::clone(&config);
+        tokio::spawn(async move {
+            const DISCOVERY_COOLDOWN_SECS: u64 = 60;
+            let seen_pumpswap_sigs = std::sync::Mutex::new(std::collections::HashSet::<String>::new());
+            let seen_raydium_sigs = std::sync::Mutex::new(std::collections::HashSet::<String>::new());
+            let mut mint_cooldowns: std::collections::HashMap<String, std::time::Instant> =
+                std::collections::HashMap::new();
+
+            loop {
+                let (profiles_mints, boosts_mints, pumpswap_mints, raydium_mints) = tokio::join!(
+                    fetch_dexscreener_solana_mints(&disc_client, "https://api.dexscreener.com/token-profiles/latest/v1"),
+                    fetch_dexscreener_solana_mints(&disc_client, "https://api.dexscreener.com/token-boosts/latest/v1"),
+                    fetch_graduated_dex_mints(
+                        &disc_client,
+                        &disc_cfg.solana.rpc_url,
+                        Some(&disc_cfg.solana.public_rpc_url),
+                        PUMPSWAP_AMM_PROGRAM_ID,
+                        &seen_pumpswap_sigs,
+                    ),
+                    fetch_graduated_dex_mints(
+                        &disc_client,
+                        &disc_cfg.solana.rpc_url,
+                        Some(&disc_cfg.solana.public_rpc_url),
+                        RAYDIUM_V4_PROGRAM_ID,
+                        &seen_raydium_sigs,
+                    ),
+                );
+
+                let now_inst = std::time::Instant::now();
+                if mint_cooldowns.len() > 2000 {
+                    mint_cooldowns.retain(|_, ts| ts.elapsed().as_secs() < DISCOVERY_COOLDOWN_SECS);
+                }
+
+                let mut seen_cycle = std::collections::HashSet::new();
+                let mut new_mints = Vec::new();
+                let mut new_dex_origins = Vec::new();
+
+                for mint in pumpswap_mints.into_iter().chain(raydium_mints.into_iter()) {
+                    if seen_cycle.insert(mint.clone()) {
+                        let in_cooldown = mint_cooldowns
+                            .get(&mint)
+                            .map(|ts| ts.elapsed().as_secs() < DISCOVERY_COOLDOWN_SECS)
+                            .unwrap_or(false);
+                        if !in_cooldown {
+                            mint_cooldowns.insert(mint.clone(), now_inst);
+                            new_dex_origins.push(mint.clone());
+                            new_mints.push(mint);
+                        }
+                    }
+                }
+                for mint in boosts_mints.into_iter().chain(profiles_mints.into_iter()) {
+                    if seen_cycle.insert(mint.clone()) {
+                        let in_cooldown = mint_cooldowns
+                            .get(&mint)
+                            .map(|ts| ts.elapsed().as_secs() < DISCOVERY_COOLDOWN_SECS)
+                            .unwrap_or(false);
+                        if !in_cooldown {
+                            mint_cooldowns.insert(mint.clone(), now_inst);
+                            new_mints.push(mint);
+                        }
+                    }
+                }
+
+                if !new_mints.is_empty() {
+                    {
+                        let mut origins = disc_dex_origins.write().await;
+                        for m in new_dex_origins {
+                            origins.insert(m);
+                        }
+                    }
+                    let mut buf = disc_mints.write().await;
+                    for m in new_mints {
+                        if !buf.contains(&m) {
+                            buf.push(m);
+                        }
+                    }
+                    if buf.len() > 120 {
+                        let drain_count = buf.len() - 120;
+                        buf.drain(0..drain_count);
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        });
+    }
+
+    // 3b. Ingestion Loop: Consume Deduplicated Candidates & Run Institutional Gates
     let scanner_state = Arc::clone(&state);
     let scanner_audit_tx = db_audit_tx.clone();
     let scanner_shadow = shadow_handle.clone();
     let scanner_client = http_client.clone();
     let scanner_cfg = Arc::clone(&config);
     let scanner_funder = Arc::clone(&funder_evaluator);
+    let scanner_mints_buf = Arc::clone(&discovered_mints_buf);
+    let scanner_dex_origins = Arc::clone(&dex_origin_mints_buf);
     tokio::spawn(async move {
-        let seen_pumpswap_sigs = std::sync::Mutex::new(std::collections::HashSet::<String>::new());
-        let seen_raydium_sigs = std::sync::Mutex::new(std::collections::HashSet::<String>::new());
         loop {
-            // Concurrently poll:
-            // (a) token-profiles/latest/v1
-            // (b) token-boosts/latest/v1 (active tokens paying for visibility post-traction/graduation)
-            // (c) PumpSwap AMM pool creations/swaps
-            // (d) Raydium V4 pool creations/swaps
-            let (profiles_mints, boosts_mints, pumpswap_mints, raydium_mints) = tokio::join!(
-                fetch_dexscreener_solana_mints(&scanner_client, "https://api.dexscreener.com/token-profiles/latest/v1"),
-                fetch_dexscreener_solana_mints(&scanner_client, "https://api.dexscreener.com/token-boosts/latest/v1"),
-                fetch_graduated_dex_mints(
-                    &scanner_client,
-                    &scanner_cfg.solana.rpc_url,
-                    Some(&scanner_cfg.solana.public_rpc_url),
-                    PUMPSWAP_AMM_PROGRAM_ID,
-                    &seen_pumpswap_sigs,
-                ),
-                fetch_graduated_dex_mints(
-                    &scanner_client,
-                    &scanner_cfg.solana.rpc_url,
-                    Some(&scanner_cfg.solana.public_rpc_url),
-                    RAYDIUM_V4_PROGRAM_ID,
-                    &seen_raydium_sigs,
-                ),
-            );
-
-            let mut seen_cycle = std::collections::HashSet::new();
-            let mut dex_origin_mints = std::collections::HashSet::new();
-            let mut candidate_mints = Vec::new();
-            for mint in pumpswap_mints.into_iter().chain(raydium_mints.into_iter()) {
-                if seen_cycle.insert(mint.clone()) {
-                    dex_origin_mints.insert(mint.clone());
-                    candidate_mints.push(mint);
-                }
-            }
-            for mint in boosts_mints.into_iter().chain(profiles_mints.into_iter()) {
-                if seen_cycle.insert(mint.clone()) {
-                    candidate_mints.push(mint);
-                }
-            }
+            let candidate_mints: Vec<String> = {
+                let mut buf = scanner_mints_buf.write().await;
+                std::mem::take(&mut *buf)
+            };
+            let dex_origin_mints: std::collections::HashSet<String> = {
+                let mut origins = scanner_dex_origins.write().await;
+                std::mem::take(&mut *origins)
+            };
 
             let mut eligible_mints = Vec::new();
             {
@@ -3064,6 +3141,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             caller_msg_timestamp_utc: None,
                                             pool_creation_timestamp_utc: None,
                                             caller_delta_seconds: None,
+                                            quote_mint: None,
+                                            bonding_curve_complete: None,
+                                            wash_volume_eta: None,
+                                            protocol_fee_ratio_phi: None,
+                                            peak_liquidity_usd: None,
+                                            sybil_ratio_rho: None,
+                                            transfer_edges: None,
+                                            deployer_address: None,
+                                            token_security: None,
+                                            holder_usd_values: None,
                                         };
 
                                         if let Err(rejection) = admission::evaluate_candidate_admission(&telemetry, &scanner_cfg, Some(&scanner_funder)) {

@@ -22,6 +22,15 @@ use crate::radar::RejectionCategory;
 pub use crate::radar::Stage2Rejection;
 
 /// Comprehensive candidate telemetry passed to the canonical admission engine
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TokenSecurityProfile {
+    pub mint_authority_revoked: bool,
+    pub freeze_authority_revoked: bool,
+    pub has_transfer_hook: bool,
+    pub has_permanent_delegate: bool,
+    pub transfer_fee_bps: u16,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CandidateTelemetry {
     pub symbol: String,
@@ -50,6 +59,26 @@ pub struct CandidateTelemetry {
     pub pool_creation_timestamp_utc: Option<i64>,
     #[serde(default)]
     pub caller_delta_seconds: Option<i64>,
+    #[serde(default)]
+    pub quote_mint: Option<String>,
+    #[serde(default)]
+    pub bonding_curve_complete: Option<bool>,
+    #[serde(default)]
+    pub wash_volume_eta: Option<f64>,
+    #[serde(default)]
+    pub protocol_fee_ratio_phi: Option<f64>,
+    #[serde(default)]
+    pub peak_liquidity_usd: Option<f64>,
+    #[serde(default)]
+    pub sybil_ratio_rho: Option<f64>,
+    #[serde(default)]
+    pub transfer_edges: Option<Vec<crate::funder_graph::TransferEdge>>,
+    #[serde(default)]
+    pub deployer_address: Option<String>,
+    #[serde(default)]
+    pub token_security: Option<TokenSecurityProfile>,
+    #[serde(default)]
+    pub holder_usd_values: Option<Vec<f64>>,
 }
 
 /// Typed rejection reason returned when a candidate fails any admission gate
@@ -173,7 +202,30 @@ pub fn evaluate_candidate_admission(
         }
     }
 
-    // 1. Liquidity Floor Gate
+    // 1. Canonical Hard-Quote & Post-Migration Graduation Gate + Liquidity Floor
+    if let Some(ref qm) = candidate.quote_mint {
+        if !cfg.gates.canonical_quote_mints.is_empty() && !cfg.gates.canonical_quote_mints.iter().any(|c| c == qm) {
+            return Err(RejectionReason::LowLiquidity {
+                current_usd: candidate.liquidity_usd,
+                required_usd: cfg.risk.min_entry_liquidity_usd,
+            });
+        }
+    }
+    if candidate.dex_id == "pumpfun" && candidate.bonding_curve_complete == Some(false) {
+        return Err(RejectionReason::LowLiquidity {
+            current_usd: candidate.liquidity_usd,
+            required_usd: cfg.risk.min_entry_liquidity_usd,
+        });
+    }
+    if let Some(peak_liq) = candidate.peak_liquidity_usd {
+        if peak_liq > 0.0 && (candidate.liquidity_usd / peak_liq) < cfg.gates.min_liquidity_retention_ratio {
+            return Err(RejectionReason::LowLiquidity {
+                current_usd: candidate.liquidity_usd,
+                required_usd: peak_liq * cfg.gates.min_liquidity_retention_ratio,
+            });
+        }
+    }
+
     // Standard radar candidates: $32,000 floor (tokens between $25k-$32k show excessive slippage on sub-second dumps)
     // Social caller signals with early pool delta (<= 30s) may retain the $25,000 floor
     let is_early_social = match delta_opt {
@@ -192,6 +244,31 @@ pub fn evaluate_candidate_admission(
         });
     }
 
+    // 1b. SPL Authority & Token-2022 Extension Safety Gate + Dynamic Deployer Blacklist
+    if let Some(ref sec) = candidate.token_security {
+        if !sec.mint_authority_revoked || !sec.freeze_authority_revoked {
+            return Err(RejectionReason::DevCluster {
+                reason: "SPL_AUTHORITY_NOT_REVOKED".to_string(),
+                metric_label: "Auth: Active".to_string(),
+            });
+        }
+        if sec.has_transfer_hook || sec.has_permanent_delegate || sec.transfer_fee_bps > 0 {
+            return Err(RejectionReason::DevCluster {
+                reason: "TOKEN2022_UNSAFE_EXTENSION".to_string(),
+                metric_label: format!("FeeBps: {}", sec.transfer_fee_bps),
+            });
+        }
+    }
+    if let Some(ref deployer) = candidate.deployer_address {
+        let store = crate::funder_graph::DeployerBlacklistStore::load_from_path(&cfg.gates.deployer_blacklist_path);
+        if store.is_blacklisted(deployer) {
+            return Err(RejectionReason::DevCluster {
+                reason: "SERIAL_DEPLOYER_BLACKLISTED".to_string(),
+                metric_label: "Deployer: Banned".to_string(),
+            });
+        }
+    }
+
     // 2. Genesis Bundle Protection & Anti-Sniper Cluster Detection Gate
     if cfg.genesis_guard.enabled {
         if let Some(ref profile) = candidate.genesis_profile {
@@ -205,7 +282,23 @@ pub fn evaluate_candidate_admission(
         }
     }
 
-    // 3. Hawkes Point Process Wash-Trading Filter Gate
+    // 3. Hawkes Point Process Wash-Trading Filter Gate + Intra-Block Wash & Protocol-Fee Consistency
+    if let Some(eta) = candidate.wash_volume_eta {
+        if eta > cfg.gates.max_wash_volume_eta {
+            return Err(RejectionReason::HawkesWash {
+                branching_ratio: eta,
+                detail: format!("WASH_VOLUME_ETA_EXCEEDED ({:.2} > {:.2})", eta, cfg.gates.max_wash_volume_eta),
+            });
+        }
+    }
+    if let Some(phi) = candidate.protocol_fee_ratio_phi {
+        if phi < cfg.gates.min_protocol_fee_ratio_phi {
+            return Err(RejectionReason::HawkesWash {
+                branching_ratio: phi,
+                detail: format!("PROTOCOL_FEE_INCONSISTENCY ({:.2} < {:.2})", phi, cfg.gates.min_protocol_fee_ratio_phi),
+            });
+        }
+    }
     if cfg.hawkes.enabled {
         if candidate.arrival_timestamps.len() < 5 {
             return Err(RejectionReason::HawkesWash {
@@ -350,6 +443,64 @@ pub fn evaluate_candidate_admission(
                 metric_label: format!("Cluster: {:.1}%", funder_metrics.max_cluster_supply_pct),
             });
         }
+
+        // Top-N Concentration HHI_top20 check over non-pool holders
+        let non_pool_pcts: Vec<f64> = holders
+            .iter()
+            .filter(|h| !h.is_liquidity_pool && h.supply_pct > 0.0)
+            .map(|h| h.supply_pct)
+            .collect();
+        let pct_sum: f64 = non_pool_pcts.iter().sum();
+        if pct_sum > 0.0 {
+            let hhi_top20: f64 = non_pool_pcts.iter().map(|&p| (p / pct_sum).powi(2)).sum();
+            if hhi_top20 > cfg.gates.max_top20_hhi {
+                return Err(RejectionReason::DevCluster {
+                    reason: "TOP20_HHI_EXCEEDED".to_string(),
+                    metric_label: format!("HHI_top20: {:.2}", hhi_top20),
+                });
+            }
+        }
+
+        // Sybil ratio rho <= 0.25
+        if let Some(rho) = candidate.sybil_ratio_rho {
+            if rho > cfg.gates.max_sybil_ratio_rho {
+                return Err(RejectionReason::DevCluster {
+                    reason: "SYBIL_RATIO_RHO_EXCEEDED".to_string(),
+                    metric_label: format!("rho: {:.2}", rho),
+                });
+            }
+        }
+
+        // SPL Transfer-Graph Connected-Component Cap (C_max <= 0.15) & Zero-Swap Airdrop Filter
+        if let Some(ref edges) = candidate.transfer_edges {
+            let tg = crate::funder_graph::compute_transfer_connected_components(edges, holders);
+            if tg.zero_swap_airdrop_cluster {
+                return Err(RejectionReason::DevCluster {
+                    reason: "ZERO_SWAP_AIRDROP_CLUSTER".to_string(),
+                    metric_label: format!("C_max: {:.2}", tg.max_component_share),
+                });
+            }
+            if tg.max_component_share > cfg.gates.max_transfer_component_cap {
+                return Err(RejectionReason::DevCluster {
+                    reason: "TRANSFER_COMPONENT_CAP_EXCEEDED".to_string(),
+                    metric_label: format!("C_max: {:.2}", tg.max_component_share),
+                });
+            }
+        }
+
+        // Dust-adjusted active holder count (N_holders,eff >= $25)
+        if let Some(ref usd_vals) = candidate.holder_usd_values {
+            let eff_count = usd_vals
+                .iter()
+                .filter(|&&v| v >= cfg.gates.min_effective_holder_usd)
+                .count();
+            if eff_count < cfg.gates.min_effective_holders_count {
+                return Err(RejectionReason::DevCluster {
+                    reason: "DUST_ADJUSTED_HOLDERS_LOW".to_string(),
+                    metric_label: format!("EffHolders: {}", eff_count),
+                });
+            }
+        }
     }
 
     Ok(())
@@ -442,6 +593,16 @@ mod tests {
             caller_msg_timestamp_utc: None,
             pool_creation_timestamp_utc: None,
             caller_delta_seconds: None,
+            quote_mint: None,
+            bonding_curve_complete: None,
+            wash_volume_eta: None,
+            protocol_fee_ratio_phi: None,
+            peak_liquidity_usd: None,
+            sybil_ratio_rho: None,
+            transfer_edges: None,
+            deployer_address: None,
+            token_security: None,
+            holder_usd_values: None,
         }
     }
 
@@ -995,6 +1156,60 @@ mod tests {
             }
             _ => panic!("Expected LateCallerDistribution, got {:?}", err),
         }
+    }
+
+    #[test]
+    fn test_v100_fail_closed_microstructure_gates() {
+        let mut cfg = EngineConfig::default();
+        cfg.genesis_guard.enabled = false;
+        cfg.hawkes.enabled = false;
+        cfg.orderflow.enabled = false;
+
+        // 1. Token-2022 unsafe extension (transfer hook / permanent delegate / fee > 0) -> rejected
+        let mut c1 = make_test_candidate();
+        c1.token_security = Some(TokenSecurityProfile {
+            mint_authority_revoked: true,
+            freeze_authority_revoked: true,
+            has_transfer_hook: true,
+            has_permanent_delegate: false,
+            transfer_fee_bps: 0,
+        });
+        assert!(evaluate_candidate_admission(&c1, &cfg, None).is_err());
+
+        // 2. SPL transfer-graph connected component cap (C_max > 0.15) & zero-swap airdrop cluster -> rejected
+        let mut c2 = make_test_candidate();
+        c2.holder_records = Some(vec![
+            TokenHolderRecord { holder_address: "A".to_string(), supply_pct: 6.0, is_liquidity_pool: false, funding_source: None },
+            TokenHolderRecord { holder_address: "B".to_string(), supply_pct: 6.0, is_liquidity_pool: false, funding_source: None },
+            TokenHolderRecord { holder_address: "C".to_string(), supply_pct: 5.0, is_liquidity_pool: false, funding_source: None },
+            TokenHolderRecord { holder_address: "D".to_string(), supply_pct: 1.0, is_liquidity_pool: false, funding_source: None },
+            TokenHolderRecord { holder_address: "E".to_string(), supply_pct: 1.0, is_liquidity_pool: false, funding_source: None },
+        ]);
+        c2.transfer_edges = Some(vec![
+            crate::funder_graph::TransferEdge { from: "A".to_string(), to: "B".to_string(), has_swap: false },
+            crate::funder_graph::TransferEdge { from: "B".to_string(), to: "C".to_string(), has_swap: false },
+        ]);
+        assert!(evaluate_candidate_admission(&c2, &cfg, None).is_err());
+
+        // 3. Liquidity retention < 50% -> rejected
+        let mut c3 = make_test_candidate();
+        c3.liquidity_usd = 40_000.0;
+        c3.peak_liquidity_usd = Some(100_000.0);
+        assert!(evaluate_candidate_admission(&c3, &cfg, None).is_err());
+
+        // 4. Dust-adjusted active holders (< 5 holders >= $25) -> rejected
+        let mut c4 = make_test_candidate();
+        c4.holder_usd_values = Some(vec![100.0, 50.0, 10.0, 5.0, 2.0]);
+        assert!(evaluate_candidate_admission(&c4, &cfg, None).is_err());
+
+        // 5. Intra-block wash eta > 0.65 & protocol fee phi < 0.70 -> rejected
+        let mut c5 = make_test_candidate();
+        c5.wash_volume_eta = Some(0.75);
+        assert!(evaluate_candidate_admission(&c5, &cfg, None).is_err());
+
+        let mut c6 = make_test_candidate();
+        c6.protocol_fee_ratio_phi = Some(0.50);
+        assert!(evaluate_candidate_admission(&c6, &cfg, None).is_err());
     }
 }
 

@@ -158,6 +158,34 @@ admin_passphrase = "dmne-alpha-desk-2026"
 rpc_url = "https://mainnet.helius-rpc.com/?api-key=1eadb81c-7820-4e10-9fe8-3328a837ec80"
 public_rpc_url = "https://api.mainnet-beta.solana.com"
 
+[gates]
+max_top20_hhi = 0.35
+max_sybil_ratio_rho = 0.25
+max_sniper_supply_share = 0.18
+max_wash_volume_eta = 0.65
+min_protocol_fee_ratio_phi = 0.70
+max_transfer_component_cap = 0.15
+min_liquidity_retention_ratio = 0.50
+min_effective_holder_usd = 25.0
+min_effective_holders_count = 5
+max_jito_packet_bytes = 1232
+social_rep_decay_tau_days = 14.0
+deployer_blacklist_path = "logs/deployer_blacklist.json"
+canonical_quote_mints = [
+  "So11111111111111111111111111111111111111112",
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+]
+dex_pool_authorities = [
+  "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1",
+  "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL",
+  "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+  "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+  "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
+]
+alt_addresses = []
+
+
 
 
 

@@ -160,7 +160,7 @@ impl HawkesArrivalTracker {
     }
 }
 
-const RPC_CACHE_TTL_SECS: u64 = 15;
+const RPC_CACHE_TTL_SECS: u64 = 30;
 
 pub const KNOWN_DEX_POOL_AUTHORITIES: &[&str] = &[
     "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1", // Raydium Authority V4

@@ -603,6 +603,121 @@ impl FunderGraphEvaluator {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferEdge {
+    pub from: String,
+    pub to: String,
+    pub has_swap: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferGraphMetrics {
+    pub max_component_share: f64,
+    pub zero_swap_airdrop_cluster: bool,
+}
+
+/// Computes SPL transfer-graph connected-component supply cap (C_max) and detects zero-swap airdrop clusters.
+pub fn compute_transfer_connected_components(
+    edges: &[TransferEdge],
+    holders: &[TokenHolderRecord],
+) -> TransferGraphMetrics {
+    if edges.is_empty() || holders.is_empty() {
+        return TransferGraphMetrics {
+            max_component_share: 0.0,
+            zero_swap_airdrop_cluster: false,
+        };
+    }
+
+    let mut supply_by_addr: HashMap<String, f64> = HashMap::new();
+    for h in holders {
+        if !h.is_liquidity_pool && h.supply_pct > 0.0 {
+            *supply_by_addr.entry(h.holder_address.clone()).or_insert(0.0) += h.supply_pct / 100.0;
+        }
+    }
+
+    let mut adj: HashMap<String, Vec<(&str, bool)>> = HashMap::new();
+    for e in edges {
+        adj.entry(e.from.clone()).or_default().push((&e.to, e.has_swap));
+        adj.entry(e.to.clone()).or_default().push((&e.from, e.has_swap));
+    }
+
+    let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut max_component_share = 0.0f64;
+    let mut zero_swap_airdrop_cluster = false;
+
+    for start in adj.keys() {
+        if visited.contains(start) {
+            continue;
+        }
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(start.clone());
+        visited.insert(start.clone());
+
+        let mut comp_share = 0.0f64;
+        let mut comp_nodes = 0usize;
+        let mut any_swap = false;
+
+        while let Some(node) = queue.pop_front() {
+            comp_nodes += 1;
+            comp_share += supply_by_addr.get(&node).copied().unwrap_or(0.0);
+            if let Some(neighbors) = adj.get(&node) {
+                for &(nbr, has_swap) in neighbors {
+                    if has_swap {
+                        any_swap = true;
+                    }
+                    if !visited.contains(nbr) {
+                        visited.insert(nbr.to_string());
+                        queue.push_back(nbr.to_string());
+                    }
+                }
+            }
+        }
+
+        if comp_share > max_component_share {
+            max_component_share = comp_share;
+        }
+        if comp_nodes >= 3 && !any_swap && comp_share > 0.0 {
+            zero_swap_airdrop_cluster = true;
+        }
+    }
+
+    TransferGraphMetrics {
+        max_component_share,
+        zero_swap_airdrop_cluster,
+    }
+}
+
+/// File-backed dynamic serial deployer & funding-ancestor blacklist store (zero hard-coded addresses).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DeployerBlacklistStore {
+    pub blacklisted: HashMap<String, String>,
+}
+
+impl DeployerBlacklistStore {
+    pub fn load_from_path(path: &str) -> Self {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(store) = serde_json::from_str::<Self>(&content) {
+                return store;
+            }
+        }
+        Self::default()
+    }
+
+    pub fn is_blacklisted(&self, address: &str) -> bool {
+        !address.is_empty() && self.blacklisted.contains_key(address)
+    }
+
+    pub fn record_toxic_deployer(&mut self, address: &str, reason: &str, path: &str) {
+        if address.is_empty() {
+            return;
+        }
+        self.blacklisted.insert(address.to_string(), reason.to_string());
+        if let Ok(json) = serde_json::to_string_pretty(self) {
+            let _ = std::fs::write(path, json);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

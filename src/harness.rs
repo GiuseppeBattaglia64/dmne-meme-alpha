@@ -626,6 +626,7 @@ mod tests {
             funder_graph: None,
             admin: None,
             solana: None,
+            gates: None,
         };
 
         assert!(validate_safety_invariants_on_toml(&cfg).is_ok());

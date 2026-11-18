@@ -72,6 +72,98 @@ pub struct EngineConfig {
 
     // Admin Authorization Config
     pub admin: AdminConfig,
+
+    // DMNE Meme v1.0.0 Microstructure & Execution Gate Envelope
+    #[serde(default)]
+    pub gates: GateConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GateConfig {
+    #[serde(default = "default_gates_max_top20_hhi")]
+    pub max_top20_hhi: f64,
+    #[serde(default = "default_gates_max_sybil_ratio_rho")]
+    pub max_sybil_ratio_rho: f64,
+    #[serde(default = "default_gates_max_sniper_supply_share")]
+    pub max_sniper_supply_share: f64,
+    #[serde(default = "default_gates_max_wash_volume_eta")]
+    pub max_wash_volume_eta: f64,
+    #[serde(default = "default_gates_min_protocol_fee_ratio_phi")]
+    pub min_protocol_fee_ratio_phi: f64,
+    #[serde(default = "default_gates_max_transfer_component_cap")]
+    pub max_transfer_component_cap: f64,
+    #[serde(default = "default_gates_min_liquidity_retention_ratio")]
+    pub min_liquidity_retention_ratio: f64,
+    #[serde(default = "default_gates_min_effective_holder_usd")]
+    pub min_effective_holder_usd: f64,
+    #[serde(default = "default_gates_min_effective_holders_count")]
+    pub min_effective_holders_count: usize,
+    #[serde(default = "default_gates_max_jito_packet_bytes")]
+    pub max_jito_packet_bytes: usize,
+    #[serde(default = "default_gates_social_rep_decay_tau_days")]
+    pub social_rep_decay_tau_days: f64,
+    #[serde(default = "default_gates_deployer_blacklist_path")]
+    pub deployer_blacklist_path: String,
+    #[serde(default = "default_gates_canonical_quote_mints")]
+    pub canonical_quote_mints: Vec<String>,
+    #[serde(default = "default_gates_dex_pool_authorities")]
+    pub dex_pool_authorities: Vec<String>,
+    #[serde(default = "default_gates_alt_addresses")]
+    pub alt_addresses: Vec<String>,
+}
+
+fn default_gates_max_top20_hhi() -> f64 { 0.35 }
+fn default_gates_max_sybil_ratio_rho() -> f64 { 0.25 }
+fn default_gates_max_sniper_supply_share() -> f64 { 0.18 }
+fn default_gates_max_wash_volume_eta() -> f64 { 0.65 }
+fn default_gates_min_protocol_fee_ratio_phi() -> f64 { 0.70 }
+fn default_gates_max_transfer_component_cap() -> f64 { 0.15 }
+fn default_gates_min_liquidity_retention_ratio() -> f64 { 0.50 }
+fn default_gates_min_effective_holder_usd() -> f64 { 25.0 }
+fn default_gates_min_effective_holders_count() -> usize { 5 }
+fn default_gates_max_jito_packet_bytes() -> usize { 1232 }
+fn default_gates_social_rep_decay_tau_days() -> f64 { 14.0 }
+fn default_gates_deployer_blacklist_path() -> String { "logs/deployer_blacklist.json".to_string() }
+fn default_gates_canonical_quote_mints() -> Vec<String> {
+    vec![
+        "So11111111111111111111111111111111111111112".to_string(),
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(),
+        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB".to_string(),
+    ]
+}
+fn default_gates_dex_pool_authorities() -> Vec<String> {
+    vec![
+        "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1".to_string(),
+        "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL".to_string(),
+        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA".to_string(),
+        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string(),
+        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(),
+    ]
+}
+fn default_gates_alt_addresses() -> Vec<String> {
+    Vec::new()
+}
+
+impl Default for GateConfig {
+    fn default() -> Self {
+        Self {
+            max_top20_hhi: default_gates_max_top20_hhi(),
+            max_sybil_ratio_rho: default_gates_max_sybil_ratio_rho(),
+            max_sniper_supply_share: default_gates_max_sniper_supply_share(),
+            max_wash_volume_eta: default_gates_max_wash_volume_eta(),
+            min_protocol_fee_ratio_phi: default_gates_min_protocol_fee_ratio_phi(),
+            max_transfer_component_cap: default_gates_max_transfer_component_cap(),
+            min_liquidity_retention_ratio: default_gates_min_liquidity_retention_ratio(),
+            min_effective_holder_usd: default_gates_min_effective_holder_usd(),
+            min_effective_holders_count: default_gates_min_effective_holders_count(),
+            max_jito_packet_bytes: default_gates_max_jito_packet_bytes(),
+            social_rep_decay_tau_days: default_gates_social_rep_decay_tau_days(),
+            deployer_blacklist_path: default_gates_deployer_blacklist_path(),
+            canonical_quote_mints: default_gates_canonical_quote_mints(),
+            dex_pool_authorities: default_gates_dex_pool_authorities(),
+            alt_addresses: default_gates_alt_addresses(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -632,6 +724,7 @@ pub struct TomlConfigFile {
     pub funder_graph: Option<crate::funder_graph::FunderGraphConfig>,
     pub admin: Option<AdminConfig>,
     pub solana: Option<SolanaConfig>,
+    pub gates: Option<GateConfig>,
 }
 
 impl Default for EngineConfig {
@@ -677,6 +770,7 @@ impl Default for EngineConfig {
             funder_graph: crate::funder_graph::FunderGraphConfig::default(),
             sandbox: SandboxConfig::default(),
             admin: AdminConfig::default(),
+            gates: GateConfig::default(),
         }
     }
 }
@@ -738,6 +832,10 @@ impl EngineConfig {
                 if let Some(adm) = toml_file.admin {
                     println!("[CONFIG] Loaded institutional [admin] envelope from config.toml");
                     cfg.admin = adm;
+                }
+                if let Some(gt) = toml_file.gates {
+                    println!("[CONFIG] Loaded institutional [gates] envelope from config.toml");
+                    cfg.gates = gt;
                 }
                 if let Some(mut sol) = toml_file.solana {
                     println!("[CONFIG] Loaded institutional [solana] envelope from config.toml");
