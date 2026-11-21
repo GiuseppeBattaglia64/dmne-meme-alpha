@@ -2328,11 +2328,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
+        }
+    });
+
+    // 2b. Independent 1.5s Active-Position Monitor (Decoupled from slow candidate admission RPC calls)
+    let pos_state = Arc::clone(&state);
+    let pos_client = http_client.clone();
+    let pos_cfg = Arc::clone(&config);
+    let pos_shadow = shadow_handle.clone();
+    let active_exit_lock = Arc::new(tokio::sync::Mutex::new(()));
+    tokio::spawn(async move {
+        let eval_state = pos_state;
+        let eval_client = pos_client;
+        let eval_cfg = pos_cfg;
+        let eval_shadow = pos_shadow;
+        loop {
+            tokio::time::sleep(Duration::from_millis(1500)).await;
 
             let active_mints: Vec<(usize, String)> = {
                 let guard = eval_state.read().await;
                 guard.active_positions.iter().enumerate().map(|(i, p)| (i, p.token_mint.clone())).collect()
             };
+            if active_mints.is_empty() {
+                continue;
+            }
 
             let mut active_arrivals: std::collections::HashMap<String, Vec<f64>> = std::collections::HashMap::new();
             for (idx, mint) in &active_mints {
@@ -2340,7 +2359,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 active_arrivals.insert(mint.clone(), arrivals);
                 if let Some(snap) = fetch_live_price(&eval_client, mint).await {
                     let mut guard = eval_state.write().await;
-                    if *idx < guard.active_positions.len() {
+                    if *idx < guard.active_positions.len() && guard.active_positions[*idx].token_mint == *mint {
                         let pos = &mut guard.active_positions[*idx];
                         pos.current_price_sol = snap.price_sol;
                         pos.record_price_tick(snap.price_sol, eval_cfg.dynamic_exits.vol_window_size);
@@ -2390,7 +2409,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 effective_risk_cfg.max_runner_trailing_drop_pct,
             );
 
-            // Evaluate dynamic exit rules
+            // Evaluate dynamic exit rules (serialized via active_exit_lock)
+            let _exit_guard = active_exit_lock.lock().await;
             let mut guard = eval_state.write().await;
             guard.effective_risk_cfg = effective_risk_cfg.clone();
             let cluster_congestion_mult = guard.cluster_congestion_multiplier();
