@@ -71,14 +71,19 @@ pub async fn record_settled_trade(
             bankroll_after_sol, exit_rule, dex_url, is_toxic
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     ";
-    let _ = client.execute(
+    let safe_exit_rule: String = exit_rule.chars().take(64).collect();
+    let safe_symbol: String = symbol.chars().take(32).collect();
+    let safe_mint: String = mint.chars().take(64).collect();
+    if let Err(e) = client.execute(
         stmt,
         &[
-            &mint, &symbol, &hold_duration_sec, &entry_size_sol, &entry_price_sol,
+            &safe_mint, &safe_symbol, &hold_duration_sec, &entry_size_sol, &entry_price_sol,
             &exit_price_sol, &peak_price_sol, &pnl_pct, &realized_pnl_sol, &bankroll_before,
-            &bankroll_after, &exit_rule, &dex_url, &is_toxic
+            &bankroll_after, &safe_exit_rule, &dex_url, &is_toxic
         ]
-    ).await;
+    ).await {
+        eprintln!("[DB ERROR] record_settled_trade failed for {} ({}): {}", symbol, mint, e);
+    }
 }
 
 /// Queries recent closed trades for the forensic ledger

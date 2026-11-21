@@ -887,50 +887,139 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_audit_tx = db::spawn_db_audit_worker(db::DEFAULT_DB_URL);
     let funder_cache = funder_graph::FunderGraphEvaluator::load_cache(&config.funder_graph.cache_path).unwrap_or_default();
     let funder_evaluator = Arc::new(funder_graph::FunderGraphEvaluator::new(config.funder_graph.clone(), funder_cache));
-    // Reconcile system bankroll and cumulative metrics on startup
-    if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
-        let (total, wins, net, rejections) = db::fetch_complete_system_stats(&pg).await;
+    // Reconcile system bankroll and cumulative metrics on startup.
+    // Derive closed_trades, realized PnL, and current_bankroll_sol directly from trades_forensic.csv
+    // so every partial/full exit is preserved even if an async DB insert failed or lagged.
+    {
         let mut g = state.write().await;
-        g.current_bankroll_sol = (g.initial_bankroll_sol + net).max(0.05);
-        g.total_trades = total as usize;
-        g.wins = wins as usize;
-        g.losses = (total - wins) as usize;
-        g.rejections_count = rejections as u64;
-        g.total_realized_pnl_sol = net;
         g.effective_risk_cfg = config.risk.clone();
         g.solana_config = config.solana.clone();
 
-        // Restore historical closed trades & quarantine state from PostgreSQL
-        let historical_trades = db::fetch_settled_trades_for_reconcile(&pg).await;
-        for (mint, symbol, size, pnl_sol, pnl_pct, rule, epoch, db_toxic) in historical_trades {
-            let is_toxic = db_toxic || risk::is_historical_exit_toxic(pnl_pct, &config.risk);
-            let tip = risk::resolve_exit_tip(&rule, pnl_sol, 1.0, &config.risk);
-            let priority = if risk::is_emergency_risk_exit(&rule) {
-                "HIGH_URGENCY_EMERGENCY".to_string()
-            } else {
-                "STANDARD_ROUTINE".to_string()
-            };
-            let outcome = match risk::classify_trade_outcome(pnl_pct) {
-                risk::TradeOutcome::Win => "WIN",
-                risk::TradeOutcome::Scratch => "SCRATCH",
-                risk::TradeOutcome::Loss => "LOSS",
-            }.to_string();
-            g.closed_trades.push(ClosedTrade {
-                token_mint: mint,
-                symbol,
-                size_sol: size,
-                pnl_sol,
-                pnl_pct,
-                reason: rule,
-                closed_at_epoch: epoch,
-                is_toxic,
-                jito_tip_lamports: tip,
-                execution_priority: priority,
-                outcome,
-            });
+        if let Ok(content) = std::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/logs/trades_forensic.csv") {
+            let mut csv_net_pnl = 0.0f64;
+            let mut csv_wins = 0usize;
+            let mut csv_losses = 0usize;
+            let mut csv_scratches = 0usize;
+            for line in content.lines().skip(1) {
+                let cols: Vec<&str> = line.split(',').collect();
+                if cols.len() >= 20 {
+                    let exit_time_str = cols[0];
+                    let closed_at_epoch = chrono::DateTime::parse_from_rfc3339(exit_time_str)
+                        .map(|dt| dt.timestamp().max(0) as u64)
+                        .unwrap_or_default();
+                    let symbol = cols[3].to_string();
+                    let token_mint = cols[4].to_string();
+                    let size_sol = cols[7].parse::<f64>().unwrap_or(0.0);
+                    let pnl_pct = cols[14].parse::<f64>().unwrap_or(0.0);
+                    let pnl_sol = cols[15].parse::<f64>().unwrap_or(0.0);
+                    let reason = cols[19].trim_matches('"').to_string();
+                    let is_toxic = if cols.len() > 24 {
+                        cols[24].trim().parse::<bool>().unwrap_or_else(|_| risk::is_historical_exit_toxic(pnl_pct, &config.risk))
+                    } else {
+                        risk::is_historical_exit_toxic(pnl_pct, &config.risk)
+                    };
+                    let tip = if cols.len() > 25 {
+                        cols[25].trim().parse::<u64>().unwrap_or_else(|_| risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk))
+                    } else {
+                        risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk)
+                    };
+                    let priority = if risk::is_emergency_risk_exit(&reason) {
+                        "HIGH_URGENCY_EMERGENCY".to_string()
+                    } else {
+                        "STANDARD_ROUTINE".to_string()
+                    };
+                    if !token_mint.is_empty() {
+                        g.banned_tokens.insert(token_mint.clone());
+                    }
+                    if !symbol.is_empty() {
+                        g.banned_tokens.insert(symbol.clone());
+                    }
+                    let outcome_enum = risk::classify_trade_outcome(pnl_pct);
+                    match outcome_enum {
+                        risk::TradeOutcome::Win => csv_wins += 1,
+                        risk::TradeOutcome::Scratch => csv_scratches += 1,
+                        risk::TradeOutcome::Loss => csv_losses += 1,
+                    }
+                    let outcome = match outcome_enum {
+                        risk::TradeOutcome::Win => "WIN",
+                        risk::TradeOutcome::Scratch => "SCRATCH",
+                        risk::TradeOutcome::Loss => "LOSS",
+                    }.to_string();
+                    csv_net_pnl += pnl_sol;
+                    g.closed_trades.push(ClosedTrade {
+                        token_mint,
+                        symbol,
+                        size_sol,
+                        pnl_sol,
+                        pnl_pct,
+                        reason,
+                        closed_at_epoch,
+                        is_toxic,
+                        jito_tip_lamports: tip,
+                        execution_priority: priority,
+                        outcome,
+                    });
+                }
+            }
+            if !g.closed_trades.is_empty() {
+                g.total_realized_pnl_sol = csv_net_pnl;
+                g.current_bankroll_sol = (g.initial_bankroll_sol + csv_net_pnl).max(0.05);
+                g.total_trades = g.closed_trades.len();
+                g.wins = csv_wins;
+                g.losses = csv_losses;
+                g.scratches = csv_scratches;
+                println!(
+                    "[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Closed Trades: {} (CSV)",
+                    g.current_bankroll_sol, g.total_realized_pnl_sol, g.total_trades, g.closed_trades.len()
+                );
+            }
         }
-        println!("[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Rejections: {} | Restored Closed Trades: {}", 
-            g.current_bankroll_sol, g.total_realized_pnl_sol, total, rejections, g.closed_trades.len());
+    }
+
+    if let Ok(pg) = db::establish_connection(db::DEFAULT_DB_URL).await {
+        let (total, wins, net, rejections) = db::fetch_complete_system_stats(&pg).await;
+        let mut g = state.write().await;
+        g.rejections_count = rejections as u64;
+        if g.closed_trades.is_empty() {
+            g.current_bankroll_sol = (g.initial_bankroll_sol + net).max(0.05);
+            g.total_trades = total as usize;
+            g.wins = wins as usize;
+            g.losses = (total - wins) as usize;
+            g.total_realized_pnl_sol = net;
+
+            let historical_trades = db::fetch_settled_trades_for_reconcile(&pg).await;
+            for (mint, symbol, size, pnl_sol, pnl_pct, rule, epoch, db_toxic) in historical_trades {
+                let is_toxic = db_toxic || risk::is_historical_exit_toxic(pnl_pct, &config.risk);
+                let tip = risk::resolve_exit_tip(&rule, pnl_sol, 1.0, &config.risk);
+                let priority = if risk::is_emergency_risk_exit(&rule) {
+                    "HIGH_URGENCY_EMERGENCY".to_string()
+                } else {
+                    "STANDARD_ROUTINE".to_string()
+                };
+                let outcome = match risk::classify_trade_outcome(pnl_pct) {
+                    risk::TradeOutcome::Win => "WIN",
+                    risk::TradeOutcome::Scratch => "SCRATCH",
+                    risk::TradeOutcome::Loss => "LOSS",
+                }.to_string();
+                g.closed_trades.push(ClosedTrade {
+                    token_mint: mint,
+                    symbol,
+                    size_sol: size,
+                    pnl_sol,
+                    pnl_pct,
+                    reason: rule,
+                    closed_at_epoch: epoch,
+                    is_toxic,
+                    jito_tip_lamports: tip,
+                    execution_priority: priority,
+                    outcome,
+                });
+            }
+            println!(
+                "[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Rejections: {} | Restored Closed Trades: {}",
+                g.current_bankroll_sol, g.total_realized_pnl_sol, total, rejections, g.closed_trades.len()
+            );
+        }
 
         // Lifetime One-Shot Policy: populate banned_tokens with all distinct settled tokens from both tables
         let all_settled_tokens = db::fetch_all_settled_tokens(&pg).await;
@@ -997,69 +1086,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("[STARTUP RECONCILE] Restored {} recent Stage 2 audits into ring buffer", audit_count);
     }
 
-    // Fallback: If DB had no closed trades or was unreachable, load from trades_forensic.csv
-    {
-        let mut g = state.write().await;
-        if g.closed_trades.is_empty() {
-            if let Ok(content) = std::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/logs/trades_forensic.csv") {
-                for line in content.lines().skip(1) {
-                    let cols: Vec<&str> = line.split(',').collect();
-                    if cols.len() >= 20 {
-                        let exit_time_str = cols[0];
-                        let closed_at_epoch = chrono::DateTime::parse_from_rfc3339(exit_time_str)
-                            .map(|dt| dt.timestamp().max(0) as u64)
-                            .unwrap_or_default();
-                        let symbol = cols[3].to_string();
-                        let token_mint = cols[4].to_string();
-                        let size_sol = cols[7].parse::<f64>().unwrap_or(0.0);
-                        let pnl_pct = cols[14].parse::<f64>().unwrap_or(0.0);
-                        let pnl_sol = cols[15].parse::<f64>().unwrap_or(0.0);
-                        let reason = cols[19].trim_matches('"').to_string();
-                        let is_toxic = if cols.len() > 24 {
-                            cols[24].trim().parse::<bool>().unwrap_or_else(|_| risk::is_historical_exit_toxic(pnl_pct, &config.risk))
-                        } else {
-                            risk::is_historical_exit_toxic(pnl_pct, &config.risk)
-                        };
-                        let tip = if cols.len() > 25 {
-                            cols[25].trim().parse::<u64>().unwrap_or_else(|_| risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk))
-                        } else {
-                            risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk)
-                        };
-                        let priority = if risk::is_emergency_risk_exit(&reason) {
-                            "HIGH_URGENCY_EMERGENCY".to_string()
-                        } else {
-                            "STANDARD_ROUTINE".to_string()
-                        };
-                        if !token_mint.is_empty() {
-                            g.banned_tokens.insert(token_mint.clone());
-                        }
-                        if !symbol.is_empty() {
-                            g.banned_tokens.insert(symbol.clone());
-                        }
-                        let outcome = match risk::classify_trade_outcome(pnl_pct) {
-                            risk::TradeOutcome::Win => "WIN",
-                            risk::TradeOutcome::Scratch => "SCRATCH",
-                            risk::TradeOutcome::Loss => "LOSS",
-                        }.to_string();
-                        g.closed_trades.push(ClosedTrade {
-                            token_mint,
-                            symbol,
-                            size_sol,
-                            pnl_sol,
-                            pnl_pct,
-                            reason,
-                            closed_at_epoch,
-                            is_toxic,
-                            jito_tip_lamports: tip,
-                            execution_priority: priority,
-                            outcome,
-                        });
-                    }
-                }
-                println!("[STARTUP RECONCILE] Restored {} closed trades from trades_forensic.csv fallback", g.closed_trades.len());
-            }
-        }
-    }
     let http_client = Client::builder()
         .tcp_nodelay(true)
         .build()?;
@@ -1134,39 +1160,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 tokio::time::sleep(Duration::from_millis(1000)).await;
                                 let snapshot = {
                                     let guard = st.read().await;
-                                    let (pg_total, pg_wins, pg_net_sol, pg_rejections) = if let Ok(client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                    db::fetch_complete_system_stats(&client).await
-                } else {
-                    (guard.total_trades as i64, guard.wins as i64, 0.0, guard.rejections_count as i64)
-                };
-
-                // Reconcile current bankroll with true PostgreSQL realized net
-                let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
-                let floating_pnl_sol: f64 = guard.active_positions.iter().map(|p| p.size_sol * (p.pnl_pct / 100.0)).sum();
-                let live_nav_sol = live_reconciled_bankroll + floating_pnl_sol;
+                                    let live_bankroll = guard.current_bankroll_sol.max(0.05);
+                                    let floating_pnl_sol: f64 = guard.active_positions.iter().map(|p| p.size_sol * (p.pnl_pct / 100.0)).sum();
+                                    let live_nav_sol = live_bankroll + floating_pnl_sol;
+                                    let total_closed = guard.closed_trades.len();
 
                                     serde_json::to_string(&serde_json::json!({
                                         "engine_version": env!("CARGO_PKG_VERSION"),
                                         "system_version": APP_VERSION,
-                    "live_onchain_sol": guard.live_onchain_sol,
-                    "is_scanner_paused": guard.is_scanner_paused,
-                    "panic_mode": guard.panic_mode,
-                    "wallet_pubkey": guard.wallet_pubkey.clone(),
-                    "initial_bankroll_sol": guard.initial_bankroll_sol,
-                                        "current_bankroll_sol": live_reconciled_bankroll,
+                                        "live_onchain_sol": guard.live_onchain_sol,
+                                        "is_scanner_paused": guard.is_scanner_paused,
+                                        "panic_mode": guard.panic_mode,
+                                        "wallet_pubkey": guard.wallet_pubkey.clone(),
+                                        "initial_bankroll_sol": guard.initial_bankroll_sol,
+                                        "current_bankroll_sol": live_bankroll,
                                         "floating_pnl_sol": floating_pnl_sol,
                                         "live_nav_sol": live_nav_sol,
                                         "total_realized_pnl_sol": guard.total_realized_pnl_sol,
-                                        "total_trades": pg_total,
-                                        "wins": pg_wins,
-                                        "losses": pg_total - pg_wins,
+                                        "total_trades": guard.total_trades.max(total_closed),
+                                        "wins": guard.wins,
+                                        "losses": guard.losses,
                                         "scratches": guard.scratches,
                                         "effective_win_rate_pct": if (guard.wins + guard.losses) > 0 {
                                             (guard.wins as f64 / (guard.wins + guard.losses) as f64) * 100.0
                                         } else {
                                             0.0
                                         },
-                                        "rejections_count": pg_rejections,
+                                        "rejections_count": guard.rejections_count,
                                         "active_positions": guard.active_positions,
                                         "radar_candidates": guard.radar_candidates,
                                         "closed_trades": guard.closed_trades,
@@ -1187,14 +1207,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         } else if req.starts_with("GET /api/state") {
                             let guard = st.read().await;
-                            let (pg_total, pg_wins, pg_net_sol, pg_rejections) = if let Ok(client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                db::fetch_complete_system_stats(&client).await
-                            } else {
-                                (guard.total_trades as i64, guard.wins as i64, 0.0, guard.rejections_count as i64)
-                            };
-                            let live_reconciled_bankroll = (guard.initial_bankroll_sol + pg_net_sol).max(0.05);
+                            let live_bankroll = guard.current_bankroll_sol.max(0.05);
                             let floating_pnl_sol: f64 = guard.active_positions.iter().map(|p| p.size_sol * (p.pnl_pct / 100.0)).sum();
-                            let live_nav_sol = live_reconciled_bankroll + floating_pnl_sol;
+                            let live_nav_sol = live_bankroll + floating_pnl_sol;
+                            let total_closed = guard.closed_trades.len();
                             let state_json = serde_json::to_string(&serde_json::json!({
                                 "engine_version": env!("CARGO_PKG_VERSION"),
                                 "system_version": APP_VERSION,
@@ -1203,20 +1219,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "panic_mode": guard.panic_mode,
                                 "wallet_pubkey": guard.wallet_pubkey.clone(),
                                 "initial_bankroll_sol": guard.initial_bankroll_sol,
-                                "current_bankroll_sol": live_reconciled_bankroll,
+                                "current_bankroll_sol": live_bankroll,
                                 "floating_pnl_sol": floating_pnl_sol,
                                 "live_nav_sol": live_nav_sol,
                                 "total_realized_pnl_sol": guard.total_realized_pnl_sol,
-                                "total_trades": pg_total,
-                                "wins": pg_wins,
-                                "losses": pg_total - pg_wins,
+                                "total_trades": guard.total_trades.max(total_closed),
+                                "wins": guard.wins,
+                                "losses": guard.losses,
                                 "scratches": guard.scratches,
                                 "effective_win_rate_pct": if (guard.wins + guard.losses) > 0 {
                                     (guard.wins as f64 / (guard.wins + guard.losses) as f64) * 100.0
                                 } else {
                                     0.0
                                 },
-                                "rejections_count": pg_rejections,
+                                "rejections_count": guard.rejections_count,
                                 "active_positions": guard.active_positions,
                                 "radar_candidates": guard.radar_candidates,
                                 "closed_trades": guard.closed_trades,
