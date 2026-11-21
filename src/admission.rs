@@ -235,7 +235,7 @@ pub fn evaluate_candidate_admission(
     let min_entry_liquidity = if is_early_social {
         25000.0f64.min(cfg.risk.min_entry_liquidity_usd)
     } else {
-        cfg.risk.min_entry_liquidity_usd.max(32000.0)
+        cfg.risk.min_entry_liquidity_usd
     };
     if candidate.liquidity_usd < min_entry_liquidity {
         return Err(RejectionReason::LowLiquidity {
@@ -618,7 +618,7 @@ mod tests {
     #[test]
     fn test_admission_low_liquidity_rejection() {
         let mut candidate = make_test_candidate();
-        candidate.liquidity_usd = 15000.0; // Below 32000.0 default
+        candidate.liquidity_usd = 15000.0; // Below 22000.0 default
         let cfg = EngineConfig::default();
         let res = evaluate_candidate_admission(&candidate, &cfg, None);
         assert!(res.is_err());
@@ -627,7 +627,7 @@ mod tests {
         match err {
             RejectionReason::LowLiquidity { current_usd, required_usd } => {
                 assert_eq!(current_usd, 15000.0);
-                assert_eq!(required_usd, 32000.0);
+                assert_eq!(required_usd, 22000.0);
             }
             _ => panic!("Expected LowLiquidity error"),
         }
@@ -636,7 +636,8 @@ mod tests {
 
     #[test]
     fn test_gate1_standard_vs_social_early_delta_liquidity_buffer() {
-        let cfg = EngineConfig::default();
+        let mut cfg = EngineConfig::default();
+        cfg.risk.min_entry_liquidity_usd = 32000.0;
 
         // 1. Standard radar candidate at $28,000 -> Rejected (< $32k floor)
         let mut standard_cand = make_test_candidate();

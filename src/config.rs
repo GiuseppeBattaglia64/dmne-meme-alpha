@@ -434,15 +434,15 @@ fn default_min_stagnation_ttl_secs() -> u64 { 120 }
 fn default_max_stagnation_ttl_secs() -> u64 { 360 }
 fn default_reentry_cooldown_secs() -> u64 { 3600 }
 fn default_toxic_exit_permanent_ban() -> bool { true }
-fn default_min_entry_liquidity_usd() -> f64 { 32000.0 }
-fn default_min_entry_price_change_pct() -> f64 { 1.5 }
+fn default_min_entry_liquidity_usd() -> f64 { 22000.0 }
+fn default_min_entry_price_change_pct() -> f64 { 0.75 }
 fn default_max_entry_price_change_pct() -> f64 { 85.0 }
-fn default_min_entry_buy_sell_ratio() -> f64 { 1.25 }
+fn default_min_entry_buy_sell_ratio() -> f64 { 1.12 }
 fn default_min_entry_conviction_pct() -> f64 { 55.0 }
 fn default_min_entry_m5_txns() -> u32 { 15 }
 fn default_min_entry_m5_volume_usd() -> f64 { 2500.0 }
 fn default_min_entry_h1_price_change_pct() -> f64 { -10.0 }
-fn default_max_entry_fdv_to_liquidity_ratio() -> f64 { 15.0 }
+fn default_max_entry_fdv_to_liquidity_ratio() -> f64 { 20.0 }
 fn default_early_abort_window_secs() -> u64 { 30 }
 fn default_early_abort_max_peak_pct() -> f64 { 1.0 }
 fn default_early_abort_loss_pct() -> f64 { -10.0 }
@@ -508,15 +508,15 @@ impl Default for RiskConfig {
             min_take_profit_activation_pct: 10.0,
             reentry_cooldown_secs: 3600,
             toxic_exit_permanent_ban: true,
-            min_entry_liquidity_usd: 32000.0,
-            min_entry_price_change_pct: 1.5,
+            min_entry_liquidity_usd: 22000.0,
+            min_entry_price_change_pct: 0.75,
             max_entry_price_change_pct: 85.0,
-            min_entry_buy_sell_ratio: 1.25,
+            min_entry_buy_sell_ratio: 1.12,
             min_entry_conviction_pct: 55.0,
             min_entry_m5_txns: 15,
             min_entry_m5_volume_usd: 2500.0,
             min_entry_h1_price_change_pct: -10.0,
-            max_entry_fdv_to_liquidity_ratio: 15.0,
+            max_entry_fdv_to_liquidity_ratio: 20.0,
             early_abort_window_secs: 30,
             early_abort_max_peak_pct: 1.0,
             early_abort_loss_pct: -10.0,

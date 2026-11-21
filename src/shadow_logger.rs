@@ -160,7 +160,13 @@ impl HawkesArrivalTracker {
     }
 }
 
-const RPC_CACHE_TTL_SECS: u64 = 30;
+const RPC_CACHE_TTL_SECS: u64 = 45;
+
+const PUBLIC_SOLANA_RPC_FALLBACKS: &[&str] = &[
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-rpc.publicnode.com",
+    "https://rpc.ankr.com/solana",
+];
 
 pub const KNOWN_DEX_POOL_AUTHORITIES: &[&str] = &[
     "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1", // Raydium Authority V4
@@ -228,25 +234,38 @@ pub async fn post_rpc_with_retry(
     payload: &serde_json::Value,
     timeout: std::time::Duration,
 ) -> Option<serde_json::Value> {
-    let mut endpoints: Vec<&str> = Vec::with_capacity(2);
+    let mut endpoints: Vec<&str> = Vec::with_capacity(4);
     if !primary_rpc_url.is_empty() {
         endpoints.push(primary_rpc_url);
     }
+    let mut fallbacks_added = 0usize;
     if let Some(fb) = fallback_rpc_url {
-        if !fb.is_empty() && fb != primary_rpc_url {
+        if !fb.is_empty() && !endpoints.contains(&fb) {
             endpoints.push(fb);
+            fallbacks_added += 1;
+        }
+    }
+    for &pub_rpc in PUBLIC_SOLANA_RPC_FALLBACKS {
+        if fallbacks_added >= 2 {
+            break;
+        }
+        if !endpoints.contains(&pub_rpc) {
+            endpoints.push(pub_rpc);
+            fallbacks_added += 1;
         }
     }
 
+    let fallback_timeout = std::time::Duration::from_millis(1200);
     for (idx, endpoint) in endpoints.iter().enumerate() {
         let has_fallback = idx + 1 < endpoints.len();
+        let req_timeout = if idx == 0 { timeout } else { fallback_timeout };
         for attempt in 0..2 {
-            match client.post(*endpoint).timeout(timeout).json(payload).send().await {
+            match client.post(*endpoint).timeout(req_timeout).json(payload).send().await {
                 Ok(res) => {
                     let status = res.status();
                     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                        // Fail over immediately to public_rpc_url when primary Helius returns 429
-                        if idx == 0 && has_fallback {
+                        // Fail over immediately to next fallback RPC when endpoint returns 429
+                        if has_fallback {
                             break;
                         }
                         if attempt == 0 {
@@ -273,7 +292,7 @@ pub async fn post_rpc_with_retry(
                             .and_then(|c| c.as_i64())
                             == Some(-32429);
                         if is_rate_limited {
-                            if idx == 0 && has_fallback {
+                            if has_fallback {
                                 break;
                             }
                             if attempt == 0 {
@@ -288,6 +307,9 @@ pub async fn post_rpc_with_retry(
                     }
                 }
                 Err(_) => {
+                    if idx == 0 && has_fallback {
+                        break;
+                    }
                     if attempt == 0 {
                         tokio::time::sleep(std::time::Duration::from_millis(jittered_backoff_ms(250))).await;
                         continue;

@@ -1236,10 +1236,10 @@ mod tests {
         // 1. Liquidity below floor ($15,000 < $32,000)
         assert_eq!(validate_entry_gates(15_000.0, 100_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
 
-        // 2. FDV to Liquidity ratio exceeded (FDV $600,000 / Liq $35,000 = 17.1x > 15.0x)
-        assert_eq!(validate_entry_gates(35_000.0, 600_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+        // 2. FDV to Liquidity ratio exceeded (FDV $800,000 / Liq $35,000 = 22.9x > 20.0x)
+        assert_eq!(validate_entry_gates(35_000.0, 800_000.0, 5.0, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
 
-        // 3. Entry momentum below threshold (+0.5% < +1.5%)
+        // 3. Entry momentum below threshold (+0.5% < +0.75%)
         assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 0.5, 2.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
 
         // 4. Entry momentum overextended (+90.0% > +85.0%)
@@ -1248,8 +1248,8 @@ mod tests {
         // 5. H1 trend bearish (-12.0% < -10.0%)
         assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, -12.0, 1.5, 25, 5_000.0, 75.0, &cfg), Err("H1_TREND_BEARISH"));
 
-        // 6. Buy/sell ratio below threshold (1.15 < 1.25)
-        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, 2.0, 1.15, 25, 5_000.0, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
+        // 6. Buy/sell ratio below threshold (1.05 < 1.12)
+        assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, 2.0, 1.05, 25, 5_000.0, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
 
         // 7. M5 txns below floor (10 < 15)
         assert_eq!(validate_entry_gates(35_000.0, 150_000.0, 5.0, 2.0, 1.5, 10, 5_000.0, 75.0, &cfg), Err("M5_TXNS_BELOW_FLOOR"));
@@ -1270,17 +1270,17 @@ mod tests {
         // 1. Liquidity below floor ($15,000 < $32,000)
         assert_eq!(validate_queue_pop_snapshot(15_000.0, 100_000.0, 2.5, 5.0, 1.5, 75.0, &cfg), Err("LIQUIDITY_BELOW_FLOOR"));
 
-        // 2. FDV to Liquidity ratio exceeded (FDV $600,000 / Liq $35,000 = 17.1x > 15x)
-        assert_eq!(validate_queue_pop_snapshot(35_000.0, 600_000.0, 2.5, 5.0, 1.5, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
+        // 2. FDV to Liquidity ratio exceeded (FDV $800,000 / Liq $35,000 = 22.9x > 20x)
+        assert_eq!(validate_queue_pop_snapshot(35_000.0, 800_000.0, 2.5, 5.0, 1.5, 75.0, &cfg), Err("FDV_LIQ_RATIO_EXCEEDED"));
 
-        // 3. M5 momentum below threshold (+0.5% < +1.5%)
+        // 3. M5 momentum below threshold (+0.5% < +0.75%)
         assert_eq!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 0.5, 5.0, 1.5, 75.0, &cfg), Err("ENTRY_MOMENTUM_BELOW_THRESHOLD"));
 
         // 4. H1 trend bearish (-12.0% < -10.0%)
         assert_eq!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 2.5, -12.0, 1.5, 75.0, &cfg), Err("H1_TREND_BEARISH"));
 
-        // 5. Buy/sell ratio below threshold (1.15 < 1.25)
-        assert_eq!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 2.5, 5.0, 1.15, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
+        // 5. Buy/sell ratio below threshold (1.05 < 1.12)
+        assert_eq!(validate_queue_pop_snapshot(35_000.0, 100_000.0, 2.5, 5.0, 1.05, 75.0, &cfg), Err("BUY_SELL_RATIO_BELOW_THRESHOLD"));
     }
 
     #[test]
