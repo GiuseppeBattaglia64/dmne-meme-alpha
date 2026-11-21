@@ -137,6 +137,7 @@ pub async fn verify_lp_burned_or_locked(
         return true;
     }
 
+    let timeout = std::time::Duration::from_millis(1500);
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -144,14 +145,25 @@ pub async fn verify_lp_burned_or_locked(
         "params": [pair_addr]
     });
 
-    let supply: f64 = match client.post(rpc_url).json(&payload).send().await {
-        Ok(res) => match res.json::<Value>().await {
-            Ok(json) => json["result"]["value"]["uiAmount"].as_f64().unwrap_or(0.0),
-            Err(_) => return false,
-        },
-        Err(_) => return false,
+    let supply_json = match crate::shadow_logger::post_rpc_with_retry(
+        client,
+        rpc_url,
+        Some("https://api.mainnet-beta.solana.com"),
+        &payload,
+        timeout,
+    ).await {
+        Some(j) => j,
+        None => {
+            if dex_id == "pumpswap" || dex_id == "meteora" || dex_id == "orca" {
+                // Concentrated/AMM pool state addresses are not SPL LP mints; allow when pool is graduated DEX
+                return true;
+            }
+            eprintln!("[PREFLIGHT WARN] AMM pair {} (dex={}): getTokenSupply failed across primary & fallback RPCs", pair_addr, dex_id);
+            return false;
+        }
     };
 
+    let supply: f64 = supply_json["result"]["value"]["uiAmount"].as_f64().unwrap_or(0.0);
     if supply == 0.0 {
         return true;
     }
@@ -163,23 +175,29 @@ pub async fn verify_lp_burned_or_locked(
         "params": [pair_addr]
     });
 
-    if let Ok(res) = client.post(rpc_url).json(&largest_payload).send().await {
-        if let Ok(json) = res.json::<Value>().await {
-            if let Some(accounts) = json["result"]["value"].as_array() {
-                for acc in accounts {
-                    let addr = acc["address"].as_str().unwrap_or("");
-                    let amount = acc["uiAmount"].as_f64().unwrap_or(0.0);
-                    if (addr.starts_with("11111111111111111111111111111111") || addr.starts_with("Dead"))
-                        && (amount / supply) >= min_dead_ratio
-                    {
-                        return true;
-                    }
+    if let Some(json) = crate::shadow_logger::post_rpc_with_retry(
+        client,
+        rpc_url,
+        Some("https://api.mainnet-beta.solana.com"),
+        &largest_payload,
+        timeout,
+    ).await {
+        if let Some(accounts) = json["result"]["value"].as_array() {
+            for acc in accounts {
+                let addr = acc["address"].as_str().unwrap_or("");
+                let amount = acc["uiAmount"].as_f64().unwrap_or(0.0);
+                if (addr.starts_with("11111111111111111111111111111111") || addr.starts_with("Dead"))
+                    && (amount / supply) >= min_dead_ratio
+                {
+                    return true;
                 }
             }
         }
+    } else {
+        eprintln!("[PREFLIGHT WARN] AMM pair {} (dex={}): getTokenLargestAccounts failed during LP check", pair_addr, dex_id);
     }
 
-    println!("[GATE REJECT] AMM pair {}: LP tokens unverified on-chain", pair_addr);
+    eprintln!("[PREFLIGHT WARN] AMM pair {} (dex={}, supply={:.2}): LP tokens unverified on-chain", pair_addr, dex_id, supply);
     false
 }
 
@@ -357,10 +375,17 @@ pub async fn simulate_dry_run_bundle(
         ]
     });
 
-    let res = client.post(rpc_url).json(&dummy_tx_payload).send().await
-        .map_err(|e| format!("RPC transport failure: {}", e))?;
-    let json: Value = res.json().await
-        .map_err(|e| format!("JSON parsing failure: {}", e))?;
+    let json = crate::shadow_logger::post_rpc_with_retry(
+        client,
+        rpc_url,
+        Some(&cfg.solana.public_rpc_url),
+        &dummy_tx_payload,
+        std::time::Duration::from_millis(1500),
+    ).await.ok_or_else(|| {
+        let msg = "RPC_RATE_LIMIT_OR_TRANSPORT: simulateTransaction unavailable across primary & fallback RPCs".to_string();
+        eprintln!("[PREFLIGHT WARN] {}", msg);
+        msg
+    })?;
 
     let val = &json["result"]["value"];
     let err_val = &val["err"];
