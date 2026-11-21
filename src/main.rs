@@ -624,7 +624,7 @@ async fn fetch_graduated_dex_mints(
         "method": "getSignaturesForAddress",
         "params": [
             program_id,
-            { "limit": 15, "commitment": "confirmed" }
+            { "limit": 8, "commitment": "confirmed" }
         ]
     });
     let timeout = Duration::from_millis(2500);
@@ -2752,30 +2752,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let disc_cfg = Arc::clone(&config);
         tokio::spawn(async move {
             const DISCOVERY_COOLDOWN_SECS: u64 = 60;
+            const DEX_RPC_POLL_INTERVAL_SECS: u64 = 20;
             let seen_pumpswap_sigs = std::sync::Mutex::new(std::collections::HashSet::<String>::new());
             let seen_raydium_sigs = std::sync::Mutex::new(std::collections::HashSet::<String>::new());
             let mut mint_cooldowns: std::collections::HashMap<String, std::time::Instant> =
                 std::collections::HashMap::new();
+            let mut last_dex_rpc_poll: Option<std::time::Instant> = None;
 
             loop {
-                let (profiles_mints, boosts_mints, pumpswap_mints, raydium_mints) = tokio::join!(
-                    fetch_dexscreener_solana_mints(&disc_client, "https://api.dexscreener.com/token-profiles/latest/v1"),
-                    fetch_dexscreener_solana_mints(&disc_client, "https://api.dexscreener.com/token-boosts/latest/v1"),
-                    fetch_graduated_dex_mints(
-                        &disc_client,
-                        &disc_cfg.solana.rpc_url,
-                        Some(&disc_cfg.solana.public_rpc_url),
-                        PUMPSWAP_AMM_PROGRAM_ID,
-                        &seen_pumpswap_sigs,
-                    ),
-                    fetch_graduated_dex_mints(
-                        &disc_client,
-                        &disc_cfg.solana.rpc_url,
-                        Some(&disc_cfg.solana.public_rpc_url),
-                        RAYDIUM_V4_PROGRAM_ID,
-                        &seen_raydium_sigs,
-                    ),
-                );
+                let poll_dex_rpc = last_dex_rpc_poll
+                    .map(|t| t.elapsed().as_secs() >= DEX_RPC_POLL_INTERVAL_SECS)
+                    .unwrap_or(true);
+                if poll_dex_rpc {
+                    last_dex_rpc_poll = Some(std::time::Instant::now());
+                }
+
+                let (profiles_mints, boosts_mints, pumpswap_mints, raydium_mints) = if poll_dex_rpc {
+                    tokio::join!(
+                        fetch_dexscreener_solana_mints(&disc_client, "https://api.dexscreener.com/token-profiles/latest/v1"),
+                        fetch_dexscreener_solana_mints(&disc_client, "https://api.dexscreener.com/token-boosts/latest/v1"),
+                        fetch_graduated_dex_mints(
+                            &disc_client,
+                            &disc_cfg.solana.rpc_url,
+                            Some(&disc_cfg.solana.public_rpc_url),
+                            PUMPSWAP_AMM_PROGRAM_ID,
+                            &seen_pumpswap_sigs,
+                        ),
+                        fetch_graduated_dex_mints(
+                            &disc_client,
+                            &disc_cfg.solana.rpc_url,
+                            Some(&disc_cfg.solana.public_rpc_url),
+                            RAYDIUM_V4_PROGRAM_ID,
+                            &seen_raydium_sigs,
+                        ),
+                    )
+                } else {
+                    let (p, b) = tokio::join!(
+                        fetch_dexscreener_solana_mints(&disc_client, "https://api.dexscreener.com/token-profiles/latest/v1"),
+                        fetch_dexscreener_solana_mints(&disc_client, "https://api.dexscreener.com/token-boosts/latest/v1"),
+                    );
+                    (p, b, Vec::new(), Vec::new())
+                };
 
                 let now_inst = std::time::Instant::now();
                 if mint_cooldowns.len() > 2000 {

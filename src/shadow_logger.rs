@@ -255,16 +255,38 @@ pub async fn post_rpc_with_retry(
         }
     }
 
+    let is_largest_accounts = payload
+        .get("method")
+        .and_then(|m| m.as_str())
+        == Some("getTokenLargestAccounts");
+    let indexed_backoffs_ms: [u64; 2] = [500, 1200];
     let fallback_timeout = std::time::Duration::from_millis(1200);
     for (idx, endpoint) in endpoints.iter().enumerate() {
         let has_fallback = idx + 1 < endpoints.len();
-        let req_timeout = if idx == 0 { timeout } else { fallback_timeout };
-        for attempt in 0..2 {
+        let is_primary_indexed = idx == 0 && is_largest_accounts;
+        let max_attempts = if is_primary_indexed { 3 } else { 2 };
+        let req_timeout = if is_primary_indexed {
+            std::time::Duration::from_millis(3000)
+        } else if idx == 0 {
+            timeout
+        } else {
+            fallback_timeout
+        };
+        for attempt in 0..max_attempts {
+            let can_retry_same = attempt + 1 < max_attempts;
+            let indexed_wait = || {
+                let base = indexed_backoffs_ms.get(attempt).copied().unwrap_or(1200);
+                jittered_backoff_ms(base)
+            };
             match client.post(*endpoint).timeout(req_timeout).json(payload).send().await {
                 Ok(res) => {
                     let status = res.status();
                     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                        // Fail over immediately to next fallback RPC when endpoint returns 429
+                        if is_primary_indexed && can_retry_same {
+                            let wait_ms = parse_retry_after_ms(res.headers()).unwrap_or_else(indexed_wait);
+                            tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
+                            continue;
+                        }
                         if has_fallback {
                             break;
                         }
@@ -277,9 +299,12 @@ pub async fn post_rpc_with_retry(
                         break;
                     }
                     if status.is_server_error() {
-                        if attempt == 0 {
-                            let wait_ms = parse_retry_after_ms(res.headers())
-                                .unwrap_or_else(|| jittered_backoff_ms(250));
+                        if can_retry_same {
+                            let wait_ms = if is_primary_indexed {
+                                parse_retry_after_ms(res.headers()).unwrap_or_else(indexed_wait)
+                            } else {
+                                parse_retry_after_ms(res.headers()).unwrap_or_else(|| jittered_backoff_ms(250))
+                            };
                             tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
                             continue;
                         }
@@ -292,6 +317,10 @@ pub async fn post_rpc_with_retry(
                             .and_then(|c| c.as_i64())
                             == Some(-32429);
                         if is_rate_limited {
+                            if is_primary_indexed && can_retry_same {
+                                tokio::time::sleep(std::time::Duration::from_millis(indexed_wait())).await;
+                                continue;
+                            }
                             if has_fallback {
                                 break;
                             }
@@ -307,10 +336,14 @@ pub async fn post_rpc_with_retry(
                     }
                 }
                 Err(_) => {
+                    if is_primary_indexed && can_retry_same {
+                        tokio::time::sleep(std::time::Duration::from_millis(indexed_wait())).await;
+                        continue;
+                    }
                     if idx == 0 && has_fallback {
                         break;
                     }
-                    if attempt == 0 {
+                    if can_retry_same {
                         tokio::time::sleep(std::time::Duration::from_millis(jittered_backoff_ms(250))).await;
                         continue;
                     }
