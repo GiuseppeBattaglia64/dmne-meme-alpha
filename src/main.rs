@@ -2055,6 +2055,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             deployer_address: None,
                             token_security: None,
                             holder_usd_values: None,
+                            is_graduated_pool: candidate.dex_id != "pumpfun",
+                            conviction_score: Some(conviction_pct),
                         };
 
                         let admission_res = admission::evaluate_candidate_admission(
@@ -3168,6 +3170,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             deployer_address: None,
                                             token_security: None,
                                             holder_usd_values: None,
+                                            is_graduated_pool: dex_id != "pumpfun",
+                                            conviction_score: Some(conviction_pct),
                                         };
 
                                         if let Err(rejection) = admission::evaluate_candidate_admission(&telemetry, &scanner_cfg, Some(&scanner_funder)) {

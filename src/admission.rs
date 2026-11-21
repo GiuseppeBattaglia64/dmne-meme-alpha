@@ -79,6 +79,10 @@ pub struct CandidateTelemetry {
     pub token_security: Option<TokenSecurityProfile>,
     #[serde(default)]
     pub holder_usd_values: Option<Vec<f64>>,
+    #[serde(default)]
+    pub is_graduated_pool: bool,
+    #[serde(default)]
+    pub conviction_score: Option<f64>,
 }
 
 /// Typed rejection reason returned when a candidate fails any admission gate
@@ -372,25 +376,50 @@ pub fn evaluate_candidate_admission(
 
     // 5. Dev Sybil Cluster & Deep Funder Graph HHI Gate
     if cfg.funder_graph.enabled {
+        // Sybil ratio rho <= 0.25 (enforced even when holder RPC degrades)
+        if let Some(rho) = candidate.sybil_ratio_rho {
+            if rho > cfg.gates.max_sybil_ratio_rho {
+                return Err(RejectionReason::DevCluster {
+                    reason: "SYBIL_RATIO_RHO_EXCEEDED".to_string(),
+                    metric_label: format!("rho: {:.2}", rho),
+                });
+            }
+        }
+
         let candidate_holders = candidate.holder_records.as_deref();
         let cached_holders = funder_evaluator.and_then(|fe| fe.cache.get(&candidate.token_mint).map(|v| v.as_slice()));
-        let holders = match (candidate_holders, cached_holders) {
-            (Some(h), _) if h.len() >= 5 => h,
-            (_, Some(h)) if h.len() >= 5 => h,
+        let holders_opt: Option<&[TokenHolderRecord]> = match (candidate_holders, cached_holders) {
+            (Some(h), _) if h.len() >= 5 => Some(h),
+            (_, Some(h)) if h.len() >= 5 => Some(h),
             _ => {
                 if candidate.holder_fetch_failed {
+                    let is_graduated = candidate.is_graduated_pool
+                        || candidate.dex_id != "pumpfun"
+                        || candidate.bonding_curve_complete == Some(true);
+                    let meets_floor = candidate.liquidity_usd >= cfg.risk.min_entry_liquidity_usd
+                        && candidate.conviction_score.unwrap_or(100.0) >= cfg.risk.min_entry_conviction_pct;
+                    if is_graduated && meets_floor {
+                        eprintln!(
+                            "[GATE 5 DEGRADE] Mint {} ({}) graduated pool (${:.1}k liq) bypassing unavailable RPC holder fetch; remaining guards enforced",
+                            candidate.token_mint, candidate.symbol, candidate.liquidity_usd / 1000.0
+                        );
+                        None
+                    } else {
+                        return Err(RejectionReason::DevCluster {
+                            reason: "RPC_HOLDER_FETCH_FAILED".to_string(),
+                            metric_label: "RPC: 429/Timeout".to_string(),
+                        });
+                    }
+                } else {
                     return Err(RejectionReason::DevCluster {
-                        reason: "RPC_HOLDER_FETCH_FAILED".to_string(),
-                        metric_label: "RPC: 429/Timeout".to_string(),
+                        reason: "HOLDERS_UNDER_5".to_string(),
+                        metric_label: "Holders: <5".to_string(),
                     });
                 }
-                return Err(RejectionReason::DevCluster {
-                    reason: "HOLDERS_UNDER_5".to_string(),
-                    metric_label: "Holders: <5".to_string(),
-                });
             }
         };
 
+        if let Some(holders) = holders_opt {
         // Sniper Profit Overhang Ceiling Check
         let price_multiple = (1.0 + (candidate.m5_price_change_pct / 100.0))
             .max(1.0 + (candidate.h1_price_change_pct / 100.0))
@@ -461,16 +490,6 @@ pub fn evaluate_candidate_admission(
             }
         }
 
-        // Sybil ratio rho <= 0.25
-        if let Some(rho) = candidate.sybil_ratio_rho {
-            if rho > cfg.gates.max_sybil_ratio_rho {
-                return Err(RejectionReason::DevCluster {
-                    reason: "SYBIL_RATIO_RHO_EXCEEDED".to_string(),
-                    metric_label: format!("rho: {:.2}", rho),
-                });
-            }
-        }
-
         // SPL Transfer-Graph Connected-Component Cap (C_max <= 0.15) & Zero-Swap Airdrop Filter
         if let Some(ref edges) = candidate.transfer_edges {
             let tg = crate::funder_graph::compute_transfer_connected_components(edges, holders);
@@ -500,6 +519,7 @@ pub fn evaluate_candidate_admission(
                     metric_label: format!("EffHolders: {}", eff_count),
                 });
             }
+        }
         }
     }
 
@@ -603,6 +623,8 @@ mod tests {
             deployer_address: None,
             token_security: None,
             holder_usd_values: None,
+            is_graduated_pool: false,
+            conviction_score: None,
         }
     }
 
@@ -1211,6 +1233,23 @@ mod tests {
         let mut c6 = make_test_candidate();
         c6.protocol_fee_ratio_phi = Some(0.50);
         assert!(evaluate_candidate_admission(&c6, &cfg, None).is_err());
+
+        // 6. Graduated pool degrades gracefully on RPC_HOLDER_FETCH_FAILED while enforcing other guards
+        let mut c7 = make_test_candidate();
+        c7.dex_id = "pumpswap".to_string();
+        c7.is_graduated_pool = true;
+        c7.conviction_score = Some(100.0);
+        c7.holder_records = None;
+        c7.holder_fetch_failed = true;
+        assert!(evaluate_candidate_admission(&c7, &cfg, None).is_ok());
+
+        // Ungraduated pumpfun still fails CLOSED on RPC_HOLDER_FETCH_FAILED
+        let mut c8 = make_test_candidate();
+        c8.dex_id = "pumpfun".to_string();
+        c8.is_graduated_pool = false;
+        c8.holder_records = None;
+        c8.holder_fetch_failed = true;
+        assert!(evaluate_candidate_admission(&c8, &cfg, None).is_err());
     }
 }
 

@@ -203,6 +203,14 @@ static ARRIVAL_RPC_CACHE: std::sync::OnceLock<
     std::sync::Mutex<HashMap<String, (std::time::Instant, Vec<f64>)>>,
 > = std::sync::OnceLock::new();
 
+static LARGEST_ACCOUNTS_PACE_LOCK: std::sync::OnceLock<
+    tokio::sync::Mutex<Option<std::time::Instant>>,
+> = std::sync::OnceLock::new();
+
+fn largest_accounts_pace_lock() -> &'static tokio::sync::Mutex<Option<std::time::Instant>> {
+    LARGEST_ACCOUNTS_PACE_LOCK.get_or_init(|| tokio::sync::Mutex::new(None))
+}
+
 fn holder_rpc_cache() -> &'static std::sync::Mutex<HashMap<String, (std::time::Instant, HolderDistributionResult)>> {
     HOLDER_RPC_CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
@@ -255,10 +263,38 @@ pub async fn post_rpc_with_retry(
         }
     }
 
-    let is_largest_accounts = payload
+    let method_name = payload
         .get("method")
         .and_then(|m| m.as_str())
-        == Some("getTokenLargestAccounts");
+        .unwrap_or("unknown");
+    let is_largest_accounts = method_name == "getTokenLargestAccounts";
+
+    // Serialize getTokenLargestAccounts with >= 350ms spacing (5s timeout guard)
+    let _pace_guard = if is_largest_accounts {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            largest_accounts_pace_lock().lock(),
+        ).await {
+            Ok(mut last_ts) => {
+                if let Some(prev) = *last_ts {
+                    let elapsed = prev.elapsed();
+                    let min_spacing = std::time::Duration::from_millis(350);
+                    if elapsed < min_spacing {
+                        tokio::time::sleep(min_spacing - elapsed).await;
+                    }
+                }
+                *last_ts = Some(std::time::Instant::now());
+                Some(last_ts)
+            }
+            Err(_) => {
+                eprintln!("[RPC WARN] method={} -> pace lock 5s timeout", method_name);
+                return None;
+            }
+        }
+    } else {
+        None
+    };
+
     let indexed_backoffs_ms: [u64; 2] = [500, 1200];
     let fallback_timeout = std::time::Duration::from_millis(1200);
     for (idx, endpoint) in endpoints.iter().enumerate() {
@@ -282,6 +318,7 @@ pub async fn post_rpc_with_retry(
                 Ok(res) => {
                     let status = res.status();
                     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        eprintln!("[RPC WARN] endpoint={} method={} -> HTTP 429", endpoint, method_name);
                         if is_primary_indexed && can_retry_same {
                             let wait_ms = parse_retry_after_ms(res.headers()).unwrap_or_else(indexed_wait);
                             tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
@@ -298,8 +335,9 @@ pub async fn post_rpc_with_retry(
                         }
                         break;
                     }
-                    if status.is_server_error() {
-                        if can_retry_same {
+                    if !status.is_success() {
+                        eprintln!("[RPC WARN] endpoint={} method={} -> HTTP {}", endpoint, method_name, status.as_u16());
+                        if status.is_server_error() && can_retry_same {
                             let wait_ms = if is_primary_indexed {
                                 parse_retry_after_ms(res.headers()).unwrap_or_else(indexed_wait)
                             } else {
@@ -311,22 +349,23 @@ pub async fn post_rpc_with_retry(
                         break;
                     }
                     if let Ok(json) = res.json::<serde_json::Value>().await {
-                        let is_rate_limited = json
-                            .get("error")
-                            .and_then(|e| e.get("code"))
-                            .and_then(|c| c.as_i64())
-                            == Some(-32429);
-                        if is_rate_limited {
-                            if is_primary_indexed && can_retry_same {
-                                tokio::time::sleep(std::time::Duration::from_millis(indexed_wait())).await;
-                                continue;
-                            }
-                            if has_fallback {
-                                break;
-                            }
-                            if attempt == 0 {
-                                tokio::time::sleep(std::time::Duration::from_millis(jittered_backoff_ms(250))).await;
-                                continue;
+                        if let Some(err_obj) = json.get("error") {
+                            let err_code = err_obj.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
+                            let err_msg = err_obj.get("message").and_then(|m| m.as_str()).unwrap_or("");
+                            eprintln!("[RPC WARN] endpoint={} method={} -> JSON-RPC {} ({})", endpoint, method_name, err_code, err_msg);
+                            let is_rate_limited = err_code == -32429 || err_code == -32005;
+                            if is_rate_limited {
+                                if is_primary_indexed && can_retry_same {
+                                    tokio::time::sleep(std::time::Duration::from_millis(indexed_wait())).await;
+                                    continue;
+                                }
+                                if has_fallback {
+                                    break;
+                                }
+                                if attempt == 0 {
+                                    tokio::time::sleep(std::time::Duration::from_millis(jittered_backoff_ms(250))).await;
+                                    continue;
+                                }
                             }
                             break;
                         }
@@ -335,7 +374,8 @@ pub async fn post_rpc_with_retry(
                         }
                     }
                 }
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("[RPC WARN] endpoint={} method={} -> transport err: {}", endpoint, method_name, e);
                     if is_primary_indexed && can_retry_same {
                         tokio::time::sleep(std::time::Duration::from_millis(indexed_wait())).await;
                         continue;
