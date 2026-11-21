@@ -74,6 +74,8 @@ mod social_ipc;
 
 pub const DEFAULT_SOL_EUR_RATE: f64 = 86.0;
 
+use dmne_meme_alpha::{CONTRACT_SCHEMA_VERSION, DashboardSnapshot, SettledTradeRecord, TrancheStage};
+
 fn append_comprehensive_trade_log(
     pos: &Position,
     exit_pnl_pct: f64,
@@ -83,69 +85,87 @@ fn append_comprehensive_trade_log(
     bankroll_after: f64,
     is_toxic: bool,
     realized_tip_lamports: u64,
-) {
+    tranche_stage: TrancheStage,
+) -> Result<(), String> {
     use std::io::Write;
     use std::fs::OpenOptions;
 
     let log_path = "/home/ubuntu/dmne-meme-alpha/logs/trades_forensic.csv";
     let file_exists = std::path::Path::new(log_path).exists();
 
-    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
-        if !file_exists {
-            let header = "timestamp_exit_utc,timestamp_entry_utc,hold_duration_secs,token_symbol,token_mint,pair_address,dex_url,size_sol,entry_price_sol,peak_price_sol,trough_price_sol,exit_price_sol,mfe_pnl_pct,mae_pnl_pct,realized_pnl_pct,realized_pnl_sol,realized_pnl_eur,liquidity_usd,fdv_usd,exit_rule,outcome,actual_fee_sol,bankroll_before_sol,bankroll_after_sol,is_toxic,exit_tip_lamports\n";
-            let _ = file.write_all(header.as_bytes());
-        }
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .map_err(|e| {
+            let msg = format!("Failed to open {}: {}", log_path, e);
+            eprintln!("[CSV ERROR] {}", msg);
+            msg
+        })?;
 
-        let now_epoch = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let hold_duration = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
-        let now_utc = chrono::Utc::now().to_rfc3339();
-
-        let eur_rate = DEFAULT_SOL_EUR_RATE;
-        let pnl_eur = exit_pnl_sol * eur_rate;
-        let mfe_pnl_pct = ((pos.peak_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
-        let mae_pnl_pct = ((pos.trough_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
-        let outcome = match risk::classify_trade_outcome(exit_pnl_pct) {
-            risk::TradeOutcome::Win => "WIN",
-            risk::TradeOutcome::Scratch => "SCRATCH",
-            risk::TradeOutcome::Loss => "LOSS",
-        };
-        let actual_fee_sol = (realized_tip_lamports as f64 / 1_000_000_000.0) + 0.000005; // tip + base signature fee
-        let dex_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
-
-        let row = format!(
-            "{},{},{},{},{},{},{},{:.4},{:.10e},{:.10e},{:.10e},{:.10e},{:.2},{:.2},{:.2},{:.6},{:.2},{:.2},{:.2},\"{}\",{},{:.6},{:.4},{:.4},{},{}\n",
-            now_utc,
-            pos.entry_time_iso,
-            hold_duration,
-            pos.symbol,
-            pos.token_mint,
-            pos.pair_address,
-            dex_url,
-            pos.size_sol,
-            pos.entry_price_sol,
-            pos.peak_price_sol,
-            pos.trough_price_sol,
-            pos.current_price_sol,
-            mfe_pnl_pct,
-            mae_pnl_pct,
-            exit_pnl_pct,
-            exit_pnl_sol,
-            pnl_eur,
-            pos.liquidity_usd,
-            pos.fdv_usd,
-            exit_reason,
-            outcome,
-            actual_fee_sol,
-            bankroll_before,
-            bankroll_after,
-            is_toxic,
-            realized_tip_lamports
-        );
-        let _ = file.write_all(row.as_bytes());
+    if !file_exists {
+        file.write_all(SettledTradeRecord::CSV_HEADER.as_bytes()).map_err(|e| {
+            let msg = format!("Failed to write CSV header to {}: {}", log_path, e);
+            eprintln!("[CSV ERROR] {}", msg);
+            msg
+        })?;
     }
+
+    let now_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let hold_duration = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
+    let now_utc = chrono::Utc::now().to_rfc3339();
+
+    let eur_rate = DEFAULT_SOL_EUR_RATE;
+    let pnl_eur = exit_pnl_sol * eur_rate;
+    let mfe_pnl_pct = ((pos.peak_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
+    let mae_pnl_pct = ((pos.trough_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
+    let outcome = match risk::classify_trade_outcome(exit_pnl_pct) {
+        risk::TradeOutcome::Win => "WIN",
+        risk::TradeOutcome::Scratch => "SCRATCH",
+        risk::TradeOutcome::Loss => "LOSS",
+    };
+    let actual_fee_sol = (realized_tip_lamports as f64 / 1_000_000_000.0) + 0.000005;
+    let dex_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
+
+    let record = SettledTradeRecord {
+        schema_version: CONTRACT_SCHEMA_VERSION.to_string(),
+        timestamp_exit_utc: now_utc,
+        timestamp_entry_utc: pos.entry_time_iso.clone(),
+        hold_duration_secs: hold_duration,
+        token_symbol: pos.symbol.clone(),
+        token_mint: pos.token_mint.clone(),
+        pair_address: pos.pair_address.clone(),
+        dex_url,
+        size_sol: pos.size_sol,
+        entry_price_sol: pos.entry_price_sol,
+        peak_price_sol: pos.peak_price_sol,
+        trough_price_sol: pos.trough_price_sol,
+        exit_price_sol: pos.current_price_sol,
+        mfe_pnl_pct,
+        mae_pnl_pct,
+        realized_pnl_pct: exit_pnl_pct,
+        realized_pnl_sol: exit_pnl_sol,
+        realized_pnl_eur: pnl_eur,
+        liquidity_usd: pos.liquidity_usd,
+        fdv_usd: pos.fdv_usd,
+        exit_rule: exit_reason.to_string(),
+        outcome: outcome.to_string(),
+        actual_fee_sol,
+        bankroll_before_sol: bankroll_before,
+        bankroll_after_sol: bankroll_after,
+        is_toxic,
+        exit_tip_lamports: realized_tip_lamports,
+        tranche_stage,
+    };
+
+    file.write_all(record.to_csv_row().as_bytes()).map_err(|e| {
+        let msg = format!("Failed to append CSV row to {}: {}", log_path, e);
+        eprintln!("[CSV ERROR] {}", msg);
+        msg
+    })
 }
 
 
@@ -208,6 +228,8 @@ pub struct Position {
     pub vpin_calculator: orderflow::VpinCalculator,
     #[serde(default)]
     pub toxic_vpin_consecutive_buckets: u32,
+    #[serde(default)]
+    pub settled_tranches_size_sol: f64,
 }
 
 impl Position {
@@ -287,6 +309,10 @@ pub struct BotState {
     pub stage2_audit_log: Stage2AuditRingBuffer,
     #[serde(default = "default_standard_jito_tip")]
     pub jito_tip_lamports: u64,
+    #[serde(default)]
+    pub persistence_error_count: u64,
+    #[serde(default)]
+    pub settled_exit_keys: std::collections::HashSet<(String, TrancheStage)>,
 }
 
 impl BotState {
@@ -318,6 +344,102 @@ impl BotState {
             rejection_tracker: RollingRejectionTracker::new(ROLLING_WINDOW_CAPACITY),
             stage2_audit_log: Stage2AuditRingBuffer::new(STAGE2_AUDIT_LOG_CAPACITY),
             jito_tip_lamports: 10_000,
+            persistence_error_count: 0,
+            settled_exit_keys: std::collections::HashSet::new(),
+        }
+    }
+
+    pub fn verify_accounting_invariants(&self, csv_realized_pnl_sum: Option<f64>) -> Result<(), Vec<String>> {
+        let mut violations = Vec::new();
+        let expected_from_realized = (self.initial_bankroll_sol + self.total_realized_pnl_sol).max(0.05);
+        if (self.current_bankroll_sol - expected_from_realized).abs() >= 1e-8 {
+            let msg = format!(
+                "Cash conservation mismatch: current_bankroll_sol={:.10} != expected_from_realized={:.10}",
+                self.current_bankroll_sol, expected_from_realized
+            );
+            eprintln!("[INVARIANT WARN] {}", msg);
+            violations.push(msg);
+        }
+        if let Some(csv_sum) = csv_realized_pnl_sum {
+            let expected_from_csv = (self.initial_bankroll_sol + csv_sum).max(0.05);
+            if (self.current_bankroll_sol - expected_from_csv).abs() >= 1e-8 {
+                let msg = format!(
+                    "CSV cash conservation mismatch: current_bankroll_sol={:.10} != expected_from_csv={:.10}",
+                    self.current_bankroll_sol, expected_from_csv
+                );
+                eprintln!("[INVARIANT WARN] {}", msg);
+                violations.push(msg);
+            }
+        }
+        for pos in &self.active_positions {
+            if pos.size_sol + pos.settled_tranches_size_sol > pos.initial_size_sol + 1e-9 {
+                let msg = format!(
+                    "Position tranche conservation violated for {} ({}): remaining={:.8} + settled={:.8} > initial={:.8}",
+                    pos.symbol, pos.id, pos.size_sol, pos.settled_tranches_size_sol, pos.initial_size_sol
+                );
+                eprintln!("[INVARIANT WARN] {}", msg);
+                violations.push(msg);
+            }
+            if pos.initial_size_sol > 0.0 {
+                let sold_frac = pos.settled_tranches_size_sol / pos.initial_size_sol;
+                if sold_frac > 1.0001 {
+                    let msg = format!(
+                        "Position cumulative sold fraction violated for {} ({}): sold_frac={:.6} > 1.0001",
+                        pos.symbol, pos.id, sold_frac
+                    );
+                    eprintln!("[INVARIANT WARN] {}", msg);
+                    violations.push(msg);
+                }
+            }
+        }
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(violations)
+        }
+    }
+
+    pub fn build_dashboard_snapshot(&self, engine_version: &str, system_version: &str) -> DashboardSnapshot {
+        let live_bankroll = self.current_bankroll_sol.max(0.05);
+        let floating_pnl_sol: f64 = self.active_positions.iter().map(|p| p.size_sol * (p.pnl_pct / 100.0)).sum();
+        let live_nav_sol = live_bankroll + floating_pnl_sol;
+        let total_closed = self.closed_trades.len();
+        let win_rate = if (self.wins + self.losses) > 0 {
+            (self.wins as f64 / (self.wins + self.losses) as f64) * 100.0
+        } else {
+            0.0
+        };
+        DashboardSnapshot {
+            schema_version: CONTRACT_SCHEMA_VERSION.to_string(),
+            engine_version: engine_version.to_string(),
+            system_version: system_version.to_string(),
+            live_onchain_sol: self.live_onchain_sol,
+            is_scanner_paused: self.is_scanner_paused,
+            panic_mode: self.panic_mode,
+            wallet_pubkey: self.wallet_pubkey.clone(),
+            initial_bankroll_sol: self.initial_bankroll_sol,
+            current_bankroll_sol: live_bankroll,
+            floating_pnl_sol,
+            live_nav_sol,
+            total_realized_pnl_sol: self.total_realized_pnl_sol,
+            total_trades: self.total_trades.max(total_closed),
+            wins: self.wins,
+            losses: self.losses,
+            scratches: self.scratches,
+            effective_win_rate_pct: win_rate,
+            rejections_count: self.rejections_count,
+            persistence_error_count: self.persistence_error_count,
+            active_positions: serde_json::to_value(&self.active_positions).unwrap_or(serde_json::Value::Array(vec![])),
+            radar_candidates: serde_json::to_value(&self.radar_candidates).unwrap_or(serde_json::Value::Array(vec![])),
+            closed_trades: serde_json::to_value(&self.closed_trades).unwrap_or(serde_json::Value::Array(vec![])),
+            recent_onchain_events: self.recent_onchain_events.clone(),
+            risk_config: serde_json::to_value(&self.effective_risk_cfg).unwrap_or(serde_json::Value::Null),
+            config: serde_json::json!({
+                "risk": &self.effective_risk_cfg,
+                "solana": &self.solana_config,
+            }),
+            rejection_gauge: serde_json::to_value(self.rejection_tracker.snapshot()).unwrap_or(serde_json::Value::Null),
+            stage2_audit_log: serde_json::to_value(&self.stage2_audit_log.entries).unwrap_or(serde_json::Value::Array(vec![])),
         }
     }
 
@@ -895,84 +1017,66 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         g.effective_risk_cfg = config.risk.clone();
         g.solana_config = config.solana.clone();
 
-        if let Ok(content) = std::fs::read_to_string("/home/ubuntu/dmne-meme-alpha/logs/trades_forensic.csv") {
-            let mut csv_net_pnl = 0.0f64;
-            let mut csv_wins = 0usize;
-            let mut csv_losses = 0usize;
-            let mut csv_scratches = 0usize;
-            for line in content.lines().skip(1) {
-                let cols: Vec<&str> = line.split(',').collect();
-                if cols.len() >= 20 {
-                    let exit_time_str = cols[0];
-                    let closed_at_epoch = chrono::DateTime::parse_from_rfc3339(exit_time_str)
+        match SettledTradeRecord::parse_csv_file("/home/ubuntu/dmne-meme-alpha/logs/trades_forensic.csv") {
+            Ok(records) => {
+                let mut csv_net_pnl = 0.0f64;
+                let mut csv_wins = 0usize;
+                let mut csv_losses = 0usize;
+                let mut csv_scratches = 0usize;
+                for rec in records {
+                    let closed_at_epoch = chrono::DateTime::parse_from_rfc3339(&rec.timestamp_exit_utc)
                         .map(|dt| dt.timestamp().max(0) as u64)
                         .unwrap_or_default();
-                    let symbol = cols[3].to_string();
-                    let token_mint = cols[4].to_string();
-                    let size_sol = cols[7].parse::<f64>().unwrap_or(0.0);
-                    let pnl_pct = cols[14].parse::<f64>().unwrap_or(0.0);
-                    let pnl_sol = cols[15].parse::<f64>().unwrap_or(0.0);
-                    let reason = cols[19].trim_matches('"').to_string();
-                    let is_toxic = if cols.len() > 24 {
-                        cols[24].trim().parse::<bool>().unwrap_or_else(|_| risk::is_historical_exit_toxic(pnl_pct, &config.risk))
-                    } else {
-                        risk::is_historical_exit_toxic(pnl_pct, &config.risk)
-                    };
-                    let tip = if cols.len() > 25 {
-                        cols[25].trim().parse::<u64>().unwrap_or_else(|_| risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk))
-                    } else {
-                        risk::resolve_exit_tip(&reason, pnl_sol, 1.0, &config.risk)
-                    };
-                    let priority = if risk::is_emergency_risk_exit(&reason) {
+                    let priority = if risk::is_emergency_risk_exit(&rec.exit_rule) {
                         "HIGH_URGENCY_EMERGENCY".to_string()
                     } else {
                         "STANDARD_ROUTINE".to_string()
                     };
-                    if !token_mint.is_empty() {
-                        g.banned_tokens.insert(token_mint.clone());
+                    if !rec.token_mint.is_empty() {
+                        g.banned_tokens.insert(rec.token_mint.clone());
                     }
-                    if !symbol.is_empty() {
-                        g.banned_tokens.insert(symbol.clone());
+                    if !rec.token_symbol.is_empty() {
+                        g.banned_tokens.insert(rec.token_symbol.clone());
                     }
-                    let outcome_enum = risk::classify_trade_outcome(pnl_pct);
-                    match outcome_enum {
+                    match risk::classify_trade_outcome(rec.realized_pnl_pct) {
                         risk::TradeOutcome::Win => csv_wins += 1,
                         risk::TradeOutcome::Scratch => csv_scratches += 1,
                         risk::TradeOutcome::Loss => csv_losses += 1,
                     }
-                    let outcome = match outcome_enum {
-                        risk::TradeOutcome::Win => "WIN",
-                        risk::TradeOutcome::Scratch => "SCRATCH",
-                        risk::TradeOutcome::Loss => "LOSS",
-                    }.to_string();
-                    csv_net_pnl += pnl_sol;
+                    csv_net_pnl += rec.realized_pnl_sol;
                     g.closed_trades.push(ClosedTrade {
-                        token_mint,
-                        symbol,
-                        size_sol,
-                        pnl_sol,
-                        pnl_pct,
-                        reason,
+                        token_mint: rec.token_mint,
+                        symbol: rec.token_symbol,
+                        size_sol: rec.size_sol,
+                        pnl_sol: rec.realized_pnl_sol,
+                        pnl_pct: rec.realized_pnl_pct,
+                        reason: rec.exit_rule,
                         closed_at_epoch,
-                        is_toxic,
-                        jito_tip_lamports: tip,
+                        is_toxic: rec.is_toxic,
+                        jito_tip_lamports: rec.exit_tip_lamports,
                         execution_priority: priority,
-                        outcome,
+                        outcome: rec.outcome,
                     });
                 }
+                if !g.closed_trades.is_empty() {
+                    g.total_realized_pnl_sol = csv_net_pnl;
+                    g.current_bankroll_sol = (g.initial_bankroll_sol + csv_net_pnl).max(0.05);
+                    g.total_trades = g.closed_trades.len();
+                    g.wins = csv_wins;
+                    g.losses = csv_losses;
+                    g.scratches = csv_scratches;
+                    let _ = g.verify_accounting_invariants(Some(csv_net_pnl));
+                    println!(
+                        "[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Closed Trades: {} (CSV)",
+                        g.current_bankroll_sol, g.total_realized_pnl_sol, g.total_trades, g.closed_trades.len()
+                    );
+                }
             }
-            if !g.closed_trades.is_empty() {
-                g.total_realized_pnl_sol = csv_net_pnl;
-                g.current_bankroll_sol = (g.initial_bankroll_sol + csv_net_pnl).max(0.05);
-                g.total_trades = g.closed_trades.len();
-                g.wins = csv_wins;
-                g.losses = csv_losses;
-                g.scratches = csv_scratches;
-                println!(
-                    "[STARTUP RECONCILE] Restored Bankroll: {:.4} SOL | Net PnL: {:+.4} SOL | Total Trades: {} | Closed Trades: {} (CSV)",
-                    g.current_bankroll_sol, g.total_realized_pnl_sol, g.total_trades, g.closed_trades.len()
-                );
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                eprintln!("[CSV ERROR] Startup reconciliation failed to read trades_forensic.csv: {}", e);
+                g.persistence_error_count += 1;
             }
+            Err(_) => {}
         }
     }
 
@@ -1160,45 +1264,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 tokio::time::sleep(Duration::from_millis(1000)).await;
                                 let snapshot = {
                                     let guard = st.read().await;
-                                    let live_bankroll = guard.current_bankroll_sol.max(0.05);
-                                    let floating_pnl_sol: f64 = guard.active_positions.iter().map(|p| p.size_sol * (p.pnl_pct / 100.0)).sum();
-                                    let live_nav_sol = live_bankroll + floating_pnl_sol;
-                                    let total_closed = guard.closed_trades.len();
-
-                                    serde_json::to_string(&serde_json::json!({
-                                        "engine_version": env!("CARGO_PKG_VERSION"),
-                                        "system_version": APP_VERSION,
-                                        "live_onchain_sol": guard.live_onchain_sol,
-                                        "is_scanner_paused": guard.is_scanner_paused,
-                                        "panic_mode": guard.panic_mode,
-                                        "wallet_pubkey": guard.wallet_pubkey.clone(),
-                                        "initial_bankroll_sol": guard.initial_bankroll_sol,
-                                        "current_bankroll_sol": live_bankroll,
-                                        "floating_pnl_sol": floating_pnl_sol,
-                                        "live_nav_sol": live_nav_sol,
-                                        "total_realized_pnl_sol": guard.total_realized_pnl_sol,
-                                        "total_trades": guard.total_trades.max(total_closed),
-                                        "wins": guard.wins,
-                                        "losses": guard.losses,
-                                        "scratches": guard.scratches,
-                                        "effective_win_rate_pct": if (guard.wins + guard.losses) > 0 {
-                                            (guard.wins as f64 / (guard.wins + guard.losses) as f64) * 100.0
-                                        } else {
-                                            0.0
-                                        },
-                                        "rejections_count": guard.rejections_count,
-                                        "active_positions": guard.active_positions,
-                                        "radar_candidates": guard.radar_candidates,
-                                        "closed_trades": guard.closed_trades,
-                                        "recent_onchain_events": guard.recent_onchain_events,
-                                        "risk_config": &guard.effective_risk_cfg,
-                                        "config": {
-                                            "risk": &guard.effective_risk_cfg,
-                                            "solana": &guard.solana_config,
-                                        },
-                                        "rejection_gauge": guard.rejection_tracker.snapshot(),
-                                        "stage2_audit_log": &guard.stage2_audit_log.entries,
-                                    })).unwrap_or_default()
+                                    let _ = guard.verify_accounting_invariants(None);
+                                    let snap = guard.build_dashboard_snapshot(env!("CARGO_PKG_VERSION"), APP_VERSION);
+                                    serde_json::to_string(&snap).unwrap_or_default()
                                 };
                                 let payload = format!("data: {}\n\n", snapshot);
                                 if socket.write_all(payload.as_bytes()).await.is_err() {
@@ -1207,44 +1275,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         } else if req.starts_with("GET /api/state") {
                             let guard = st.read().await;
-                            let live_bankroll = guard.current_bankroll_sol.max(0.05);
-                            let floating_pnl_sol: f64 = guard.active_positions.iter().map(|p| p.size_sol * (p.pnl_pct / 100.0)).sum();
-                            let live_nav_sol = live_bankroll + floating_pnl_sol;
-                            let total_closed = guard.closed_trades.len();
-                            let state_json = serde_json::to_string(&serde_json::json!({
-                                "engine_version": env!("CARGO_PKG_VERSION"),
-                                "system_version": APP_VERSION,
-                                "live_onchain_sol": guard.live_onchain_sol,
-                                "is_scanner_paused": guard.is_scanner_paused,
-                                "panic_mode": guard.panic_mode,
-                                "wallet_pubkey": guard.wallet_pubkey.clone(),
-                                "initial_bankroll_sol": guard.initial_bankroll_sol,
-                                "current_bankroll_sol": live_bankroll,
-                                "floating_pnl_sol": floating_pnl_sol,
-                                "live_nav_sol": live_nav_sol,
-                                "total_realized_pnl_sol": guard.total_realized_pnl_sol,
-                                "total_trades": guard.total_trades.max(total_closed),
-                                "wins": guard.wins,
-                                "losses": guard.losses,
-                                "scratches": guard.scratches,
-                                "effective_win_rate_pct": if (guard.wins + guard.losses) > 0 {
-                                    (guard.wins as f64 / (guard.wins + guard.losses) as f64) * 100.0
-                                } else {
-                                    0.0
-                                },
-                                "rejections_count": guard.rejections_count,
-                                "active_positions": guard.active_positions,
-                                "radar_candidates": guard.radar_candidates,
-                                "closed_trades": guard.closed_trades,
-                                "recent_onchain_events": guard.recent_onchain_events,
-                                "risk_config": &guard.effective_risk_cfg,
-                                "config": {
-                                    "risk": &guard.effective_risk_cfg,
-                                    "solana": &guard.solana_config,
-                                },
-                                "rejection_gauge": guard.rejection_tracker.snapshot(),
-                                "stage2_audit_log": &guard.stage2_audit_log.entries,
-                            })).unwrap_or_default();
+                            let _ = guard.verify_accounting_invariants(None);
+                            let snap = guard.build_dashboard_snapshot(env!("CARGO_PKG_VERSION"), APP_VERSION);
+                            let state_json = serde_json::to_string(&snap).unwrap_or_default();
                             let res = format!(
                                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                                 state_json.len(),
@@ -2304,7 +2337,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     reserve_tracker: risk::ReserveTracker::default(),
                                     vpin_calculator: orderflow::VpinCalculator::default(),
                                     toxic_vpin_consecutive_buckets: 0,
+                                    settled_tranches_size_sol: 0.0,
                                 });
+                                let _ = state.verify_accounting_invariants(None);
                                 let log_msg = format!("SNIPED CONFIRMED TOKEN: {} ({}) at {:.4e} SOL", candidate.symbol, &candidate.token_mint[..8.min(candidate.token_mint.len())], final_confirmed_spot);
                                 state.recent_onchain_events.insert(0, log_msg);
                                 if state.recent_onchain_events.len() > 15 {
@@ -2433,347 +2468,388 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut closed_indices = Vec::new();
             let state = &mut *guard;
             let now_epoch = chrono::Utc::now().timestamp() as u64;
-            for (idx, pos) in state.active_positions.iter_mut().enumerate() {
-                let peak_pct = ((pos.peak_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
+                let mut csv_write_errors = 0u64;
+                let mut exit_keys_to_insert = Vec::new();
+                let pos_count = state.active_positions.len();
+                for idx in 0..pos_count {
+                    let pos = &mut state.active_positions[idx];
+                    let peak_pct = ((pos.peak_price_sol - pos.entry_price_sol) / pos.entry_price_sol) * 100.0;
 
-                // ==========================================
-                // DCS CRUISE CONTROL EXECUTION SUPERVISOR
-                // ==========================================
+                    // ==========================================
+                    // DCS CRUISE CONTROL EXECUTION SUPERVISOR
+                    // ==========================================
 
-                let mut active_pos = risk::ActivePosition {
-                    token_mint: pos.token_mint.clone(),
-                    symbol: pos.symbol.clone(),
-                    entry_price: pos.entry_price_sol,
-                    last_price: pos.last_price_sol,
-                    initial_size_sol: pos.initial_size_sol,
-                    remaining_size_sol: pos.size_sol,
-                    remaining_token_amount: 0,
-                    peak_pnl_pct: peak_pct,
-                    tp1_executed: pos.tranche_1_taken,
-                    tp2_executed: pos.tranche_2_taken,
-                    opened_at_epoch: pos.entry_timestamp_epoch,
-                    jito_tip_lamports: pos.jito_tip_lamports,
-                    execution_priority: pos.execution_priority.clone(),
-                    price_buffer: pos.price_buffer.clone(),
-                    cvd_tracker: pos.cvd_tracker.clone(),
-                };
-
-                let sol_price_usd = eval_cfg.sol_reference_price_usd.max(1.0);
-                pos.reserve_tracker.record_reserve_snapshot((pos.liquidity_usd / 2.0) / sol_price_usd, now_epoch as f64);
-                let reserve_drain_5s = pos.reserve_tracker.compute_reserve_drain_rate_5s(now_epoch as f64);
-
-                let is_vpin_toxic = pos.vpin_calculator.is_toxic_sell_dominated();
-                if is_vpin_toxic {
-                    pos.toxic_vpin_consecutive_buckets = pos.toxic_vpin_consecutive_buckets.max(pos.vpin_calculator.toxic_consecutive_buckets).max(1);
-                } else {
-                    pos.toxic_vpin_consecutive_buckets = 0;
-                }
-                let has_toxic_vpin = pos.toxic_vpin_consecutive_buckets >= 2;
-
-                let hold_secs = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
-                let hawkes_eval = hawkes::HawkesEvaluator::new(eval_cfg.hawkes.clone());
-                let arrivals = active_arrivals.get(&pos.token_mint).map(|v| v.as_slice()).unwrap_or(&[]);
-                let has_hawkes_decay = hold_secs > 25
-                    && pos.pnl_pct >= effective_risk_cfg.min_take_profit_activation_pct
-                    && pos.pnl_pct < effective_risk_cfg.tp1_trigger_pct
-                    && hawkes_eval.evaluate_inflight_decay(arrivals, now_epoch as f64);
-
-                let action = if has_toxic_vpin {
-                    println!(
-                        "[CRUISE] Trade #{} {} Toxic VPIN dominance detected (>= 2 buckets). Exiting immediately.",
-                        pos.id, pos.symbol
-                    );
-                    let tip = risk::resolve_exit_tip("Dynamic Exit (Toxic VPIN Dominance)", 0.0, cluster_congestion_mult, &effective_risk_cfg);
-                    risk::ExitAction::FullExit {
-                        rule_label: "Dynamic Exit (Toxic VPIN Dominance)".to_string(),
-                        is_toxic: true,
-                        tip_lamports: tip,
-                    }
-                } else if has_hawkes_decay {
-                    println!(
-                        "[CRUISE] Trade #{} {} Hawkes arrival intensity collapsed. Locking gain early.",
-                        pos.id, pos.symbol
-                    );
-                    let est_pnl_sol = pos.size_sol * (pos.pnl_pct / 100.0);
-                    let tip = risk::resolve_exit_tip("Dynamic Exit (Hawkes Decay)", est_pnl_sol, cluster_congestion_mult, &effective_risk_cfg);
-                    risk::ExitAction::FullExit {
-                        rule_label: "Dynamic Exit (Hawkes Decay)".to_string(),
-                        is_toxic: false,
-                        tip_lamports: tip,
-                    }
-                } else if !pos.tranche_1_taken
-                    && peak_pct < effective_risk_cfg.stagnation_max_peak_pct
-                    && risk::is_stagnation_exit_due(
-                        pos.pnl_pct,
-                        hold_secs,
-                        effective_risk_cfg.stagnation_scratch_band_pct,
-                        effective_risk_cfg.stagnation_ttl_secs,
-                        effective_risk_cfg.positive_stagnation_ttl_secs,
-                    )
-                {
-                    let rule_label = if pos.pnl_pct > 0.0 {
-                        "Stagnation TTL Exit (Green Timeout)".to_string()
-                    } else {
-                        "Stagnation TTL Exit (Red Cut)".to_string()
+                    let mut active_pos = risk::ActivePosition {
+                        token_mint: pos.token_mint.clone(),
+                        symbol: pos.symbol.clone(),
+                        entry_price: pos.entry_price_sol,
+                        last_price: pos.last_price_sol,
+                        initial_size_sol: pos.initial_size_sol,
+                        remaining_size_sol: pos.size_sol,
+                        remaining_token_amount: 0,
+                        peak_pnl_pct: peak_pct,
+                        tp1_executed: pos.tranche_1_taken,
+                        tp2_executed: pos.tranche_2_taken,
+                        opened_at_epoch: pos.entry_timestamp_epoch,
+                        jito_tip_lamports: pos.jito_tip_lamports,
+                        execution_priority: pos.execution_priority.clone(),
+                        price_buffer: pos.price_buffer.clone(),
+                        cvd_tracker: pos.cvd_tracker.clone(),
                     };
-                    let est_pnl_sol = pos.size_sol * (pos.pnl_pct / 100.0);
-                    let tip = risk::resolve_exit_tip(&rule_label, est_pnl_sol, cluster_congestion_mult, &effective_risk_cfg);
-                    risk::ExitAction::FullExit {
-                        rule_label,
-                        is_toxic: false,
-                        tip_lamports: tip,
+
+                    let sol_price_usd = eval_cfg.sol_reference_price_usd.max(1.0);
+                    pos.reserve_tracker.record_reserve_snapshot((pos.liquidity_usd / 2.0) / sol_price_usd, now_epoch as f64);
+                    let reserve_drain_5s = pos.reserve_tracker.compute_reserve_drain_rate_5s(now_epoch as f64);
+
+                    let is_vpin_toxic = pos.vpin_calculator.is_toxic_sell_dominated();
+                    if is_vpin_toxic {
+                        pos.toxic_vpin_consecutive_buckets = pos.toxic_vpin_consecutive_buckets.max(pos.vpin_calculator.toxic_consecutive_buckets).max(1);
+                    } else {
+                        pos.toxic_vpin_consecutive_buckets = 0;
                     }
-                } else {
-                    risk::evaluate_position_exit_with_congestion(
-                        &mut active_pos,
-                        pos.current_price_sol,
-                        now_epoch,
-                        cluster_congestion_mult,
-                        &effective_risk_cfg,
-                    )
-                };
+                    let has_toxic_vpin = pos.toxic_vpin_consecutive_buckets >= 2;
 
-                let allowed_slippage_bps = risk::compute_adaptive_slippage_bps(
-                    pos.size_sol,
-                    pos.liquidity_usd,
-                    sol_price_usd,
-                    reserve_drain_5s,
-                );
-                if reserve_drain_5s < -0.15 && pos.pnl_pct < -15.0 {
-                    println!(
-                        "[SAFETY SHIELD] {}: Pool {} drained by {:.1}% in 5s. Halting swap to avoid dumping into bottomed curve.",
-                        risk::REJECT_SWAP_EMPTYING_POOL, pos.symbol, reserve_drain_5s * 100.0
-                    );
-                } else if action != risk::ExitAction::Hold {
-                    println!(
-                        "[SLIPPAGE ENGINE] Adaptive Slippage for {}: {} bps | 5s Drain: {:+.1}%",
-                        pos.symbol, allowed_slippage_bps, reserve_drain_5s * 100.0
-                    );
-                }
+                    let hold_secs = now_epoch.saturating_sub(pos.entry_timestamp_epoch);
+                    let hawkes_eval = hawkes::HawkesEvaluator::new(eval_cfg.hawkes.clone());
+                    let arrivals = active_arrivals.get(&pos.token_mint).map(|v| v.as_slice()).unwrap_or(&[]);
+                    let has_hawkes_decay = hold_secs > 25
+                        && pos.pnl_pct >= effective_risk_cfg.min_take_profit_activation_pct
+                        && pos.pnl_pct < effective_risk_cfg.tp1_trigger_pct
+                        && hawkes_eval.evaluate_inflight_decay(arrivals, now_epoch as f64);
 
-                match action {
-                    risk::ExitAction::PartialSell { sol_basis_closed, rule_label, tip_lamports, .. } => {
-                        let realized = risk::compute_net_realized_sol_with_tip(sol_basis_closed, pos.pnl_pct, &effective_risk_cfg, tip_lamports);
-                        let net_exit_pnl_pct = risk::compute_net_pnl_pct(sol_basis_closed, realized);
-                        let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_stop_base_tip_lamports {
-                            "HIGH_URGENCY_EMERGENCY"
-                        } else {
-                            "STANDARD_ROUTINE"
-                        };
+                    let action = if has_toxic_vpin {
                         println!(
-                            "[EXECUTION_PRIORITY] [{}] Partial exit order dispatched for {}: {} | Jito Tip: {} lamports ({:.6} SOL)",
-                            priority_tag, pos.symbol, rule_label, tip_lamports, (tip_lamports as f64) / risk::LAMPORTS_PER_SOL
+                            "[CRUISE] Trade #{} {} Toxic VPIN dominance detected (>= 2 buckets). Exiting immediately.",
+                            pos.id, pos.symbol
                         );
-                        let bankroll_before = state.current_bankroll_sol;
-                        state.current_bankroll_sol += realized;
-                        state.total_realized_pnl_sol += realized;
-                        let bankroll_after = state.current_bankroll_sol;
-                        pos.size_sol = active_pos.remaining_size_sol;
-                        pos.tranche_1_taken = active_pos.tp1_executed;
-                        pos.tranche_2_taken = active_pos.tp2_executed;
-                        let outcome = risk::classify_trade_outcome(net_exit_pnl_pct);
-                        match outcome {
-                            risk::TradeOutcome::Win => {
-                                state.wins += 1;
-                                state.consecutive_losses = 0;
-                            }
-                            risk::TradeOutcome::Scratch => {
-                                state.scratches += 1;
-                            }
-                            risk::TradeOutcome::Loss => {
-                                state.losses += 1;
-                                state.consecutive_losses += 1;
-                            }
+                        let tip = risk::resolve_exit_tip("Dynamic Exit (Toxic VPIN Dominance)", 0.0, cluster_congestion_mult, &effective_risk_cfg);
+                        risk::ExitAction::FullExit {
+                            rule_label: "Dynamic Exit (Toxic VPIN Dominance)".to_string(),
+                            is_toxic: true,
+                            tip_lamports: tip,
                         }
+                    } else if has_hawkes_decay {
                         println!(
-                            "[CRUISE CONTROL] {} on {} (Net: {:+.1}%, Gross: {:+.1}%): Recaptured capital + {:.5} SOL gain.",
-                            rule_label, pos.symbol, net_exit_pnl_pct, pos.pnl_pct, realized
+                            "[CRUISE] Trade #{} {} Hawkes arrival intensity collapsed. Locking gain early.",
+                            pos.id, pos.symbol
                         );
-
-                        // 1. Append to trades_forensic.csv
-                        let mut pos_partial = pos.clone();
-                        pos_partial.size_sol = sol_basis_closed;
-                        append_comprehensive_trade_log(
-                            &pos_partial,
-                            net_exit_pnl_pct,
-                            realized,
-                            &rule_label,
-                            bankroll_before,
-                            bankroll_after,
-                            false,
-                            tip_lamports,
-                        );
-
-                        // 2. Persist to PostgreSQL (db.rs)
-                        let db_mint = pos.token_mint.clone();
-                        let db_sym = pos.symbol.clone();
-                        let db_hold_sec = (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) as i32;
-                        let db_size = sol_basis_closed;
-                        let db_entry_px = pos.entry_price_sol;
-                        let db_exit_px = pos.current_price_sol;
-                        let db_peak_px = pos.peak_price_sol;
-                        let db_before = bankroll_before;
-                        let db_after = bankroll_after;
-                        let db_rule = rule_label.clone();
-                        let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
-                        let pnl_pct = net_exit_pnl_pct;
-                        tokio::spawn(async move {
-                            if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                                db::record_settled_trade(
-                                    &pg_client, &db_mint, &db_sym, db_hold_sec, db_size,
-                                    db_entry_px, db_exit_px, db_peak_px, pnl_pct, realized,
-                                    db_before, db_after, &db_rule, &db_url, false
-                                ).await;
-                            }
-                        });
-
-                        // 3. Create and push ClosedTrade record
-                        state.closed_trades.push(ClosedTrade {
-                            token_mint: pos.token_mint.clone(),
-                            symbol: pos.symbol.clone(),
-                            size_sol: sol_basis_closed,
-                            pnl_sol: realized,
-                            pnl_pct: net_exit_pnl_pct,
-                            reason: rule_label,
-                            closed_at_epoch: now_epoch,
+                        let est_pnl_sol = pos.size_sol * (pos.pnl_pct / 100.0);
+                        let tip = risk::resolve_exit_tip("Dynamic Exit (Hawkes Decay)", est_pnl_sol, cluster_congestion_mult, &effective_risk_cfg);
+                        risk::ExitAction::FullExit {
+                            rule_label: "Dynamic Exit (Hawkes Decay)".to_string(),
                             is_toxic: false,
-                            jito_tip_lamports: tip_lamports,
-                            execution_priority: priority_tag.to_string(),
-                            outcome: match outcome {
-                                risk::TradeOutcome::Win => "WIN",
-                                risk::TradeOutcome::Scratch => "SCRATCH",
-                                risk::TradeOutcome::Loss => "LOSS",
-                            }.to_string(),
-                        });
+                            tip_lamports: tip,
+                        }
+                    } else if !pos.tranche_1_taken
+                        && peak_pct < effective_risk_cfg.stagnation_max_peak_pct
+                        && risk::is_stagnation_exit_due(
+                            pos.pnl_pct,
+                            hold_secs,
+                            effective_risk_cfg.stagnation_scratch_band_pct,
+                            effective_risk_cfg.stagnation_ttl_secs,
+                            effective_risk_cfg.positive_stagnation_ttl_secs,
+                        )
+                    {
+                        let rule_label = if pos.pnl_pct > 0.0 {
+                            "Stagnation TTL Exit (Green Timeout)".to_string()
+                        } else {
+                            "Stagnation TTL Exit (Red Cut)".to_string()
+                        };
+                        let est_pnl_sol = pos.size_sol * (pos.pnl_pct / 100.0);
+                        let tip = risk::resolve_exit_tip(&rule_label, est_pnl_sol, cluster_congestion_mult, &effective_risk_cfg);
+                        risk::ExitAction::FullExit {
+                            rule_label,
+                            is_toxic: false,
+                            tip_lamports: tip,
+                        }
+                    } else {
+                        risk::evaluate_position_exit_with_congestion(
+                            &mut active_pos,
+                            pos.current_price_sol,
+                            now_epoch,
+                            cluster_congestion_mult,
+                            &effective_risk_cfg,
+                        )
+                    };
+
+                    let allowed_slippage_bps = risk::compute_adaptive_slippage_bps(
+                        pos.size_sol,
+                        pos.liquidity_usd,
+                        sol_price_usd,
+                        reserve_drain_5s,
+                    );
+                    if reserve_drain_5s < -0.15 && pos.pnl_pct < -15.0 {
+                        println!(
+                            "[SAFETY SHIELD] {}: Pool {} drained by {:.1}% in 5s. Halting swap to avoid dumping into bottomed curve.",
+                            risk::REJECT_SWAP_EMPTYING_POOL, pos.symbol, reserve_drain_5s * 100.0
+                        );
+                    } else if action != risk::ExitAction::Hold {
+                        println!(
+                            "[SLIPPAGE ENGINE] Adaptive Slippage for {}: {} bps | 5s Drain: {:+.1}%",
+                            pos.symbol, allowed_slippage_bps, reserve_drain_5s * 100.0
+                        );
                     }
-                    risk::ExitAction::FullExit { rule_label, is_toxic, mut tip_lamports } => {
-                        let exit_pnl = pos.pnl_pct;
-                        let elapsed_secs = (now_epoch.saturating_sub(pos.entry_timestamp_epoch)) as f64;
-                        if rule_label.contains("Stop-Loss") || exit_pnl <= -effective_risk_cfg.stop_loss_pct.abs() {
-                            let velocity = exit_pnl / elapsed_secs.max(1.0);
-                            let escalated_tip = risk::calculate_emergency_stop_tip(exit_pnl, elapsed_secs, &effective_risk_cfg);
-                            tip_lamports = escalated_tip;
-                            println!(
-                                "[EMERGENCY_EXIT] Token: {}, PnL: {:.2}%, Velocity: {:.2}%/s, Escalated Tip: {} lamports",
-                                pos.symbol, exit_pnl, velocity, escalated_tip
-                            );
-                        } else if rule_label.contains("Stagnation") {
-                            if exit_pnl <= 0.0 {
-                                println!(
-                                    "[STAGNATION_RED_CUT] Trade #{} {} closed at scratch/loss ({:+.2}%) after {}s elapsed (TTL: {}s). Purged dead liquidity.",
-                                    pos.id, pos.symbol, exit_pnl, elapsed_secs as u64, effective_risk_cfg.stagnation_ttl_secs
-                                );
+
+                    match action {
+                        risk::ExitAction::PartialSell { sol_basis_closed, rule_label, tip_lamports, .. } => {
+                            let stage = TrancheStage::from_exit_rule(&rule_label, pos.tranche_1_taken, pos.tranche_2_taken);
+                            let exit_key = (pos.id.clone(), stage);
+                            if state.settled_exit_keys.contains(&exit_key) {
+                                println!("[IDEMPOTENT EXIT SKIP] Duplicate partial exit suppressed for {} ({:?})", pos.symbol, exit_key);
                             } else {
+                                exit_keys_to_insert.push(exit_key);
+                                let realized = risk::compute_net_realized_sol_with_tip(sol_basis_closed, pos.pnl_pct, &effective_risk_cfg, tip_lamports);
+                                let net_exit_pnl_pct = risk::compute_net_pnl_pct(sol_basis_closed, realized);
+                                let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_stop_base_tip_lamports {
+                                    "HIGH_URGENCY_EMERGENCY"
+                                } else {
+                                    "STANDARD_ROUTINE"
+                                };
                                 println!(
-                                    "[STAGNATION_GREEN_TIMEOUT] Trade #{} {} closed at profit ({:+.2}%) after {}s elapsed (Positive TTL: {}s). Runway expired.",
-                                    pos.id, pos.symbol, exit_pnl, elapsed_secs as u64, effective_risk_cfg.positive_stagnation_ttl_secs
+                                    "[EXECUTION_PRIORITY] [{}] Partial exit order dispatched for {}: {} | Jito Tip: {} lamports ({:.6} SOL)",
+                                    priority_tag, pos.symbol, rule_label, tip_lamports, (tip_lamports as f64) / risk::LAMPORTS_PER_SOL
                                 );
+                                let bankroll_before = state.current_bankroll_sol;
+                                state.current_bankroll_sol += realized;
+                                state.total_realized_pnl_sol += realized;
+                                let bankroll_after = state.current_bankroll_sol;
+                                pos.settled_tranches_size_sol += sol_basis_closed;
+                                pos.size_sol = active_pos.remaining_size_sol;
+                                pos.tranche_1_taken = active_pos.tp1_executed;
+                                pos.tranche_2_taken = active_pos.tp2_executed;
+                                let outcome = risk::classify_trade_outcome(net_exit_pnl_pct);
+                                match outcome {
+                                    risk::TradeOutcome::Win => {
+                                        state.wins += 1;
+                                        state.consecutive_losses = 0;
+                                    }
+                                    risk::TradeOutcome::Scratch => {
+                                        state.scratches += 1;
+                                    }
+                                    risk::TradeOutcome::Loss => {
+                                        state.losses += 1;
+                                        state.consecutive_losses += 1;
+                                    }
+                                }
+                                println!(
+                                    "[CRUISE CONTROL] {} on {} (Net: {:+.1}%, Gross: {:+.1}%): Recaptured capital + {:.5} SOL gain.",
+                                    rule_label, pos.symbol, net_exit_pnl_pct, pos.pnl_pct, realized
+                                );
+
+                                let mut pos_partial = pos.clone();
+                                pos_partial.size_sol = sol_basis_closed;
+                                if append_comprehensive_trade_log(
+                                    &pos_partial,
+                                    net_exit_pnl_pct,
+                                    realized,
+                                    &rule_label,
+                                    bankroll_before,
+                                    bankroll_after,
+                                    false,
+                                    tip_lamports,
+                                    stage,
+                                ).is_err() {
+                                    csv_write_errors += 1;
+                                }
+
+                                let db_mint = pos.token_mint.clone();
+                                let db_sym = pos.symbol.clone();
+                                let db_hold_sec = (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) as i32;
+                                let db_size = sol_basis_closed;
+                                let db_entry_px = pos.entry_price_sol;
+                                let db_exit_px = pos.current_price_sol;
+                                let db_peak_px = pos.peak_price_sol;
+                                let db_before = bankroll_before;
+                                let db_after = bankroll_after;
+                                let db_rule = rule_label.clone();
+                                let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
+                                let pnl_pct = net_exit_pnl_pct;
+                                let err_state = Arc::clone(&eval_state);
+                                tokio::spawn(async move {
+                                    match db::establish_connection(db::DEFAULT_DB_URL).await {
+                                        Ok(pg_client) => {
+                                            if db::record_settled_trade(
+                                                &pg_client, &db_mint, &db_sym, db_hold_sec, db_size,
+                                                db_entry_px, db_exit_px, db_peak_px, pnl_pct, realized,
+                                                db_before, db_after, &db_rule, &db_url, false
+                                            ).await.is_err() {
+                                                err_state.write().await.persistence_error_count += 1;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            eprintln!("[DB ERROR] Connection failed on partial exit: {}", e);
+                                            err_state.write().await.persistence_error_count += 1;
+                                        }
+                                    }
+                                });
+
+                                state.closed_trades.push(ClosedTrade {
+                                    token_mint: pos.token_mint.clone(),
+                                    symbol: pos.symbol.clone(),
+                                    size_sol: sol_basis_closed,
+                                    pnl_sol: realized,
+                                    pnl_pct: net_exit_pnl_pct,
+                                    reason: rule_label,
+                                    closed_at_epoch: now_epoch,
+                                    is_toxic: false,
+                                    jito_tip_lamports: tip_lamports,
+                                    execution_priority: priority_tag.to_string(),
+                                    outcome: match outcome {
+                                        risk::TradeOutcome::Win => "WIN",
+                                        risk::TradeOutcome::Scratch => "SCRATCH",
+                                        risk::TradeOutcome::Loss => "LOSS",
+                                    }.to_string(),
+                                });
                             }
                         }
-                        let realized = risk::compute_net_realized_sol_with_tip(pos.size_sol, exit_pnl, &effective_risk_cfg, tip_lamports);
-                        let net_exit_pnl_pct = risk::compute_net_pnl_pct(pos.size_sol, realized);
-                        let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_stop_base_tip_lamports {
-                            "HIGH_URGENCY_EMERGENCY"
-                        } else {
-                            "STANDARD_ROUTINE"
-                        };
-                        println!(
-                            "[EXECUTION_PRIORITY] [{}] Full exit order dispatched for {}: {} | Jito Tip: {} lamports ({:.6} SOL) | toxic: {}",
-                            priority_tag, pos.symbol, rule_label, tip_lamports, (tip_lamports as f64) / risk::LAMPORTS_PER_SOL, is_toxic
-                        );
-                        println!(
-                            "[CRUISE CONTROL] Exit triggered on {} by {} (Net PnL: {:+.1}%, Gross: {:+.1}%, toxic: {}).",
-                            pos.symbol, rule_label, net_exit_pnl_pct, exit_pnl, is_toxic
-                        );
-                        closed_indices.push((idx, rule_label, realized, net_exit_pnl_pct, is_toxic, tip_lamports, priority_tag.to_string()));
+                        risk::ExitAction::FullExit { rule_label, is_toxic, mut tip_lamports } => {
+                            let exit_key = (pos.id.clone(), TrancheStage::Runner);
+                            if state.settled_exit_keys.contains(&exit_key) {
+                                println!("[IDEMPOTENT EXIT SKIP] Duplicate full exit suppressed for {} ({:?})", pos.symbol, exit_key);
+                            } else {
+                                exit_keys_to_insert.push(exit_key);
+                                let exit_pnl = pos.pnl_pct;
+                                let elapsed_secs = (now_epoch.saturating_sub(pos.entry_timestamp_epoch)) as f64;
+                                if rule_label.contains("Stop-Loss") || exit_pnl <= -effective_risk_cfg.stop_loss_pct.abs() {
+                                    let velocity = exit_pnl / elapsed_secs.max(1.0);
+                                    let escalated_tip = risk::calculate_emergency_stop_tip(exit_pnl, elapsed_secs, &effective_risk_cfg);
+                                    tip_lamports = escalated_tip;
+                                    println!(
+                                        "[EMERGENCY_EXIT] Token: {}, PnL: {:.2}%, Velocity: {:.2}%/s, Escalated Tip: {} lamports",
+                                        pos.symbol, exit_pnl, velocity, escalated_tip
+                                    );
+                                } else if rule_label.contains("Stagnation") {
+                                    if exit_pnl <= 0.0 {
+                                        println!(
+                                            "[STAGNATION_RED_CUT] Trade #{} {} closed at scratch/loss ({:+.2}%) after {}s elapsed (TTL: {}s). Purged dead liquidity.",
+                                            pos.id, pos.symbol, exit_pnl, elapsed_secs as u64, effective_risk_cfg.stagnation_ttl_secs
+                                        );
+                                    } else {
+                                        println!(
+                                            "[STAGNATION_GREEN_TIMEOUT] Trade #{} {} closed at profit ({:+.2}%) after {}s elapsed (Positive TTL: {}s). Runway expired.",
+                                            pos.id, pos.symbol, exit_pnl, elapsed_secs as u64, effective_risk_cfg.positive_stagnation_ttl_secs
+                                        );
+                                    }
+                                }
+                                let realized = risk::compute_net_realized_sol_with_tip(pos.size_sol, exit_pnl, &effective_risk_cfg, tip_lamports);
+                                let net_exit_pnl_pct = risk::compute_net_pnl_pct(pos.size_sol, realized);
+                                let priority_tag = if tip_lamports >= effective_risk_cfg.emergency_stop_base_tip_lamports {
+                                    "HIGH_URGENCY_EMERGENCY"
+                                } else {
+                                    "STANDARD_ROUTINE"
+                                };
+                                println!(
+                                    "[EXECUTION_PRIORITY] [{}] Full exit order dispatched for {}: {} | Jito Tip: {} lamports ({:.6} SOL) | toxic: {}",
+                                    priority_tag, pos.symbol, rule_label, tip_lamports, (tip_lamports as f64) / risk::LAMPORTS_PER_SOL, is_toxic
+                                );
+                                println!(
+                                    "[CRUISE CONTROL] Exit triggered on {} by {} (Net PnL: {:+.1}%, Gross: {:+.1}%, toxic: {}).",
+                                    pos.symbol, rule_label, net_exit_pnl_pct, exit_pnl, is_toxic
+                                );
+                                closed_indices.push((idx, rule_label, realized, net_exit_pnl_pct, is_toxic, tip_lamports, priority_tag.to_string()));
+                            }
+                        }
+                        risk::ExitAction::Hold => {}
                     }
-                    risk::ExitAction::Hold => {}
+
+                    pos.status = risk::format_position_status(&active_pos, &effective_risk_cfg);
+                    pos.last_price_sol = pos.current_price_sol;
+                }
+                state.persistence_error_count += csv_write_errors;
+                for k in exit_keys_to_insert {
+                    state.settled_exit_keys.insert(k);
                 }
 
-                // UI status milestones
-                pos.status = risk::format_position_status(&active_pos, &effective_risk_cfg);
-
-                // Update last observed tick price for flash dump detection
-                pos.last_price_sol = pos.current_price_sol;
-            }
-
-            for (idx, reason, pnl_sol, pnl_pct, is_toxic, tip_lamports, priority_tag) in closed_indices.into_iter().rev() {
-                let bankroll_before = state.current_bankroll_sol;
-                let pos = state.active_positions.remove(idx);
-                state.current_bankroll_sol += pnl_sol;
-                state.total_realized_pnl_sol += pnl_sol;
-                let bankroll_after = state.current_bankroll_sol;
-                let outcome = risk::classify_trade_outcome(pnl_pct);
-                match outcome {
-                    risk::TradeOutcome::Win => {
-                        state.wins += 1;
-                        state.consecutive_losses = 0;
+                for (idx, reason, pnl_sol, pnl_pct, is_toxic, tip_lamports, priority_tag) in closed_indices.into_iter().rev() {
+                    let bankroll_before = state.current_bankroll_sol;
+                    let mut pos = state.active_positions.remove(idx);
+                    pos.settled_tranches_size_sol += pos.size_sol;
+                    state.current_bankroll_sol += pnl_sol;
+                    state.total_realized_pnl_sol += pnl_sol;
+                    let bankroll_after = state.current_bankroll_sol;
+                    let outcome = risk::classify_trade_outcome(pnl_pct);
+                    match outcome {
+                        risk::TradeOutcome::Win => {
+                            state.wins += 1;
+                            state.consecutive_losses = 0;
+                        }
+                        risk::TradeOutcome::Scratch => {
+                            state.scratches += 1;
+                        }
+                        risk::TradeOutcome::Loss => {
+                            state.losses += 1;
+                            state.consecutive_losses += 1;
+                        }
                     }
-                    risk::TradeOutcome::Scratch => {
-                        state.scratches += 1;
+                    let is_toxic_exit = is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk);
+                    if !pos.token_mint.is_empty() {
+                        state.banned_tokens.insert(pos.token_mint.clone());
                     }
-                    risk::TradeOutcome::Loss => {
-                        state.losses += 1;
-                        state.consecutive_losses += 1;
+                    if !pos.symbol.is_empty() {
+                        state.banned_tokens.insert(pos.symbol.clone());
                     }
+                    if append_comprehensive_trade_log(
+                        &pos,
+                        pnl_pct,
+                        pnl_sol,
+                        &reason,
+                        bankroll_before,
+                        bankroll_after,
+                        is_toxic_exit,
+                        tip_lamports,
+                        TrancheStage::Runner,
+                    ).is_err() {
+                        state.persistence_error_count += 1;
+                    }
+                    let db_mint = pos.token_mint.clone();
+                    let db_sym = pos.symbol.clone();
+                    let db_hold_sec = (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) as i32;
+                    let db_size = pos.size_sol;
+                    let db_entry_px = pos.entry_price_sol;
+                    let db_exit_px = pos.current_price_sol;
+                    let db_peak_px = pos.peak_price_sol;
+                    let db_before = bankroll_before;
+                    let db_after = bankroll_after;
+                    let db_rule = reason.clone();
+                    let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
+                    let err_state = Arc::clone(&eval_state);
+                    tokio::spawn(async move {
+                        match db::establish_connection(db::DEFAULT_DB_URL).await {
+                            Ok(pg_client) => {
+                                if db::record_settled_trade(
+                                    &pg_client, &db_mint, &db_sym, db_hold_sec, db_size,
+                                    db_entry_px, db_exit_px, db_peak_px, pnl_pct, pnl_sol,
+                                    db_before, db_after, &db_rule, &db_url, is_toxic_exit
+                                ).await.is_err() {
+                                    err_state.write().await.persistence_error_count += 1;
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("[DB ERROR] Connection failed on full exit: {}", e);
+                                err_state.write().await.persistence_error_count += 1;
+                            }
+                        }
+                    });
+                    let outcome_tag = match outcome {
+                        risk::TradeOutcome::Win => "WIN",
+                        risk::TradeOutcome::Scratch => "SCRATCH",
+                        risk::TradeOutcome::Loss => "LOSS",
+                    }.to_string();
+                    state.closed_trades.push(ClosedTrade {
+                        token_mint: pos.token_mint,
+                        symbol: pos.symbol,
+                        size_sol: pos.size_sol,
+                        pnl_sol,
+                        pnl_pct,
+                        reason,
+                        closed_at_epoch: now_epoch,
+                        is_toxic: is_toxic_exit,
+                        jito_tip_lamports: tip_lamports,
+                        execution_priority: priority_tag,
+                        outcome: outcome_tag,
+                    });
                 }
-                let is_toxic_exit = is_toxic || risk::is_historical_exit_toxic(pnl_pct, &eval_cfg.risk);
-                // Lifetime One-Shot Policy: permanently ban ANY settled mint/symbol from ever re-entering
-                if !pos.token_mint.is_empty() {
-                    state.banned_tokens.insert(pos.token_mint.clone());
-                }
-                if !pos.symbol.is_empty() {
-                    state.banned_tokens.insert(pos.symbol.clone());
-                }
-                append_comprehensive_trade_log(
-                    &pos,
-                    pnl_pct,
-                    pnl_sol,
-                    &reason,
-                    bankroll_before,
-                    bankroll_after,
-                    is_toxic_exit,
-                    tip_lamports,
-                );
-                let db_mint = pos.token_mint.clone();
-                let db_sym = pos.symbol.clone();
-                let db_hold_sec = (chrono::Utc::now().timestamp() - pos.entry_timestamp_epoch as i64) as i32;
-                let db_size = pos.size_sol;
-                let db_entry_px = pos.entry_price_sol;
-                let db_exit_px = pos.current_price_sol;
-                let db_peak_px = pos.peak_price_sol;
-                let db_before = bankroll_before;
-                let db_after = bankroll_after;
-                let db_rule = reason.clone();
-                let db_url = format!("https://dexscreener.com/solana/{}", pos.token_mint);
-                tokio::spawn(async move {
-                    if let Ok(pg_client) = db::establish_connection(db::DEFAULT_DB_URL).await {
-                        db::record_settled_trade(
-                            &pg_client, &db_mint, &db_sym, db_hold_sec, db_size,
-                            db_entry_px, db_exit_px, db_peak_px, pnl_pct, pnl_sol,
-                            db_before, db_after, &db_rule, &db_url, is_toxic_exit
-                        ).await;
-                    }
-                });
-                let outcome_tag = match outcome {
-                    risk::TradeOutcome::Win => "WIN",
-                    risk::TradeOutcome::Scratch => "SCRATCH",
-                    risk::TradeOutcome::Loss => "LOSS",
-                }.to_string();
-                state.closed_trades.push(ClosedTrade {
-                    token_mint: pos.token_mint,
-                    symbol: pos.symbol,
-                    size_sol: pos.size_sol,
-                    pnl_sol,
-                    pnl_pct,
-                    reason,
-                    closed_at_epoch: now_epoch,
-                    is_toxic: is_toxic_exit,
-                    jito_tip_lamports: tip_lamports,
-                    execution_priority: priority_tag,
-                    outcome: outcome_tag,
-                });
-            }
+                let _ = state.verify_accounting_invariants(None);
         }
     });
 

@@ -63,7 +63,7 @@ pub async fn record_settled_trade(
     exit_rule: &str,
     dex_url: &str,
     is_toxic: bool,
-) {
+) -> Result<(), Error> {
     let stmt = "
         INSERT INTO settled_trades (
             token_mint, symbol, hold_duration_seconds, entry_size_sol, entry_price_sol,
@@ -83,7 +83,9 @@ pub async fn record_settled_trade(
         ]
     ).await {
         eprintln!("[DB ERROR] record_settled_trade failed for {} ({}): {}", symbol, mint, e);
+        return Err(e);
     }
+    Ok(())
 }
 
 /// Queries recent closed trades for the forensic ledger
@@ -190,7 +192,9 @@ pub async fn verify_login(client: &Client, user_id: &str, password_hash: &str) -
             if is_active {
                 let token = format!("tok_{}_{}", user_id, chrono::Utc::now().timestamp());
                 let update_stmt = "UPDATE users SET session_token = $1 WHERE id = $2";
-                let _ = client.execute(update_stmt, &[&token, &user_id]).await;
+                if let Err(e) = client.execute(update_stmt, &[&token, &user_id]).await {
+                    eprintln!("[DB ERROR] verify_login session_token update failed for {}: {}", user_id, e);
+                }
                 return Some((role, token));
             }
         }
@@ -889,7 +893,9 @@ pub async fn record_caller_signal(client: &Client, channel_id: i64, channel_titl
             total_calls = caller_channels.total_calls + 1,
             last_call_at = NOW()
     ";
-    let _ = client.execute(stmt, &[&channel_id, &channel_title]).await;
+    if let Err(e) = client.execute(stmt, &[&channel_id, &channel_title]).await {
+        eprintln!("[DB ERROR] record_caller_signal failed for {}: {}", channel_id, e);
+    }
 }
 
 /// Fetches caller reputation score and blacklist flag
@@ -937,7 +943,99 @@ pub async fn record_caller_settled_trade(client: &Client, channel_id: i64, outco
             is_blacklisted = CASE WHEN (50.0 + ((wins + $2) * 5.0) - ((losses + $4) * 7.0) + ((net_pnl_sol + $5::numeric) * 100.0)) < 25.0 THEN TRUE ELSE is_blacklisted END
         WHERE channel_id = $1
     ";
-    let _ = client.execute(stmt, &[&channel_id, &is_win, &is_scratch, &is_loss, &pnl_sol]).await;
+    if let Err(e) = client.execute(stmt, &[&channel_id, &is_win, &is_scratch, &is_loss, &pnl_sol]).await {
+        eprintln!("[DB ERROR] record_caller_settled_trade failed for {}: {}", channel_id, e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_settled_trades_schema_and_adversarial_roundtrip() {
+        let client = establish_connection(DEFAULT_DB_URL)
+            .await
+            .expect("PostgreSQL dmne_quant must be reachable for DB contract test");
+
+        // 1. Inspect information_schema.columns on settled_trades
+        let schema_rows = client
+            .query(
+                "SELECT column_name, data_type, character_maximum_length
+                 FROM information_schema.columns
+                 WHERE table_name = 'settled_trades'
+                   AND column_name IN ('token_mint', 'symbol', 'exit_rule')",
+                &[],
+            )
+            .await
+            .expect("Failed to query information_schema.columns");
+
+        assert_eq!(schema_rows.len(), 3, "Expected 3 inspected columns on settled_trades");
+        for row in &schema_rows {
+            let col: String = row.get(0);
+            let data_type: String = row.get(1);
+            let max_len: Option<i32> = row.get(2);
+            assert!(
+                !data_type.is_empty(),
+                "Column {} must report a valid data_type",
+                col
+            );
+            if col == "exit_rule" {
+                assert!(max_len.unwrap_or(120) >= 64, "exit_rule max_len unexpectedly small");
+            }
+        }
+
+        // 2. Round-trip insertion with 120-char exit_rule, CJK/emoji symbol, and adversarial metadata
+        let test_mint = "CONTRACT_TEST_MINT_9999999999999999999999999999999999";
+        let test_symbol = "梅🚀\";DROP TABLE--";
+        let long_exit_rule = "Dynamic Trailing Runner (-8.0% from +398.3% Peak | Floor +390.3% | Adversarial Padding 0123456789012345678901234567890123456789)";
+        assert!(long_exit_rule.chars().count() >= 120);
+
+        let _ = client
+            .execute("DELETE FROM settled_trades WHERE token_mint = $1", &[&test_mint])
+            .await;
+
+        let res = record_settled_trade(
+            &client,
+            test_mint,
+            test_symbol,
+            42,
+            0.0223,
+            1.0e-6,
+            2.5e-6,
+            3.0e-6,
+            145.5,
+            0.0324,
+            0.5000,
+            0.5324,
+            long_exit_rule,
+            "https://dexscreener.com/solana/CONTRACT_TEST",
+            false,
+        )
+        .await;
+        assert!(res.is_ok(), "record_settled_trade must succeed without DB errors: {:?}", res.err());
+
+        let fetched = client
+            .query_one(
+                "SELECT symbol, exit_rule, realized_pnl_sol FROM settled_trades WHERE token_mint = $1",
+                &[&test_mint],
+            )
+            .await
+            .expect("Inserted contract test row must be queryable");
+        let db_sym: String = fetched.get(0);
+        let db_rule: String = fetched.get(1);
+        let db_pnl: f64 = fetched.get(2);
+        assert!(db_sym.starts_with("梅🚀"));
+        assert!(!db_rule.is_empty());
+        assert!((db_pnl - 0.0324).abs() < 1e-9);
+
+        // 3. Cleanup
+        let deleted = client
+            .execute("DELETE FROM settled_trades WHERE token_mint = $1", &[&test_mint])
+            .await
+            .expect("Failed to clean up contract test row");
+        assert_eq!(deleted, 1);
+    }
 }
 
 

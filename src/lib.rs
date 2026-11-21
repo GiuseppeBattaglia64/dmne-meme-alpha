@@ -16,4 +16,7 @@ pub mod cold_path;
 pub mod harness;
 pub mod genesis_guard;
 pub mod admission;
+pub mod contracts;
+
+pub use contracts::{CONTRACT_SCHEMA_VERSION, DashboardSnapshot, SettledTradeRecord, TrancheStage};
 
